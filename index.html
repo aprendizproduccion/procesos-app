@@ -1,0 +1,1635 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <base target="_top">
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 24px 16px 60px;
+      background: #f5f6f8;
+      color: #1c1e21;
+    }
+
+    h1 {
+      font-size: 20px;
+      margin-bottom: 4px;
+      text-align: center;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 18px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: #444;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #d7dade;
+      border-radius: 6px;
+      font-size: 14px;
+      margin-bottom: 14px;
+      font-family: inherit;
+      resize: vertical;
+    }
+
+    .row2 {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .row2>div {
+      flex: 1 1 140px;
+      min-width: 0;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      background: #e8eefc;
+      color: #2452c9;
+      padding: 6px 10px;
+      border-radius: 16px;
+      font-size: 13px;
+      margin: 0 6px 6px 0;
+    }
+
+    .chip button {
+      background: none;
+      border: none;
+      color: #2452c9;
+      margin-left: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      padding: 0;
+    }
+
+    .add-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .add-row input,
+    .add-row select {
+      min-width: 0;
+      flex: 1 1 120px;
+    }
+
+    .add-row input,
+    .add-row select {
+      margin-bottom: 0;
+    }
+
+    .add-row button {
+      background: #2452c9;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 0 16px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    #chips {
+      margin-top: 10px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 6px 4px;
+      border-bottom: 1px solid #eee;
+    }
+
+    th {
+      color: #666;
+      font-weight: 600;
+    }
+
+    .btn-submit {
+      width: 100%;
+      background: #16a34a;
+      color: #fff;
+      border: none;
+      padding: 14px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+
+    .btn-submit:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+
+    #btnCerrarPedido {
+      width: 100%;
+      padding: 12px;
+      margin-top: 10px;
+      border: none;
+      border-radius: 6px;
+      background: #007bff;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    #contadorPedido {
+      text-align: center;
+      font-weight: 600;
+    }
+
+    .msg {
+      font-size: 13px;
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 6px;
+    }
+
+    .msg.ok {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .msg.err {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+
+    .msg.warn {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    #alertaCantidadJustificar .msg,
+    #alertaCantidadJustificar .hint {
+      font-size: 16px;
+      font-weight: 700;
+      padding: 12px 14px;
+      line-height: 1.35;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: #000;
+      margin-top: -8px;
+      margin-bottom: 14px;
+    }
+
+    .tasa-hint {
+      font-size: 15px;
+      font-weight: 600;
+      color: #1e40af;
+      background: #eff6ff;
+      border-left: 3px solid #2563eb;
+      padding: 8px 10px;
+      border-radius: 4px;
+      margin-top: -8px;
+      margin-bottom: 14px;
+    }
+
+    .ean-confirmado {
+      font-size: 20px;
+      font-weight: 700;
+      color: #166534;
+      background: #dcfce7;
+      border: 2px solid #16a34a;
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      text-align: center;
+    }
+
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-overlay.visible {
+      display: flex;
+    }
+
+    .modal-box {
+      background: #fff;
+      border-radius: 10px;
+      padding: 20px;
+      max-width: 420px;
+      width: 100%;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    .modal-box h3 {
+      margin: 0 0 10px;
+      font-size: 16px;
+      color: #991b1b;
+    }
+
+    .modal-box p {
+      font-size: 14px;
+      color: #444;
+      margin-bottom: 18px;
+      line-height: 1.4;
+    }
+
+    .modal-box .row2 button {
+      border: none;
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      flex: 1;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Registro de Producción</h1>
+
+  <div id="vistaLogin" class="card" style="max-width:360px; margin: 60px auto;">
+    <h1 style="text-align:center;">Iniciar sesión</h1>
+    <div id="loginBotones" class="row2">
+      <button type="button" class="btn-submit" style="background:#3DEAA9; color:#000;" onclick="seleccionarRol('supervisor')">Administrativo</button>
+      <button type="button" class="btn-submit" style="background:#000;" onclick="seleccionarRol('operario')">Operativo</button>
+    </div>
+    <div id="loginPasswordBox" style="display:none; margin-top:14px;">
+      <label id="loginRolLabel"></label>
+      <input id="loginPassword" type="password" placeholder="Contraseña" />
+      <div id="loginError"></div>
+      <div class="row2">
+        <button type="button" class="btn-submit" style="background:#16a34a;" onclick="enviarLogin()">Entrar</button>
+        <button type="button" class="btn-submit" style="background:#9ca3af;" onclick="cancelarSeleccionRol()">Volver</button>
+      </div>
+    </div>
+  </div>
+  <div id="vistaPrincipal" style="display:none;">
+    <button type="button" class="btn-submit" style="background:#6b7280; margin-bottom:14px;" onclick="volverALogin()">← Volver al login</button>
+    <div class="card">
+      <div class="row2">
+        <div>
+          <label>Coordinador</label>
+          <select id="coordinador">
+          <option value="">Selecciona un coordinador...</option>
+          </select>
+        </div>
+        <div>
+          <label>Supernumerario</label>
+          <select id="supernumerario">
+          <option value="">Selecciona un supernumerario...</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div>
+          <label>Número de pedido</label>
+          <input id="pedido" placeholder="Ej: 123" />
+        </div>
+        <div>
+          <label>Fecha</label>
+          <input id="fecha" type="date" />
+        </div>
+      </div>
+
+      <div>
+        <label>Proceso</label>
+        <select id="proceso">
+        <option value="">Ingresa un pedido primero...</option>
+        </select>
+      </div>
+      <p class="tasa-hint" id="tasaHint"></p>
+      <button type="button" id="btnLinkProceso" style="display:none; margin-top:-8px; margin-bottom:14px; background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe; border-radius:6px; padding:8px 12px; font-size:13px; font-weight:600; cursor:pointer;" onclick="abrirLinkProceso()">▶ Ver instructivo del proceso</button>
+
+      <label>Código EAN del producto</label>
+      <div class="add-row" style="margin-bottom: 14px;">
+        <input id="eanInput" placeholder="Apunta el escáner aquí y dispara" autocomplete="off" enterkeyhint="done" />
+        <button type="button" onclick="confirmarEan()">Confirmar</button>
+      </div>
+      <div id="eanConfirmado" class="ean-confirmado" style="display:none;"></div>
+      <div id="alertaEan"></div>
+
+      <div class="row2">
+        <div>
+          <label>Hora inicio</label>
+          <input id="horaInicio" type="time" />
+        </div>
+        <div>
+          <label>Hora fin</label>
+          <input id="horaFin" type="time" />
+        </div>
+      </div>
+
+      <label>Suplemento (descanso)</label>
+      <select id="suplementoMin">
+      <option value="0">Sin suplemento</option>
+      <option value="5">5 minutos</option>
+      <option value="10">10 minutos</option>
+      <option value="15">15 minutos</option>
+      <option value="20">20 minutos</option>
+      <option value="25">25 minutos</option>
+      <option value="30">30 minutos</option>
+      <option value="35">35 minutos</option>
+      <option value="40">40 minutos</option>
+      <option value="45">45 minutos</option>
+      <option value="50">50 minutos</option>
+      <option value="55">55 minutos</option>
+      <option value="60">1 hora</option>
+      <option value="65">1 hora 5 minutos</option>
+      <option value="70">1 hora 10 minutos</option>
+      </select>
+
+      <label>Total de unidades (según escaneo final de banda)</label>
+      <input id="totalUnidades" type="number" min="0" placeholder="Ej: 1000" />
+      <div id="alertaCantidad"></div>
+      <button type="button" id="btnCerrarPedido">Justificar/Cerrar</button>
+      <div id="contadorPedido" class="hint" style="margin-top:6px;"></div>
+    </div>
+
+    <div class="card">
+      <label>Observaciones</label>
+      <textarea id="observaciones" rows="3" placeholder="Novedades con mercancía, maquinaria u otro inconveniente (opcional)"></textarea>
+    </div>
+
+    <div class="card">
+      <label style="font-size: 15px; border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 12px;">Asignación de Personal</label>
+      <p class="hint">Agrega un equipo completo o añade personal de apoyo individualmente. (El catálogo se carga desde
+        la
+        hoja 'Operarios').</p>
+
+      <div style="margin-bottom: 16px;">
+        <label>Agregar Equipo Completo</label>
+        <div class="add-row">
+          <select id="equipoSelect">
+          <option value="">Cargando equipos...</option>
+          </select>
+          <button type="button" onclick="agregarEquipo()">+ Equipo</button>
+        </div>
+      </div>
+
+      <div>
+        <label>Agregar Individual</label>
+        <div class="add-row">
+          <input id="operarioInput" list="sugeridos" placeholder="Nombre del operario" />
+          <datalist id="sugeridos"></datalist>
+          <button type="button" onclick="agregarOperario()">+ Individual</button>
+        </div>
+      </div>
+
+      <div id="chips"></div>
+    </div>
+
+    <div class="card" id="previewCard" style="display:none;">
+      <label>Vista previa del reparto</label>
+      <table>
+        <thead>
+          <tr>
+            <th>Operario</th>
+            <th>Unidades</th>
+            <th>Unid/hora real</th>
+            <th>Eficiencia</th>
+          </tr>
+        </thead>
+        <tbody id="previewBody"></tbody>
+      </table>
+    </div>
+
+    <button class="btn-submit" id="btnSubmit" onclick="enviar()">Enviar registro</button>
+    <div id="resultado"></div>
+  </div>
+
+  <div id="vistaOperario" class="card" style="display:none; max-width:560px; margin:0 auto;">
+    <button type="button" class="btn-submit" style="background:#6b7280; margin-bottom:14px;" onclick="volverALogin()">← Volver al login</button>
+    <h1>Registro de Producción — Operario</h1>
+
+    <label>Cédula</label>
+    <div class="add-row" style="margin-bottom:14px;">
+      <input id="opCedula" placeholder="Escanea o escribe tu cédula" autocomplete="off" enterkeyhint="done" />
+      <button type="button" onclick="confirmarCedula()">Confirmar</button>
+    </div>
+    <div id="opNombreConfirmado" class="ean-confirmado" style="display:none;"></div>
+    <div id="opAlertaCedula"></div>
+
+    <div class="row2">
+      <div>
+        <label>Coordinador</label>
+        <select id="opCoordinador"><option value="">Selecciona un coordinador...</option></select>
+      </div>
+      <div>
+        <label>Supernumerario</label>
+        <select id="opSupernumerario"><option value="">Selecciona un supernumerario...</option></select>
+      </div>
+    </div>
+
+    <label>Número de pedido</label>
+    <input id="opPedido" placeholder="Ej: 123" />
+
+    <label>Código EAN del producto</label>
+    <div class="add-row" style="margin-bottom:14px;">
+      <input id="opEanInput" placeholder="Apunta el escáner aquí y dispara" autocomplete="off" enterkeyhint="done" />
+      <button type="button" onclick="confirmarEanOperario()">Confirmar</button>
+    </div>
+    <div id="opEanConfirmado" class="ean-confirmado" style="display:none;"></div>
+    <div id="opAlertaEan"></div>
+
+    <label>Proceso</label>
+    <select id="opProceso"><option value="">Ingresa un pedido primero...</option></select>
+    <p class="tasa-hint" id="opTasaHint"></p>
+    <button type="button" id="opBtnLinkProceso" style="display:none; margin-top:-8px; margin-bottom:14px; background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe; border-radius:6px; padding:8px 12px; font-size:13px; font-weight:600; cursor:pointer;" onclick="abrirLinkProcesoOperario()">▶ Ver instructivo del proceso</button>
+
+    <div class="row2">
+      <div>
+        <label>Fecha</label>
+        <input id="opFecha" type="date" disabled />
+      </div>
+    </div>
+
+    <div class="row2">
+      <div>
+        <label>Suplemento (descanso)</label>
+        <select id="opSuplementoMin">
+        <option value="0">Sin suplemento</option>
+        <option value="5">5 minutos</option>
+        <option value="10">10 minutos</option>
+        <option value="15">15 minutos</option>
+        <option value="20">20 minutos</option>
+        <option value="25">25 minutos</option>
+        <option value="30">30 minutos</option>
+        <option value="35">35 minutos</option>
+        <option value="40">40 minutos</option>
+        <option value="45">45 minutos</option>
+        <option value="50">50 minutos</option>
+        <option value="55">55 minutos</option>
+        <option value="60">1 hora</option>
+        <option value="65">1 hora 5 minutos</option>
+        <option value="70">1 hora 10 minutos</option>
+        </select>
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <label>Hora inicio</label>
+        <input id="opHoraInicio" type="time" />
+      </div>
+      <div>
+        <label>Hora fin</label>
+        <input id="opHoraFin" type="time" />
+      </div>
+    </div>
+
+    <label>Unidades procesadas</label>
+    <input id="opUnidades" type="number" min="0" placeholder="Ej: 50" />
+    <div id="opAlertaUnidades"></div>
+
+    <label>Observaciones</label>
+    <textarea id="opObservaciones" rows="3" placeholder="Novedades (opcional)"></textarea>
+
+    <button class="btn-submit" id="opBtnSubmit" onclick="enviarOperario()">Enviar registro</button>
+    <div id="opResultado"></div>
+  </div>
+
+  <div id="modalAviso" class="modal-overlay">
+    <div class="modal-box">
+      <h3 style="color:#166534;">Justificación guardada</h3>
+      <p id="modalAvisoTexto"></p>
+      <div class="row2">
+        <button type="button" style="background:#16a34a; color:#fff;" onclick="cerrarModalAviso()">Entendido</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalConfirmarCierre" class="modal-overlay">
+    <div class="modal-box">
+      <h3 style="color:#166534;">¿Confirmar cierre?</h3>
+      <p id="modalConfirmarCierreTexto">Vas a justificar y cerrar este EAN. Esta acción lo marcará como completado.</p>
+      <div class="row2">
+        <button type="button" style="background:#059669; color:#fff;" onclick="confirmarCierreDesdeModal()">Sí, cerrar</button>
+        <button type="button" style="background:#e5e7eb; color:#333;" onclick="cerrarModalConfirmarCierre()">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalSinEan" class="modal-overlay">
+    <div class="modal-box">
+      <h3>Falta el número de pedido</h3>
+      <p>Ingresa el número de pedido antes de justificar o cerrar.</p>
+      <div class="row2">
+        <button type="button" style="background:#2452c9; color:#fff;" onclick="cerrarModalSinEan()">Entendido</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalEanInvalido" class="modal-overlay">
+    <div class="modal-box">
+      <h3>EAN no válido para este pedido</h3>
+      <p id="modalEanInvalidoTexto"></p>
+      <div class="row2">
+        <button type="button" style="background:#2452c9; color:#fff;" onclick="cerrarModalEanInvalido()">Entendido</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="vistaJustificacion" class="card" style="display:none;">
+    <label style="font-size: 15px; border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 12px;">Justificar / Cerrar</label>
+    <p class="hint">Escanea o escribe el EAN que quieres cerrar y confirma. Debes justificar exactamente el faltante
+      total de ese EAN
+      (ni más ni menos) para poder marcarlo como completado. El pedido se marca completo automáticamente cuando todos
+      sus EANes quedan cerrados.</p>
+
+    <label>Pedido</label>
+    <input id="justPedido" disabled />
+
+    <label>EAN</label>
+
+    <div class="add-row" style="margin-bottom: 14px;">
+      <input id="justEanBuscar" placeholder="Apunta el escáner aquí y dispara" autocomplete="off" enterkeyhint="done" />
+      <button type="button" onclick="confirmarEanJustificar()">Confirmar</button>
+    </div>
+
+    <div id="justEanConfirmado" class="ean-confirmado" style="display:none;"></div>
+
+    <div id="justAlertaEan"></div>
+
+    <label>Unidades totales</label>
+    <input id="justTotales" disabled />
+
+    <label>Unidades a justificar</label>
+    <input id="justUnidades" type="number" min="1" placeholder="Ej: 20" />
+    <div id="alertaCantidadJustificar"></div>
+
+    <label>Motivo de la novedad</label>
+    <input id="justMotivo" type="text" placeholder="Ej: material dañado, unidades faltantes, etc." />
+
+    <div id="alertaJustificacion"></div>
+
+    <div class="row2" style="margin-top:10px;">
+      <button type="button" class="btn-submit" id="btnJustificarCerrar" style="background:#059669;" onclick="enviarJustificacion(true)">Justificar y cerrar</button>
+    </div>
+    <button type="button" class="btn-submit" style="background:#9ca3af; margin-top:8px;" onclick="cerrarVistaJustificacion()">Cancelar</button>
+  </div>
+
+  <script src="api.js"></script>
+  <script>
+    let rolActual = null;
+
+
+function seleccionarRol(rol) {
+  rolActual = rol;
+  document.getElementById('loginBotones').style.display = 'none';
+  document.getElementById('loginPasswordBox').style.display = 'block';
+  document.getElementById('loginRolLabel').textContent =
+    rol === 'supervisor' ? 'Contraseña de Administrativo' : 'Contraseña de Operativo';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginError').innerHTML = '';
+  document.getElementById('loginPassword').focus();
+}
+
+
+function cancelarSeleccionRol() {
+  rolActual = null;
+  document.getElementById('loginPasswordBox').style.display = 'none';
+  document.getElementById('loginBotones').style.display = 'flex';
+}
+
+
+function cancelarSeleccionRol() {
+  rolActual = null;
+  document.getElementById('loginPasswordBox').style.display = 'none';
+  document.getElementById('loginBotones').style.display = 'flex';
+}
+
+
+function volverALogin() {
+  // 1. Ocultar vistas
+  ['vistaPrincipal', 'vistaOperario', 'vistaJustificacion'].forEach(id => {
+    document.getElementById(id).style.display = 'none';
+  });
+
+
+  // 2. Vaciar inputs, textareas y selects simples
+  const camposAVaciar = [
+    'coordinador', 'supernumerario', 'pedido', 'eanInput', 'horaInicio', 'horaFin',
+    'totalUnidades', 'observaciones', 'operarioInput', 'equipoSelect',
+    'opCedula', 'opCoordinador', 'opSupernumerario', 'opPedido', 'opEanInput',
+    'opFecha', 'opHoraInicio', 'opHoraFin', 'opUnidades', 'opObservaciones',
+    'loginPassword'
+  ];
+  camposAVaciar.forEach(id => document.getElementById(id).value = '');
+
+
+  // 3. Limpiar contenido de alertas, hints y confirmaciones
+  const elementosACancelarText = [
+
+    'tasaHint', 'eanConfirmado', 'alertaEan', 'alertaCantidad', 'resultado',
+
+    'opNombreConfirmado', 'opAlertaCedula', 'opEanConfirmado', 'opAlertaEan',
+
+    'opTasaHint', 'opAlertaUnidades', 'opResultado', 'loginError', 'justAlertaEan'
+
+  ];
+  elementosACancelarText.forEach(id => document.getElementById(id).innerHTML = '');
+
+
+  // 4. Ocultar elementos de confirmación/previsualización
+  ['eanConfirmado', 'opEanConfirmado', 'previewCard', 'opNombreConfirmado', 'loginPasswordBox', 'btnLinkProceso', 'opBtnLinkProceso', 'justEanConfirmado']
+
+.forEach(id => document.getElementById(id).style.display = 'none');
+
+
+  // 5. Valores por defecto específicos
+  document.getElementById('fecha').valueAsDate = new Date();
+  document.getElementById('suplementoMin').value = '0';
+  document.getElementById('opSuplementoMin').value = '0';
+
+
+  const defaultOption = '<option value="">Ingresa un pedido primero...</option>';
+  document.getElementById('proceso').innerHTML = defaultOption;
+  document.getElementById('opProceso').innerHTML = defaultOption;
+
+
+  ['btnSubmit', 'opBtnSubmit'].forEach(id => {
+    const btn = document.getElementById(id);
+    btn.disabled = false;
+    btn.textContent = 'Enviar registro';
+  });
+
+
+  // 7. Re-habilitar controles bloqueados de la vista operario
+  document.querySelectorAll('#vistaOperario input, #vistaOperario select, #vistaOperario textarea, #vistaOperario button')
+    .forEach(el => el.disabled = false);
+
+
+  // 7b.
+  document.getElementById('opFecha').disabled = true;
+
+
+  // 8. Restablecer estado del Login
+  document.getElementById('loginBotones').style.display = 'flex';
+  document.getElementById('vistaLogin').style.display = 'block';
+
+
+  // 9. Resetear variables globales
+  codigoEan = pedidoValidado = estadoPaquete = opNombreOperario = opCedulaConfirmada = opCodigoEan = opPedidoValidado = '';
+  unidadesEsperadas = unidadesRestantes = rolActual = null;
+  opFormularioBloqueado = false;
+  operarios = [];
+  justEanSeleccionado = '';
+  restanteNetoSeleccionado = null;
+  justificacionPendiente = null;
+
+
+  renderChips();
+  resetContadorPedido();
+  window.scrollTo(0, 0);
+}
+
+
+function enviarLogin() {
+  const clave = document.getElementById('loginPassword').value;
+  if (!clave) return;
+  llamarAPI('validarLogin', { rol: rolActual, password: clave })
+  .then(function(res) {
+    if (res.success) {
+      document.getElementById('vistaLogin').style.display = 'none';
+      if (rolActual === 'operario') {
+        document.getElementById('vistaOperario').style.display = 'block';
+        document.getElementById('coordinador') && (document.getElementById('opCoordinador').innerHTML = document.getElementById('coordinador').innerHTML);
+        document.getElementById('supernumerario') && (document.getElementById('opSupernumerario').innerHTML = document.getElementById('supernumerario').innerHTML);
+      } else {
+        document.getElementById('vistaPrincipal').style.display = 'block';
+      }
+    } else {
+      document.getElementById('loginError').innerHTML = `<div class="msg err">${res.message}</div>`;
+    }
+  })
+  .catch(function(err) {
+    document.getElementById('loginError').innerHTML = `<div class="msg err">Error de conexión: ${err.message}</div>`;
+  });
+}
+
+
+document.getElementById('loginPassword').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') { e.preventDefault(); enviarLogin(); }
+});
+
+
+    let estadoPaquete = "";
+    let procesos = [];
+    let operarios = [];
+    let catalogoOperarios = [];
+    let datosSupervisores = { coordinadores: [], supernumerarios: [] };
+    let unidadesEsperadas = null;
+    let unidadesRestantes = null;
+
+
+document.getElementById('fecha').valueAsDate = new Date();
+let codigoEan = '';
+let pedidoValidado = '';
+const eanInput = document.getElementById('eanInput');
+const pedidoInput = document.getElementById('pedido');
+
+
+pedidoInput.addEventListener('input', function() {
+  filtrarProcesosPorPedido();
+  resetContadorPedido();
+
+  if (codigoEan && pedidoInput.value.trim() !== pedidoValidado) {
+    codigoEan = '';
+    unidadesEsperadas = null;
+    unidadesRestantes = null;
+    const confirmado = document.getElementById('eanConfirmado');
+    confirmado.textContent = '';
+    confirmado.style.display = 'none';
+    document.getElementById('alertaEan').innerHTML =
+      '<div class="msg warn">AVISO: Cambiaste el número de pedido. Vuelve a escanear el EAN para validar de nuevo.</div>';
+    document.getElementById('btnSubmit').disabled = true;
+  }
+});
+
+
+if (codigoEan && pedidoInput.value.trim() !== pedidoValidado) {
+codigoEan = '';
+unidadesEsperadas = null;
+unidadesRestantes = null;
+const confirmado = document.getElementById('eanConfirmado');
+confirmado.textContent = '';
+confirmado.style.display = 'none';
+document.getElementById('alertaEan').innerHTML =
+'<div class="msg warn">AVISO: Cambiaste el número de pedido. Vuelve a escanear el EAN para validar de nuevo.</div>';
+document.getElementById('btnSubmit').disabled = true;
+resetContadorPedido();
+}
+
+
+// ---------------- CARGA DE DATOS INICIALES ----------------
+
+
+// 1. Cargar Procesos
+llamarAPI('getProcesos', {}).then(function(resp) {
+  if (!resp.success) { console.error('Error cargando procesos:', resp.message); return; }
+  procesos = resp.data;
+  filtrarProcesosPorPedido();
+  actualizarTasaHint();
+  actualizarPreview();
+}).catch(function(err) {
+  console.error('Error de conexión cargando procesos:', err.message);
+});
+
+
+// 2. Cargar Operarios
+llamarAPI('getOperariosData', {}).then(function(resp) {
+  if (!resp.success) { console.error('Error cargando operarios:', resp.message); return; }
+  catalogoOperarios = resp.data;
+  document.getElementById('sugeridos').innerHTML =
+    catalogoOperarios.map(op => `<option value="${op.nombre}">`).join('');
+  const equiposUnicos = [...new Set(catalogoOperarios.map(op => op.equipo).filter(Boolean))];
+  const selEquipo = document.getElementById('equipoSelect');
+  selEquipo.innerHTML = '<option value="">Selecciona un equipo...</option>' +
+    equiposUnicos.map(eq => `<option value="${eq}">${eq}</option>`).join('');
+}).catch(function(err) {
+  console.error('Error de conexión cargando operarios:', err.message);
+});
+
+
+// 3. Cargar Supervisores y Supernumerarios
+llamarAPI('getSupervisoresData', {}).then(function(resp) {
+  if (!resp.success) { console.error('Error cargando supervisores:', resp.message); return; }
+  const data = resp.data;
+  datosSupervisores = data;
+  document.getElementById('coordinador').innerHTML =
+    '<option value="">Selecciona un coordinador...</option>' +
+    data.coordinadores.map(c => `<option value="${c}">${c}</option>`).join('');
+  document.getElementById('supernumerario').innerHTML =
+    '<option value="">Selecciona un supernumerario...</option>' +
+    data.supernumerarios.map(s => `<option value="${s.nombre}">${s.nombre}</option>`).join('');
+}).catch(function(err) {
+  console.error('Error de conexión cargando supervisores:', err.message);
+});
+
+
+
+
+// ---------------- LÓGICA DE FILTROS ----------------
+
+
+function filtrarProcesosPorPedido() {
+const pedidoVal = document.getElementById('pedido').value.trim();
+const sel = document.getElementById('proceso');
+
+
+const filtrados = procesos.filter(p => p.pedido === pedidoVal);
+sel.innerHTML = '<option value="">' + (pedidoVal ? 'Selecciona un proceso...' : 'Ingresa un pedido primero...') + '</option>' +
+filtrados.map(p => `<option value="${p.nombre}">${p.nombre}</option>`).join('');
+
+
+actualizarTasaHint();
+actualizarPreview();
+}
+
+
+
+
+// ---------------- EVENTOS DEL ESCÁNER EAN ----------------
+function confirmarEan() {
+const valor = eanInput.value.trim();
+const pedidoVal = pedidoInput.value.trim();
+
+
+if (!valor) return;
+if (!pedidoVal) {
+document.getElementById('alertaEan').innerHTML = '<div class="msg err">Por favor, ingresa primero el número de pedido antes de escanear el EAN.</div>';
+return;
+}
+
+
+codigoEan = valor;
+pedidoValidado = pedidoVal;
+const confirmado = document.getElementById('eanConfirmado');
+confirmado.textContent = 'Código capturado: ' + codigoEan;
+confirmado.style.display = 'block';
+eanInput.value = '';
+
+
+document.getElementById('alertaEan').innerHTML = '<div class="msg" style="background:#e0f2fe; color:#0369a1;">Verificando pedido en la base de datos...</div>';
+
+
+llamarAPI('obtenerDatosValidacion', { pedido: pedidoVal, ean: codigoEan })
+  .then(function(res) {
+    const alertaEanDiv = document.getElementById('alertaEan');
+    if (res.success) {
+      unidadesEsperadas = res.unidadesEsperadas;
+      unidadesRestantes = res.restantes;
+      alertaEanDiv.innerHTML = '';
+      ejecutarValidacionCantidades();
+      cargarResumenPedido(pedidoVal);
+    } else {
+      unidadesEsperadas = null;
+      unidadesRestantes = null;
+      alertaEanDiv.innerHTML = `<div class="msg err">AVISO: ${res.message}</div>`;
+      document.getElementById('btnSubmit').disabled = true;
+    }
+  })
+  .catch(function(err) {
+    document.getElementById('alertaEan').innerHTML = `<div class="msg err">Error de conexión: ${err.message}</div>`;
+  });
+}
+
+
+eanInput.addEventListener('keydown', function(e) {
+if (e.key === 'Enter') {
+e.preventDefault();
+confirmarEan();
+}
+});
+eanInput.addEventListener('search', confirmarEan);
+
+
+// ---------------- ASIGNACIÓN DE PERSONAL ----------------
+function agregarEquipo() {
+const equipoSeleccionado = document.getElementById('equipoSelect').value;
+if (!equipoSeleccionado) return;
+
+
+const operariosDelEquipo = catalogoOperarios.filter(op => op.equipo === equipoSeleccionado);
+let agregados = 0;
+operariosDelEquipo.forEach(op => {
+if (!operarios.includes(op.nombre)) {
+operarios.push(op.nombre);
+agregados++;
+}
+});
+
+
+if (agregados > 0) {
+renderChips();
+actualizarPreview();
+}
+document.getElementById('equipoSelect').value = '';
+}
+
+
+function agregarOperario() {
+const input = document.getElementById('operarioInput');
+const escrito = input.value.trim();
+if (!escrito) { input.value = ''; return; }
+
+
+const match = catalogoOperarios.find(op => op.nombre.toLowerCase() === escrito.toLowerCase());
+
+
+if (!match) {
+alert('Este operario no existe en la base de datos. Pide a un administrador que lo agregue a la hoja "Operarios" primero.');
+return;
+}
+
+
+const nombreCanonico = match.nombre;
+if (operarios.includes(nombreCanonico)) {
+input.value = '';
+return;
+}
+
+
+operarios.push(nombreCanonico);
+input.value = '';
+renderChips();
+actualizarPreview();
+}
+
+
+function quitarOperario(nombre) {
+operarios = operarios.filter(n => n !== nombre);
+renderChips();
+actualizarPreview();
+}
+
+
+function renderChips() {
+document.getElementById('chips').innerHTML = operarios.map(n =>
+`<span class="chip">${n}<button onclick="quitarOperario('${n}')">×</button></span>`
+).join('');
+}
+
+
+// ---------------- LÓGICA DE TIEMPOS Y PREVIEW ----------------
+document.getElementById('proceso').addEventListener('change', () => {
+actualizarTasaHint();
+actualizarPreview();
+});
+
+
+['horaInicio','horaFin','totalUnidades','suplementoMin'].forEach(id =>
+document.getElementById(id).addEventListener('input', () => {
+actualizarPreview();
+const pedidoActual = document.getElementById('pedido').value.trim();
+if (pedidoActual) cargarResumenPedido(pedidoActual);
+if (id === 'totalUnidades') ejecutarValidacionCantidades();
+})
+);
+
+
+let resumenPedidoActual = null;
+
+
+function resetContadorPedido() {
+  resumenPedidoActual = null;
+  document.getElementById('contadorPedido').innerHTML = '';
+}
+
+function mostrarErrorContadorPedido(mensaje) {
+  resumenPedidoActual = null;
+  document.getElementById('contadorPedido').innerHTML =
+    `<div class="msg err">${mensaje}</div>`;
+}
+
+function cargarResumenPedido(pedido) {
+  llamarAPI('obtenerResumenPedido', { pedido: pedido })
+    .then(function(res) {
+      if (res.success) {
+        resumenPedidoActual = res;
+        actualizarContadorPedido();
+      } else {
+        mostrarErrorContadorPedido(res.message || 'No se pudo cargar el resumen del pedido.');
+      }
+    })
+    .catch(function(err) {
+      mostrarErrorContadorPedido('Error de conexión al cargar el resumen del pedido: ' + err.message);
+    });
+}
+
+function actualizarContadorPedido() {
+  const cont = document.getElementById('contadorPedido');
+  if (!resumenPedidoActual) { cont.innerHTML = ''; return; }
+  const inputActual = Number(document.getElementById('totalUnidades').value) || 0;
+  const proyectado = resumenPedidoActual.procesadoPedido + inputActual;
+  cont.innerHTML = `Unidades Pedido: ${proyectado} / ${resumenPedidoActual.totalPedido} unidades`;
+}
+
+
+function ejecutarValidacionCantidades() {
+  const totalInput = document.getElementById('totalUnidades').value;
+  const alertaDiv = document.getElementById('alertaCantidad');
+  const btnSubmit = document.getElementById('btnSubmit');
+
+
+  if (unidadesRestantes === null || totalInput === '') {
+    alertaDiv.innerHTML = '';
+    btnSubmit.disabled = false;
+    return;
+  }
+
+
+  const cantidadIngresada = Number(totalInput);
+  const contadorHtml = `<div class="hint" style="margin-top:0;margin-bottom:6px;">Este EAN: ${cantidadIngresada} / ${unidadesRestantes} unidades restantes (${unidadesEsperadas} totales)</div>`;
+
+
+  if (cantidadIngresada > unidadesRestantes) {
+    alertaDiv.innerHTML = contadorHtml + `<div class="msg err">ALERTA CRÍTICA: La cantidad ingresada (${cantidadIngresada}) supera lo que falta de este EAN (${unidadesRestantes} de ${unidadesEsperadas} totales). El envío está bloqueado hasta realizar verificación.</div>`;
+    btnSubmit.disabled = true;
+  } else if (cantidadIngresada < unidadesRestantes) {
+    alertaDiv.innerHTML = contadorHtml;
+    btnSubmit.disabled = false;
+  } else {
+    alertaDiv.innerHTML = contadorHtml + `<div class="msg ok">Cantidad exacta concordante con lo restante de este EAN (${unidadesRestantes} unidades).</div>`;
+    btnSubmit.disabled = false;
+  }
+}
+
+
+function tasaActual() {
+const p = procesoValido();
+return p ? p.unidadesHora : 0;
+}
+
+
+function procesoValido() {
+const nombre = document.getElementById('proceso').value.trim();
+const pedidoActual = document.getElementById('pedido').value.trim();
+if (!nombre) return null;
+return procesos.find(p => p.nombre.toLowerCase() === nombre.toLowerCase() && p.pedido === pedidoActual) || null;
+}
+
+
+function actualizarTasaHint() {
+  const hint = document.getElementById('tasaHint');
+  const btnLink = document.getElementById('btnLinkProceso');
+  const escrito = document.getElementById('proceso').value.trim();
+  const p = procesoValido();
+  if (!escrito) {
+    hint.textContent = '';
+    btnLink.style.display = 'none';
+  } else if (p) {
+    hint.textContent = `Tasa Estandar: ${p.unidadesHora} unidades/hora`;
+    btnLink.style.display = p.link ? 'block' : 'none';
+  } else {
+    hint.innerHTML = '<span style="color:#991b1b;">⚠ Ese proceso no existe para el pedido ingresado. Verifica tu selección.</span>';
+    btnLink.style.display = 'none';
+  }
+}
+
+
+function abrirLinkProceso() {
+  const p = procesoValido();
+  if (p && p.link) window.open(p.link, '_blank');
+}
+
+
+function durationMinutos() {
+const hi = document.getElementById('horaInicio').value;
+const hf = document.getElementById('horaFin').value;
+if (!hi || !hf) return 0;
+const [h1,m1] = hi.split(':').map(Number);
+const [h2,m2] = hf.split(':').map(Number);
+let min = (h2*60+m2) - (h1*60+m1);
+if (min < 0) min += 24*60;
+const suplemento = Number(document.getElementById('suplementoMin').value) || 0;
+return Math.max(min - suplemento, 0);
+}
+
+
+function actualizarPreview() {
+const total = Number(document.getElementById('totalUnidades').value);
+const n = operarios.length;
+const card = document.getElementById('previewCard');
+if (!total || n === 0) { card.style.display = 'none'; return; }
+
+
+const unidadesPorOperario = Math.round((total / n) * 100) / 100;
+const durHoras = durationMinutos() / 60;
+const esperado = durHoras > 0 ? (tasaActual() / n) * durHoras : 0;
+const ritmoReal = durHoras > 0 ? Math.round((unidadesPorOperario/durHoras)*100)/100 : 0;
+const efic = esperado > 0 ? Math.round((unidadesPorOperario/esperado)*100) : null;
+
+
+const filas = operarios.map((nombre) =>
+`<tr><td>${nombre}</td><td>${unidadesPorOperario}</td><td>${ritmoReal}</td><td>${efic !== null ? efic+'%' : '—'}</td></tr>`
+).join('');
+
+
+document.getElementById('previewBody').innerHTML = filas;
+card.style.display = 'block';
+}
+
+
+// ---------------- ENVÍO DE DATOS ----------------
+function enviar() {
+const payload = {
+pedido: document.getElementById('pedido').value.trim(),
+codigoEan: codigoEan,
+coordinador: document.getElementById('coordinador').value.trim(),
+supernumerario: document.getElementById('supernumerario').value.trim(),
+fecha: document.getElementById('fecha').value,
+proceso: (procesoValido() ? procesoValido().nombre : document.getElementById('proceso').value.trim()),
+unidadesHoraEstandar: tasaActual(),
+horaInicio: document.getElementById('horaInicio').value,
+horaFin: document.getElementById('horaFin').value,
+suplementoMin: Number(document.getElementById('suplementoMin').value),
+observaciones: document.getElementById('observaciones').value.trim(),
+totalUnidades: Number(document.getElementById('totalUnidades').value),
+operarios: operarios,
+estadoPaquete: estadoPaquete
+};
+
+
+if (!payload.pedido) return mostrarMsg('Falta el número de pedido.', false);
+if (!payload.codigoEan) return mostrarMsg('Falta escanear el código EAN del producto.', false);
+if (!procesoValido()) return mostrarMsg('El proceso seleccionado no es válido para este pedido.', false);
+if (!payload.coordinador) return mostrarMsg('Falta el nombre del coordinador.', false);
+if (!payload.supernumerario) return mostrarMsg('Falta el nombre del supernumerario.', false);
+if (!payload.horaInicio || !payload.horaFin) return mostrarMsg('Faltan las horas.', false);
+if (!payload.totalUnidades) return mostrarMsg('Falta el total de unidades.', false);
+if (payload.operarios.length === 0) return mostrarMsg('Agrega al menos un operario o un equipo.', false);
+
+
+const btn = document.getElementById('btnSubmit');
+btn.disabled = true;
+btn.textContent = 'Enviando...';
+
+
+llamarAPI('submitRegistro', payload)
+  .then(function(res) {
+    if (res.success) {
+      mostrarMsg('Registro guardado correctamente', true);
+      operarios = [];
+      renderChips();
+      document.getElementById('totalUnidades').value = '';
+      document.getElementById('observaciones').value = '';
+      document.getElementById('suplementoMin').value = '0';
+      document.getElementById('fecha').valueAsDate = new Date();
+      document.getElementById('horaInicio').value = '';
+      document.getElementById('horaFin').value = '';
+      estadoPaquete = '';
+      document.getElementById('alertaCantidad').innerHTML = '';
+      document.getElementById('previewCard').style.display = 'none';
+      const pedidoActual = document.getElementById('pedido').value.trim();
+      if (pedidoActual) cargarResumenPedido(pedidoActual);
+    } else {
+      mostrarMsg('Error: ' + res.message, false);
+    }
+    btn.disabled = false;
+    btn.textContent = 'Enviar registro';
+  })
+  .catch(function(err) {
+    mostrarMsg('Error de conexión: ' + err.message, false);
+    btn.disabled = false;
+    btn.textContent = 'Enviar registro';
+  });
+
+
+function mostrarMsg(texto, ok) {
+document.getElementById('resultado').innerHTML =
+`<div class="msg ${ok ? 'ok' : 'err'}">${texto}</div>`;
+}
+
+let justEanSeleccionado = '';
+let restanteNetoSeleccionado = null;
+let justificacionPendiente = null;
+
+function abrirVistaJustificacion(pedido) {
+  document.getElementById('vistaPrincipal').style.display = 'none';
+  document.getElementById('vistaJustificacion').style.display = 'block';
+  document.getElementById('justPedido').value = pedido;
+  document.getElementById('justEanBuscar').value = '';
+  document.getElementById('justEanConfirmado').style.display = 'none';
+  document.getElementById('justAlertaEan').innerHTML = '';
+  document.getElementById('justTotales').value = '';
+  document.getElementById('justUnidades').value = '';
+  document.getElementById('justMotivo').value = '';
+  document.getElementById('alertaJustificacion').innerHTML = '';
+  document.getElementById('alertaCantidadJustificar').innerHTML = '';
+  document.getElementById('btnJustificarCerrar').disabled = true;
+  justEanSeleccionado = '';
+  restanteNetoSeleccionado = null;
+  window.scrollTo(0, 0);
+}
+
+function confirmarEanJustificar() {
+  const input = document.getElementById('justEanBuscar');
+  const valor = input.value.trim();
+  const pedido = document.getElementById('justPedido').value.trim();
+  const alertaDiv = document.getElementById('justAlertaEan');
+  if (!valor) return;
+  if (!pedido) {
+    alertaDiv.innerHTML = '<div class="msg err">Falta el número de pedido.</div>';
+    return;
+  }
+  alertaDiv.innerHTML = '<div class="msg" style="background:#e0f2fe; color:#0369a1;">Verificando EAN...</div>';
+
+  llamarAPI('obtenerEstadoEanJustificar', { pedido: pedido, ean: valor })
+    .then(function(res) {
+      alertaDiv.innerHTML = '';
+      const alertaCant = document.getElementById('alertaCantidadJustificar');
+      const btnJC = document.getElementById('btnJustificarCerrar');
+      document.getElementById('justUnidades').value = '';
+
+      if (!res.success) {
+        justEanSeleccionado = '';
+        restanteNetoSeleccionado = null;
+        document.getElementById('justEanConfirmado').style.display = 'none';
+        document.getElementById('justTotales').value = '';
+        alertaCant.innerHTML = '';
+        btnJC.disabled = true;
+        document.getElementById('modalEanInvalidoTexto').textContent = res.message;
+        document.getElementById('modalEanInvalido').classList.add('visible');
+        return;
+      }
+
+      justEanSeleccionado = res.ean;
+      restanteNetoSeleccionado = res.restanteNeto;
+      document.getElementById('justTotales').value = res.esperadas;
+      input.value = '';
+
+      const confirmado = document.getElementById('justEanConfirmado');
+      confirmado.textContent = 'EAN: ' + res.ean + ' — Estado: ' + res.estado;
+      confirmado.style.display = 'block';
+
+      if (res.restanteNeto <= 0) {
+        alertaCant.innerHTML = `<div class="msg err">Este EAN ya no tiene faltante pendiente por justificar. Estado actual: ${res.estado}.</div>`;
+        btnJC.disabled = true;
+      } else {
+        alertaCant.innerHTML = `<div class="hint" style="margin-top:0;">Debes justificar exactamente ${res.restanteNeto} unidades (el faltante total) para cerrar este EAN. Estado actual: ${res.estado}.</div>`;
+        btnJC.disabled = false;
+      }
+    })
+    .catch(function(err) {
+      alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${err.message}</div>`;
+    })
+    .obtenerEstadoEanJustificar(pedido, valor);
+}
+
+const justEanBuscarInput = document.getElementById('justEanBuscar');
+
+justEanBuscarInput.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    confirmarEanJustificar();
+  }
+});
+
+justEanBuscarInput.addEventListener('search', confirmarEanJustificar);
+
+document.getElementById('justUnidades').addEventListener('input', function() {
+  const alertaDiv = document.getElementById('alertaCantidadJustificar');
+  const btnJC = document.getElementById('btnJustificarCerrar');
+  if (restanteNetoSeleccionado === null || restanteNetoSeleccionado <= 0) return;
+  if (this.value === '') {
+    alertaDiv.innerHTML = `<div class="hint" style="margin-top:0;">Debes justificar exactamente ${restanteNetoSeleccionado} unidades (el faltante total) para cerrar este EAN.</div>`;
+    btnJC.disabled = false;
+    return;
+  }
+  const val = Number(this.value);
+  if (val !== restanteNetoSeleccionado) {
+    alertaDiv.innerHTML = `<div class="msg err">Debes justificar exactamente ${restanteNetoSeleccionado} unidades, ni más ni menos, para cerrar este EAN.</div>`;
+    btnJC.disabled = true;
+  } else {
+    alertaDiv.innerHTML = `<div class="msg ok">Cantidad exacta. Puedes cerrar este EAN.</div>`;
+    btnJC.disabled = false;
+  }
+});
+
+function mostrarModalAviso(texto) {
+  document.getElementById('modalAvisoTexto').textContent = texto;
+  document.getElementById('modalAviso').classList.add('visible');
+}
+
+
+function cerrarModalAviso() {
+  document.getElementById('modalAviso').classList.remove('visible');
+}
+
+
+function cerrarModalSinEan() {
+  document.getElementById('modalSinEan').classList.remove('visible');
+}
+
+function cerrarModalEanInvalido() {
+  document.getElementById('modalEanInvalido').classList.remove('visible');
+}
+
+function cerrarVistaJustificacion() {
+  document.getElementById('vistaJustificacion').style.display = 'none';
+  document.getElementById('vistaPrincipal').style.display = 'block';
+}
+
+
+function enviarJustificacion() {
+  const pedido = document.getElementById('justPedido').value;
+  const ean = justEanSeleccionado;
+  const unidades = Number(document.getElementById('justUnidades').value);
+  const motivo = document.getElementById('justMotivo').value.trim();
+  const supernumerario = document.getElementById('supernumerario').value.trim();
+  const alertaDiv = document.getElementById('alertaJustificacion');
+
+  if (!ean) { alertaDiv.innerHTML = '<div class="msg err">Confirma un EAN primero.</div>'; return; }
+  if (restanteNetoSeleccionado === null || restanteNetoSeleccionado <= 0) {
+    alertaDiv.innerHTML = '<div class="msg err">Este EAN ya no tiene faltante pendiente por justificar.</div>';
+    return;
+  }
+  if (!Number.isFinite(unidades) || unidades <= 0) { alertaDiv.innerHTML = '<div class="msg err">Ingresa las unidades a justificar.</div>'; return; }
+  if (unidades !== restanteNetoSeleccionado) {
+    alertaDiv.innerHTML = `<div class="msg err">Debes justificar exactamente ${restanteNetoSeleccionado} unidades (el faltante total de este EAN) para cerrarlo.</div>`;
+    return;
+  }
+  if (!motivo) { alertaDiv.innerHTML = '<div class="msg err">Escribe el motivo de la novedad.</div>'; return; }
+  if (!supernumerario) { alertaDiv.innerHTML = '<div class="msg err">Falta seleccionar el supernumerario en el formulario principal.</div>'; return; }
+
+  const payload = { pedido: pedido, ean: ean, unidadesAJustificar: unidades, motivo: motivo, supernumerario: supernumerario };
+
+  justificacionPendiente = payload;
+  document.getElementById('modalConfirmarCierreTexto').textContent =
+    `Vas a justificar ${unidades} unidades del EAN ${ean} (faltante total) y marcarlo como completado. ¿Confirmas?`;
+  document.getElementById('modalConfirmarCierre').classList.add('visible');
+}
+
+function confirmarCierreDesdeModal() {
+  cerrarModalConfirmarCierre();
+  if (justificacionPendiente) {
+    _enviarJustificacionAlServidor(justificacionPendiente);
+    justificacionPendiente = null;
+  }
+}
+
+function cerrarModalConfirmarCierre() {
+  document.getElementById('modalConfirmarCierre').classList.remove('visible');
+}
+
+function _enviarJustificacionAlServidor(payload) {
+  const alertaDiv = document.getElementById('alertaJustificacion');
+  const btnJC = document.getElementById('btnJustificarCerrar');
+  btnJC.disabled = true;
+  const textoJC = btnJC.textContent;
+  btnJC.textContent = 'Enviando...';
+
+  llamarAPI('guardarJustificacion', payload)
+  .then(function(res) {
+    btnJC.disabled = false;
+    btnJC.textContent = textoJC;
+    if (res.success) {
+      const mensaje = res.pedidoCompleto ? 'Justificación guardada y pedido completado.' : 'Justificación guardada y EAN cerrado.';
+      mostrarModalAviso(mensaje);
+      abrirVistaJustificacion(payload.pedido);
+    } else {
+      alertaDiv.innerHTML = `<div class="msg err">Error: ${res.message}</div>`;
+    }
+  })
+  .catch(function(err) {
+    btnJC.disabled = false;
+    btnJC.textContent = textoJC;
+    alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${err.message}</div>`;
+  });
+}
+
+
+document.getElementById('btnCerrarPedido').addEventListener('click', function() {
+  const pedidoActual = document.getElementById('pedido').value.trim();
+  if (!pedidoActual) {
+    document.getElementById('modalSinEan').classList.add('visible');
+    return;
+  }
+  abrirVistaJustificacion(pedidoActual);
+});
+
+
+let opNombreOperario = '';
+let opCedulaConfirmada = '';
+let opCodigoEan = '';
+let opPedidoValidado = '';
+let opFormularioBloqueado = false;
+
+
+function confirmarCedula() {
+  const valor = document.getElementById('opCedula').value.trim();
+  if (!valor) return;
+  llamarAPI('buscarOperarioPorCedula', { cedula: valor })
+    .then(function(res) {
+      const alertaDiv = document.getElementById('opAlertaCedula');
+      if (res.success) {
+        opNombreOperario = res.nombre;
+        opCedulaConfirmada = valor;
+        const confirmado = document.getElementById('opNombreConfirmado');
+        confirmado.textContent = res.nombre;
+        confirmado.style.display = 'block';
+        alertaDiv.innerHTML = '';
+        document.getElementById('opFecha').valueAsDate = new Date();
+      } else {
+        opNombreOperario = '';
+        opCedulaConfirmada = '';
+        document.getElementById('opNombreConfirmado').style.display = 'none';
+        alertaDiv.innerHTML = `<div class="msg err">${res.message}</div>`;
+      }
+    })
+    .catch(function(err) {
+      document.getElementById('opAlertaCedula').innerHTML = `<div class="msg err">Error de conexión: ${err.message}</div>`;
+    })
+    .buscarOperarioPorCedula(valor);
+}
+document.getElementById('opCedula').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') { e.preventDefault(); confirmarCedula(); }
+});
+
+
+function filtrarProcesosOperarioPorPedido() {
+  const pedidoVal = document.getElementById('opPedido').value.trim();
+  const sel = document.getElementById('opProceso');
+  const filtrados = procesos.filter(p => p.pedido === pedidoVal);
+  sel.innerHTML = '<option value="">' + (pedidoVal ? 'Selecciona un proceso...' : 'Ingresa un pedido primero...') + '</option>' +
+    filtrados.map(p => `<option value="${p.nombre}">${p.nombre}</option>`).join('');
+}
+document.getElementById('opPedido').addEventListener('input', function() {
+  filtrarProcesosOperarioPorPedido();
+  if (opCodigoEan && this.value.trim() !== opPedidoValidado) {
+    opCodigoEan = '';
+    const confirmado = document.getElementById('opEanConfirmado');
+    confirmado.textContent = '';
+    confirmado.style.display = 'none';
+    document.getElementById('opAlertaEan').innerHTML =
+      '<div class="msg warn">AVISO: Cambiaste el número de pedido. Vuelve a escanear el EAN.</div>';
+  }
+});
+
+
+function confirmarEanOperario() {
+  const input = document.getElementById('opEanInput');
+  const valor = input.value.trim();
+  const pedidoVal = document.getElementById('opPedido').value.trim();
+  if (!valor) return;
+  if (!pedidoVal) {
+    document.getElementById('opAlertaEan').innerHTML = '<div class="msg err">Ingresa primero el número de pedido.</div>';
+    return;
+  }
+  opCodigoEan = valor;
+  opPedidoValidado = pedidoVal;
+  const confirmado = document.getElementById('opEanConfirmado');
+  confirmado.textContent = 'Código capturado: ' + opCodigoEan;
+  confirmado.style.display = 'block';
+  input.value = '';
+  document.getElementById('opAlertaEan').innerHTML = '<div class="msg" style="background:#e0f2fe; color:#0369a1;">Verificando pedido en la base de datos...</div>';
+
+
+  llamarAPI('obtenerDatosValidacion', { pedido: pedidoVal, ean: opCodigoEan })
+  .then(function(res) {
+    const alertaDiv = document.getElementById('opAlertaEan');
+    if (res.success) {
+      alertaDiv.innerHTML = '';
+    } else {
+      opCodigoEan = '';
+      opPedidoValidado = '';
+      confirmado.style.display = 'none';
+      alertaDiv.innerHTML = `<div class="msg err">AVISO: ${res.message}</div>`;
+    }
+  })
+  .catch(function(err) {
+    document.getElementById('opAlertaEan').innerHTML = `<div class="msg err">Error de conexión: ${err.message}</div>`;
+  });
+}
+document.getElementById('opEanInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') { e.preventDefault(); confirmarEanOperario(); }
+});
+document.getElementById('opEanInput').addEventListener('search', confirmarEanOperario);
+
+
+document.getElementById('opProceso').addEventListener('change', function() {
+  const hint = document.getElementById('opTasaHint');
+  const btnLink = document.getElementById('opBtnLinkProceso');
+  const nombre = this.value.trim();
+  const pedidoActual = document.getElementById('opPedido').value.trim();
+  const p = procesos.find(pr => pr.nombre.toLowerCase() === nombre.toLowerCase() && pr.pedido === pedidoActual);
+  hint.textContent = p ? `Tasa Estándar: ${p.unidadesHora} unidades/hora` : '';
+  btnLink.style.display = (p && p.link) ? 'block' : 'none';
+});
+
+
+function abrirLinkProcesoOperario() {
+  const nombre = document.getElementById('opProceso').value.trim();
+  const pedidoActual = document.getElementById('opPedido').value.trim();
+  const p = procesos.find(pr => pr.nombre.toLowerCase() === nombre.toLowerCase() && pr.pedido === pedidoActual);
+  if (p && p.link) window.open(p.link, '_blank');
+}
+
+
+function bloquearFormularioOperario(mensaje) {
+  opFormularioBloqueado = true;
+  document.getElementById('vistaOperario').querySelectorAll('input, select, textarea, button')
+    .forEach(el => el.disabled = true);
+  document.getElementById('opAlertaUnidades').innerHTML =
+    `<div class="msg err">${mensaje} Solicita a tu supernumerario, coordinador o un superior que revise y envíe este dato por ti.</div>`;
+}
+
+
+function enviarOperario() {
+  if (opFormularioBloqueado) return;
+  if (!opCedulaConfirmada) return mostrarMsgOperario('Confirma tu cédula primero.', false);
+  const payload = {
+    cedula: opCedulaConfirmada,
+    coordinador: document.getElementById('opCoordinador').value.trim(),
+    supernumerario: document.getElementById('opSupernumerario').value.trim(),
+    pedido: document.getElementById('opPedido').value.trim(),
+    codigoEan: opCodigoEan,
+    proceso: document.getElementById('opProceso').value.trim(),
+    horaInicio: document.getElementById('opHoraInicio').value,
+    horaFin: document.getElementById('opHoraFin').value,
+    suplementoMin: Number(document.getElementById('opSuplementoMin').value),
+    unidadesProcesadas: Number(document.getElementById('opUnidades').value),
+    observaciones: document.getElementById('opObservaciones').value.trim()
+  };
+  if (!payload.pedido) return mostrarMsgOperario('Falta el número de pedido.', false);
+  if (!payload.codigoEan) return mostrarMsgOperario('Falta escanear el EAN.', false);
+  if (!payload.proceso) return mostrarMsgOperario('Falta seleccionar el proceso.', false);
+  if (!payload.coordinador) return mostrarMsgOperario('Falta el coordinador.', false);
+  if (!payload.supernumerario) return mostrarMsgOperario('Falta el supernumerario.', false);
+  if (!payload.horaInicio || !payload.horaFin) return mostrarMsgOperario('Faltan las horas.', false);
+  if (!payload.unidadesProcesadas) return mostrarMsgOperario('Falta la cantidad de unidades procesadas.', false);
+
+
+  const btn = document.getElementById('opBtnSubmit');
+  btn.disabled = true;
+  btn.textContent = 'Enviando...';
+
+
+  llamarAPI('submitRegistroOperario', payload)
+  .then(function(res) {
+    btn.disabled = false;
+    btn.textContent = 'Enviar registro';
+    if (res.success) {
+      mostrarMsgOperario('Registro guardado correctamente', true);
+      resetFormularioOperario();
+    } else if (res.message && res.message.indexOf('no corresponde con lo disponible') !== -1) {
+      bloquearFormularioOperario(res.message);
+    } else {
+      mostrarMsgOperario('Error: ' + res.message, false);
+    }
+  })
+  .catch(function(err) {
+    btn.disabled = false;
+    btn.textContent = 'Enviar registro';
+    mostrarMsgOperario('Error de conexión: ' + err.message, false);
+  });
+}
+
+
+function mostrarMsgOperario(texto, ok) {
+  document.getElementById('opResultado').innerHTML = `<div class="msg ${ok ? 'ok' : 'err'}">${texto}</div>`;
+}
+
+function resetFormularioOperario() {
+  document.getElementById('opPedido').value = '';
+  document.getElementById('opProceso').innerHTML = '<option value="">Ingresa un pedido primero...</option>';
+  document.getElementById('opTasaHint').textContent = '';
+  opCodigoEan = '';
+  opPedidoValidado = '';
+  document.getElementById('opEanConfirmado').style.display = 'none';
+  document.getElementById('opAlertaEan').innerHTML = '';
+  document.getElementById('opSuplementoMin').value = '0';
+  document.getElementById('opUnidades').value = '';
+  document.getElementById('opAlertaUnidades').innerHTML = '';
+  document.getElementById('opObservaciones').value = '';
+  document.getElementById('opFecha').valueAsDate = new Date();
+  document.getElementById('opHoraInicio').value = '';
+  document.getElementById('opHoraFin').value = '';
+  // Cédula, coordinador y supernumerario se mantienen.
+}
+  </script>
+</body>
+
+</html>
