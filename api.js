@@ -1,7 +1,7 @@
 // api.js — wrapper de comunicación con el backend Apps Script (Registro de Producción)
 
-var API_URL = 'PEGA_AQUI_LA_URL_/exec_DE_LA_NUEVA_IMPLEMENTACION';
-var API_TOKEN = 'EL_MISMO_VALOR_QUE_PUSISTE_EN_TOKEN_API_DE_CODE.GS';
+var API_URL = 'https://script.google.com/macros/s/AKfycbw2lnJTQLNg7CYdtDjgDvEPh24QaFia9H-YkbcDVDzYgrzr7twF5k02DxFhgEGo4L0/exec';
+var API_TOKEN = '937dc94c-cdb2-428e-8b04-b1dfb3b52280';
 
 function llamarAPI(action, datos) {
   return fetch(API_URL + '?cachebust=' + Date.now(), {
