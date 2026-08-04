@@ -1491,58 +1491,64 @@
           estadoPaquete: estadoPaquete,
         };
 
-      if (!payload.pedido)
-        return mostrarMsg("Falta el número de pedido.", false);
-      if (!payload.codigoEan)
-        return mostrarMsg("Falta escanear el código EAN del producto.", false);
-      if (!procesoValido())
-        return mostrarMsg(
-          "El proceso seleccionado no es válido para este pedido.",
-          false,
-        );
-      if (!payload.coordinador)
-        return mostrarMsg("Falta el nombre del coordinador.", false);
-      if (!payload.supernumerario)
-        return mostrarMsg("Falta el nombre del supernumerario.", false);
-      if (!payload.horaInicio || !payload.horaFin)
-        return mostrarMsg("Faltan las horas.", false);
-      if (!payload.totalUnidades)
-        return mostrarMsg("Falta el total de unidades.", false);
-      if (payload.operarios.length === 0)
-        return mostrarMsg("Agrega al menos un operario o un equipo.", false);
+        if (!payload.pedido)
+          return mostrarMsg("Falta el número de pedido.", false);
+        if (!payload.codigoEan)
+          return mostrarMsg(
+            "Falta escanear el código EAN del producto.",
+            false,
+          );
+        if (!procesoValido())
+          return mostrarMsg(
+            "El proceso seleccionado no es válido para este pedido.",
+            false,
+          );
+        if (!payload.coordinador)
+          return mostrarMsg("Falta el nombre del coordinador.", false);
+        if (!payload.supernumerario)
+          return mostrarMsg("Falta el nombre del supernumerario.", false);
+        if (!payload.horaInicio || !payload.horaFin)
+          return mostrarMsg("Faltan las horas.", false);
+        if (!payload.totalUnidades)
+          return mostrarMsg("Falta el total de unidades.", false);
+        if (payload.operarios.length === 0)
+          return mostrarMsg("Agrega al menos un operario o un equipo.", false);
 
-      const btn = document.getElementById("btnSubmit");
-      btn.disabled = true;
-      btn.textContent = "Enviando...";
+        const btn = document.getElementById("btnSubmit");
+        btn.disabled = true;
+        btn.textContent = "Enviando...";
 
-      llamarAPI("submitRegistro", payload)
-        .then(function (res) {
-          if (res.success) {
-            mostrarMsg("Registro guardado correctamente", true);
-            operarios = [];
-            renderChips();
-            document.getElementById("totalUnidades").value = "";
-            document.getElementById("observaciones").value = "";
-            document.getElementById("suplementoMin").value = "0";
-            document.getElementById("fecha").valueAsDate = new Date();
-            document.getElementById("horaInicio").value = "";
-            document.getElementById("horaFin").value = "";
-            estadoPaquete = "";
-            document.getElementById("alertaCantidad").innerHTML = "";
-            document.getElementById("previewCard").style.display = "none";
-            const pedidoActual = document.getElementById("pedido").value.trim();
-            if (pedidoActual) cargarResumenPedido(pedidoActual);
-          } else {
-            mostrarMsg("Error: " + res.message, false);
-          }
-          btn.disabled = false;
-          btn.textContent = "Enviar registro";
-        })
-        .catch(function (err) {
-          mostrarMsg("Error de conexión: " + err.message, false);
-          btn.disabled = false;
-          btn.textContent = "Enviar registro";
-        });
+        llamarAPI("submitRegistro", payload)
+          .then(function (res) {
+            if (res.success) {
+              mostrarMsg("Registro guardado correctamente", true);
+              operarios = [];
+              renderChips();
+              document.getElementById("totalUnidades").value = "";
+              document.getElementById("observaciones").value = "";
+              document.getElementById("suplementoMin").value = "0";
+              document.getElementById("fecha").valueAsDate = new Date();
+              document.getElementById("horaInicio").value = "";
+              document.getElementById("horaFin").value = "";
+              estadoPaquete = "";
+              document.getElementById("alertaCantidad").innerHTML = "";
+              document.getElementById("previewCard").style.display = "none";
+              const pedidoActual = document
+                .getElementById("pedido")
+                .value.trim();
+              if (pedidoActual) cargarResumenPedido(pedidoActual);
+            } else {
+              mostrarMsg("Error: " + res.message, false);
+            }
+            btn.disabled = false;
+            btn.textContent = "Enviar registro";
+          })
+          .catch(function (err) {
+            mostrarMsg("Error de conexión: " + err.message, false);
+            btn.disabled = false;
+            btn.textContent = "Enviar registro";
+          });
+      }
 
       function mostrarMsg(texto, ok) {
         document.getElementById("resultado").innerHTML =
