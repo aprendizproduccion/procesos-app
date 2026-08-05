@@ -285,6 +285,92 @@
         cursor: pointer;
         flex: 1;
       }
+
+      /* ===== Responsive para móviles ===== */
+      @media (max-width: 480px) {
+        body {
+          padding: 16px 12px 50px;
+        }
+
+        h1 {
+          font-size: 18px;
+        }
+
+        .card {
+          padding: 14px;
+          border-radius: 8px;
+        }
+
+        input,
+        select,
+        textarea {
+          font-size: 16px;
+          /* evita el auto-zoom de iOS al enfocar un campo */
+          padding: 10px 8px;
+        }
+
+        .row2 {
+          gap: 10px;
+        }
+
+        .add-row {
+          flex-direction: column;
+        }
+
+        .add-row input,
+        .add-row select {
+          width: 100%;
+        }
+
+        .add-row button {
+          width: 100%;
+          padding: 12px;
+        }
+
+        table {
+          font-size: 12px;
+        }
+
+        th,
+        td {
+          padding: 5px 3px;
+        }
+
+        .modal-box {
+          padding: 16px;
+          max-width: 100%;
+        }
+
+        .modal-box .row2 {
+          flex-direction: column;
+        }
+
+        .modal-box .row2 button {
+          width: 100%;
+        }
+
+        .btn-submit {
+          font-size: 14px;
+          padding: 12px;
+        }
+      }
+
+      @media (max-width: 360px) {
+        .row2 > div {
+          flex: 1 1 100%;
+        }
+
+        .ean-confirmado {
+          font-size: 17px;
+          padding: 10px 12px;
+        }
+
+        #alertaCantidadJustificar .msg,
+        #alertaCantidadJustificar .hint {
+          font-size: 14px;
+          padding: 10px 12px;
+        }
+      }
     </style>
   </head>
 
