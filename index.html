@@ -2,7 +2,10 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
+    />
     <base target="_top" />
     <style>
       * {
@@ -307,7 +310,17 @@
         textarea {
           font-size: 16px;
           /* evita el auto-zoom de iOS al enfocar un campo */
-          padding: 10px 8px;
+          padding: 6px 8px;
+          line-height: 1.25;
+        }
+
+        select {
+          padding: 6px 8px;
+        }
+
+        input[type="date"],
+        input[type="time"] {
+          padding: 5px 8px;
         }
 
         .row2 {
@@ -325,7 +338,8 @@
 
         .add-row button {
           width: 100%;
-          padding: 12px;
+          padding: 8px 12px;
+          line-height: 1.25;
         }
 
         table {
