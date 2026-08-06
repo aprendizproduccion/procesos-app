@@ -1158,6 +1158,7 @@
         const clave = document.getElementById("loginPassword").value;
         if (!clave) return;
         const btn = document.getElementById("btnEnviarLogin");
+        if (btn.disabled) return; // evita doble envío (doble Enter/tap en móvil)
         const textoOriginal = btn.innerHTML;
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner"></span>';
@@ -1754,6 +1755,7 @@
       let justEanSeleccionado = "";
       let restanteNetoSeleccionado = null;
       let justificacionPendiente = null;
+      let justEanEnvioEnCurso = false;
 
       function abrirVistaJustificacion(pedido) {
         document.getElementById("vistaPrincipal").style.display = "none";
@@ -1779,11 +1781,13 @@
         const pedido = document.getElementById("justPedido").value.trim();
         const alertaDiv = document.getElementById("justAlertaEan");
         if (!valor) return;
+        if (justEanEnvioEnCurso) return; // evita doble envío (doble Enter/tap en móvil)
         if (!pedido) {
           alertaDiv.innerHTML =
             '<div class="msg err">Falta el número de pedido.</div>';
           return;
         }
+        justEanEnvioEnCurso = true;
         alertaDiv.innerHTML =
           '<div class="msg" style="background:#e0f2fe; color:#0369a1;">Verificando EAN...</div>';
 
@@ -1833,7 +1837,9 @@
           .catch(function (err) {
             alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${err.message}</div>`;
           })
-          .obtenerEstadoEanJustificar(pedido, valor);
+          .finally(function () {
+            justEanEnvioEnCurso = false;
+          });
       }
 
       const justEanBuscarInput = document.getElementById("justEanBuscar");
@@ -2011,10 +2017,13 @@
       let opCodigoEan = "";
       let opPedidoValidado = "";
       let opFormularioBloqueado = false;
+      let cedulaEnvioEnCurso = false;
 
       function confirmarCedula() {
         const valor = document.getElementById("opCedula").value.trim();
         if (!valor) return;
+        if (cedulaEnvioEnCurso) return; // evita doble envío (doble Enter/tap en móvil)
+        cedulaEnvioEnCurso = true;
         llamarAPI("buscarOperarioPorCedula", { cedula: valor })
           .then(function (res) {
             const alertaDiv = document.getElementById("opAlertaCedula");
@@ -2038,7 +2047,9 @@
             document.getElementById("opAlertaCedula").innerHTML =
               `<div class="msg err">Error de conexión: ${err.message}</div>`;
           })
-          .buscarOperarioPorCedula(valor);
+          .finally(function () {
+            cedulaEnvioEnCurso = false;
+          });
       }
       document
         .getElementById("opCedula")
