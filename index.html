@@ -161,6 +161,21 @@
         background: #9ca3af;
         cursor: not-allowed;
       }
+      .spinner {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.4);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: girarSpinner 0.6s linear infinite;
+        vertical-align: middle;
+      }
+      @keyframes girarSpinner {
+        to {
+          transform: rotate(360deg);
+        }
+      }
 
       #btnCerrarPedido {
         width: 100%;
@@ -424,11 +439,38 @@
       </div>
       <div id="loginPasswordBox" style="display: none; margin-top: 14px">
         <label id="loginRolLabel"></label>
-        <input id="loginPassword" type="password" placeholder="Contraseña" />
+        <div style="position: relative">
+          <input
+            id="loginPassword"
+            type="password"
+            placeholder="Contraseña"
+            style="padding-right: 42px"
+          />
+          <button
+            type="button"
+            id="btnTogglePassword"
+            onclick="togglePasswordVisibility()"
+            style="
+              position: absolute;
+              right: 6px;
+              top: 50%;
+              transform: translateY(-50%);
+              background: none;
+              border: none;
+              cursor: pointer;
+              font-size: 18px;
+              padding: 4px;
+              line-height: 1;
+            "
+          >
+            👁️
+          </button>
+        </div>
         <div id="loginError"></div>
         <div class="row2">
           <button
             type="button"
+            id="btnEnviarLogin"
             class="btn-submit"
             style="background: #16a34a"
             onclick="enviarLogin()"
@@ -478,7 +520,7 @@
           </div>
           <div>
             <label>Fecha</label>
-            <input id="fecha" type="date" />
+            <input id="fecha" type="date" disabled />
           </div>
         </div>
 
@@ -1099,6 +1141,10 @@
       function enviarLogin() {
         const clave = document.getElementById("loginPassword").value;
         if (!clave) return;
+        const btn = document.getElementById("btnEnviarLogin");
+        const textoOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>';
         llamarAPI("validarLogin", { rol: rolActual, password: clave })
           .then(function (res) {
             if (res.success) {
@@ -1119,12 +1165,28 @@
             } else {
               document.getElementById("loginError").innerHTML =
                 `<div class="msg err">${res.message}</div>`;
+              btn.disabled = false;
+              btn.innerHTML = textoOriginal;
             }
           })
           .catch(function (err) {
             document.getElementById("loginError").innerHTML =
               `<div class="msg err">Error de conexión: ${err.message}</div>`;
+            btn.disabled = false;
+            btn.innerHTML = textoOriginal;
           });
+      }
+
+      function togglePasswordVisibility() {
+        const input = document.getElementById("loginPassword");
+        const btn = document.getElementById("btnTogglePassword");
+        if (input.type === "password") {
+          input.type = "text";
+          btn.textContent = "🙈";
+        } else {
+          input.type = "password";
+          btn.textContent = "👁️";
+        }
       }
 
       document
@@ -2068,18 +2130,12 @@
         if (p && p.link) window.open(p.link, "_blank");
       }
 
-      function bloquearFormularioOperario(mensaje) {
-        opFormularioBloqueado = true;
-        document
-          .getElementById("vistaOperario")
-          .querySelectorAll("input, select, textarea, button")
-          .forEach((el) => (el.disabled = true));
+      function mostrarAlertaUnidadesOperario(mensaje) {
         document.getElementById("opAlertaUnidades").innerHTML =
-          `<div class="msg err">${mensaje} Solicita a tu supernumerario, coordinador o un superior que revise y envíe este dato por ti.</div>`;
+          `<div class="msg err">${mensaje} Corrige el numero de unidades o solicita a tu supernumerario, coordinador o un superior que revise y envíe este dato por ti.</div>`;
       }
 
       function enviarOperario() {
-        if (opFormularioBloqueado) return;
         if (!opCedulaConfirmada)
           return mostrarMsgOperario("Confirma tu cédula primero.", false);
         const payload = {
@@ -2136,7 +2192,7 @@
               res.message &&
               res.message.indexOf("no corresponde con lo disponible") !== -1
             ) {
-              bloquearFormularioOperario(res.message);
+              mostrarAlertaUnidadesOperario(res.message);
             } else {
               mostrarMsgOperario("Error: " + res.message, false);
             }
