@@ -938,6 +938,32 @@
       </div>
     </div>
 
+    <div id="modalEanesPedido" class="modal-overlay">
+      <div class="modal-box" style="max-width: 480px">
+        <h3 style="color: #2452c9">EANes del pedido</h3>
+        <div style="max-height: 55vh; overflow-y: auto; margin-bottom: 14px">
+          <table>
+            <thead>
+              <tr>
+                <th>EAN</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyEanesPedido"></tbody>
+          </table>
+        </div>
+        <div class="row2">
+          <button
+            type="button"
+            style="background: #9ca3af; color: #fff"
+            onclick="cerrarModalEanesPedido()"
+          >
+            Volver
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div id="vistaJustificacion" class="card" style="display: none">
       <label
         style="
@@ -957,6 +983,15 @@
 
       <label>Pedido</label>
       <input id="justPedido" disabled />
+      <button
+        type="button"
+        id="btnVerEanesPedido"
+        class="btn-submit"
+        style="background: #2452c9; margin-top: -8px; margin-bottom: 14px"
+        onclick="abrirModalEanesPedido()"
+      >
+        Ver EANes del pedido
+      </button>
 
       <label>EAN</label>
 
@@ -1792,6 +1827,80 @@
         justEanSeleccionado = "";
         restanteNetoSeleccionado = null;
         window.scrollTo(0, 0);
+      }
+
+      let verEanesPedidoEnCurso = false;
+
+      function abrirModalEanesPedido() {
+        const pedido = document.getElementById("justPedido").value.trim();
+        if (!pedido) return;
+        if (verEanesPedidoEnCurso) return; // evita doble tap
+        verEanesPedidoEnCurso = true;
+
+        const btn = document.getElementById("btnVerEanesPedido");
+        const textoOriginal = btn.textContent;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>';
+
+        llamarAPI("obtenerEanesParaJustificar", { pedido: pedido })
+          .then(function (res) {
+            if (res.success) {
+              renderListaEanesPedido(res.eanes);
+              document
+                .getElementById("modalEanesPedido")
+                .classList.add("visible");
+            } else {
+              document.getElementById("justAlertaEan").innerHTML =
+                `<div class="msg err">${res.message}</div>`;
+            }
+          })
+          .catch(function (err) {
+            document.getElementById("justAlertaEan").innerHTML =
+              `<div class="msg err">Error de conexión: ${err.message}</div>`;
+          })
+          .finally(function () {
+            btn.disabled = false;
+            btn.textContent = textoOriginal;
+            verEanesPedidoEnCurso = false;
+          });
+      }
+
+      function renderListaEanesPedido(eanes) {
+        const tbody = document.getElementById("tbodyEanesPedido");
+        if (!eanes || eanes.length === 0) {
+          tbody.innerHTML =
+            '<tr><td colspan="2">Este pedido no tiene EANes en Validación.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = eanes
+          .map(function (e) {
+            const color = e.estado === "Completado" ? "#166534" : "#92400e";
+            return (
+              `<tr data-ean="${e.ean}" style="cursor:pointer;">` +
+              `<td>${e.ean}</td>` +
+              `<td style="color:${color}; font-weight:600;">${e.estado}</td>` +
+              `</tr>`
+            );
+          })
+          .join("");
+      }
+
+      document
+        .getElementById("tbodyEanesPedido")
+        .addEventListener("click", function (e) {
+          const fila = e.target.closest("tr[data-ean]");
+          if (!fila) return;
+          seleccionarEanDesdeModal(fila.getAttribute("data-ean"));
+        });
+
+      function cerrarModalEanesPedido() {
+        document.getElementById("modalEanesPedido").classList.remove("visible");
+      }
+
+      function seleccionarEanDesdeModal(ean) {
+        cerrarModalEanesPedido();
+        document.getElementById("justEanBuscar").value = ean;
+        confirmarEanJustificar();
       }
 
       function confirmarEanJustificar() {
