@@ -32,14 +32,14 @@
       }
 
       .logo-login {
-      display: block;
-      width: 96px;
-      height: 96px;
-      margin: 0 auto 14px;
-      border-radius: 50%;
-      object-fit: cover;
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
-    }
+        display: block;
+        width: 96px;
+        height: 96px;
+        margin: 0 auto 14px;
+        border-radius: 50%;
+        object-fit: cover;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+      }
 
       .card {
         background: #fff;
@@ -423,7 +423,11 @@
   <body>
     <h1>Registro de Producción</h1>
 
-    <div id="vistaLogin" class="card" style="max-width: 360px; margin: 60px auto">
+    <div
+      id="vistaLogin"
+      class="card"
+      style="max-width: 360px; margin: 60px auto"
+    >
       <img src="glovanze1_logo.svg" alt="Logo" class="logo-login" />
       <h1 style="text-align: center">Iniciar sesión</h1>
 
@@ -446,47 +450,49 @@
         </button>
       </div>
       <div id="loginPasswordBox" style="display: none; margin-top: 14px">
-        <label id="loginRolLabel"></label>
-        <div style="position: relative">
-          <input
-            id="loginPassword"
-            type="password"
-            placeholder="Contraseña"
-            style="padding-right: 42px"
-          />
-          <button
-            type="button"
-            id="btnTogglePassword"
-            onclick="togglePasswordVisibility()"
-            style="
-              position: absolute;
-              right: 6px;
-              top: 50%;
-              transform: translateY(-50%);
-              background: none;
-              border: none;
-              cursor: pointer;
-              padding: 4px;
-              line-height: 1;
-              color: #666;
-              display: flex;
-            "
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
+        <div id="loginPasswordFieldWrap">
+          <label id="loginRolLabel"></label>
+          <div style="position: relative">
+            <input
+              id="loginPassword"
+              type="password"
+              placeholder="Contraseña"
+              style="padding-right: 42px"
+            />
+            <button
+              type="button"
+              id="btnTogglePassword"
+              onclick="togglePasswordVisibility()"
+              style="
+                position: absolute;
+                right: 6px;
+                top: 50%;
+                transform: translateY(-50%);
+                background: none;
+                border: none;
+                cursor: pointer;
+                padding: 4px;
+                line-height: 1;
+                color: #666;
+                display: flex;
+              "
             >
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-          </button>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
+          </div>
         </div>
         <div id="loginError"></div>
         <div class="row2">
@@ -1019,13 +1025,15 @@
         rolActual = rol;
         document.getElementById("loginBotones").style.display = "none";
         document.getElementById("loginPasswordBox").style.display = "block";
+        document.getElementById("loginPasswordFieldWrap").style.display =
+          rol === "supervisor" ? "block" : "none";
         document.getElementById("loginRolLabel").textContent =
-          rol === "supervisor"
-            ? "Contraseña de Administrativo"
-            : "Contraseña de Operativo";
+          rol === "supervisor" ? "Contraseña de Administrativo" : "";
         document.getElementById("loginPassword").value = "";
         document.getElementById("loginError").innerHTML = "";
-        document.getElementById("loginPassword").focus();
+        if (rol === "supervisor") {
+          document.getElementById("loginPassword").focus();
+        }
       }
 
       function cancelarSeleccionRol() {
@@ -1163,8 +1171,11 @@
       }
 
       function enviarLogin() {
-        const clave = document.getElementById("loginPassword").value;
-        if (!clave) return;
+        const clave =
+          rolActual === "supervisor"
+            ? document.getElementById("loginPassword").value
+            : "";
+        if (rolActual === "supervisor" && !clave) return;
         const btn = document.getElementById("btnEnviarLogin");
         if (btn.disabled) return; // evita doble envío (doble Enter/tap en móvil)
         const textoOriginal = btn.innerHTML;
