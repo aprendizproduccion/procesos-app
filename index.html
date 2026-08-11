@@ -640,6 +640,15 @@
       </div>
 
       <div class="card">
+        <label>Códigos sobrantes (si aplica)</label>
+        <input
+          id="codigosSobrantes"
+          type="number"
+          min="0"
+          step="1"
+          inputmode="numeric"
+          placeholder="Ej: 5 — déjalo vacío si no sobró ninguno"
+        />
         <label>Observaciones</label>
         <textarea
           id="observaciones"
@@ -850,6 +859,16 @@
       <label>Unidades procesadas</label>
       <input id="opUnidades" type="number" min="0" placeholder="Ej: 50" />
       <div id="opAlertaUnidades"></div>
+
+      <label>Códigos sobrantes (si aplica)</label>
+      <input
+        id="opCodigosSobrantes"
+        type="number"
+        min="0"
+        step="1"
+        inputmode="numeric"
+        placeholder="Ej: 5 — déjalo vacío si no sobró ninguno"
+      />
 
       <label>Observaciones</label>
       <textarea
@@ -1101,6 +1120,7 @@
           "horaInicio",
           "horaFin",
           "totalUnidades",
+          "codigosSobrantes",
           "observaciones",
           "operarioInput",
           "equipoSelect",
@@ -1113,6 +1133,7 @@
           "opHoraInicio",
           "opHoraFin",
           "opUnidades",
+          "opCodigosSobrantes",
           "opObservaciones",
           "loginPassword",
         ];
@@ -1558,6 +1579,10 @@
           }),
       );
 
+      document
+        .getElementById("codigosSobrantes")
+        .addEventListener("input", ejecutarValidacionCantidades);
+
       let resumenPedidoActual = null;
 
       function resetContadorPedido() {
@@ -1603,8 +1628,17 @@
         cont.innerHTML = `Unidades Pedido: ${proyectado} / ${resumenPedidoActual.totalPedido} unidades`;
       }
 
+      function obtenerCodigosSobrantesValidados(inputId) {
+        const raw = document.getElementById(inputId).value.trim();
+        if (raw === "") return { ok: true, valor: 0 };
+        if (!/^\d+$/.test(raw)) return { ok: false, valor: null };
+        return { ok: true, valor: Number(raw) };
+      }
+
       function ejecutarValidacionCantidades() {
         const totalInput = document.getElementById("totalUnidades").value;
+        const codSobrantesResult =
+          obtenerCodigosSobrantesValidados("codigosSobrantes");
         const alertaDiv = document.getElementById("alertaCantidad");
         const btnSubmit = document.getElementById("btnSubmit");
 
@@ -1615,14 +1649,25 @@
         }
 
         const cantidadIngresada = Number(totalInput);
-        const contadorHtml = `<div class="hint" style="margin-top:0;margin-bottom:6px;">Este EAN: ${cantidadIngresada} / ${unidadesRestantes} unidades restantes (${unidadesEsperadas} totales)</div>`;
+        const codigosSobrantes = codSobrantesResult.ok
+          ? codSobrantesResult.valor
+          : 0;
+        const sumaTotal = cantidadIngresada + codigosSobrantes;
+        const detalleSobrantes =
+          codigosSobrantes > 0 ? ` + ${codigosSobrantes} sobrantes` : "";
+        const contadorHtml = `<div class="hint" style="margin-top:0;margin-bottom:6px;">Este EAN: ${cantidadIngresada}${detalleSobrantes} = ${sumaTotal} / ${unidadesRestantes} unidades restantes (${unidadesEsperadas} totales)</div>`;
 
-        if (cantidadIngresada > unidadesRestantes) {
+        if (!codSobrantesResult.ok) {
           alertaDiv.innerHTML =
             contadorHtml +
-            `<div class="msg err">ALERTA CRÍTICA: La cantidad ingresada (${cantidadIngresada}) supera lo que falta de este EAN (${unidadesRestantes} de ${unidadesEsperadas} totales). El envío está bloqueado hasta realizar verificación.</div>`;
+            `<div class="msg err">Los códigos sobrantes deben ser un número entero (sin letras ni decimales).</div>`;
           btnSubmit.disabled = true;
-        } else if (cantidadIngresada < unidadesRestantes) {
+        } else if (sumaTotal > unidadesRestantes) {
+          alertaDiv.innerHTML =
+            contadorHtml +
+            `<div class="msg err">ALERTA CRÍTICA: La cantidad ingresada${detalleSobrantes} supera lo que falta de este EAN (${unidadesRestantes} de ${unidadesEsperadas} totales). El envío está bloqueado hasta realizar verificación.</div>`;
+          btnSubmit.disabled = true;
+        } else if (sumaTotal < unidadesRestantes) {
           alertaDiv.innerHTML = contadorHtml;
           btnSubmit.disabled = false;
         } else {
@@ -1721,6 +1766,8 @@
 
       // ---------------- ENVÍO DE DATOS ----------------
       function enviar() {
+        const codSobrantesResult =
+          obtenerCodigosSobrantesValidados("codigosSobrantes");
         const payload = {
           pedido: document.getElementById("pedido").value.trim(),
           codigoEan: codigoEan,
@@ -1736,12 +1783,18 @@
           horaInicio: document.getElementById("horaInicio").value,
           horaFin: document.getElementById("horaFin").value,
           suplementoMin: Number(document.getElementById("suplementoMin").value),
+          codigosSobrantes: codSobrantesResult.ok ? codSobrantesResult.valor : 0,
           observaciones: document.getElementById("observaciones").value.trim(),
           totalUnidades: Number(document.getElementById("totalUnidades").value),
           operarios: operarios,
           estadoPaquete: estadoPaquete,
         };
 
+        if (!codSobrantesResult.ok)
+          return mostrarMsg(
+            "Los códigos sobrantes deben ser un número entero (sin letras ni decimales).",
+            false,
+          );
         if (!payload.pedido)
           return mostrarMsg("Falta el número de pedido.", false);
         if (!payload.codigoEan)
@@ -1776,6 +1829,7 @@
               operarios = [];
               renderChips();
               document.getElementById("totalUnidades").value = "";
+              document.getElementById("codigosSobrantes").value = "";
               document.getElementById("observaciones").value = "";
               document.getElementById("suplementoMin").value = "0";
               document.getElementById("fecha").valueAsDate = new Date();
@@ -2304,6 +2358,14 @@
       function enviarOperario() {
         if (!opCedulaConfirmada)
           return mostrarMsgOperario("Confirma tu cédula primero.", false);
+        const opCodSobrantesResult = obtenerCodigosSobrantesValidados(
+          "opCodigosSobrantes",
+        );
+        if (!opCodSobrantesResult.ok)
+          return mostrarMsgOperario(
+            "Los códigos sobrantes deben ser un número entero (sin letras ni decimales).",
+            false,
+          );
         const payload = {
           cedula: opCedulaConfirmada,
           coordinador: document.getElementById("opCoordinador").value.trim(),
@@ -2321,6 +2383,7 @@
           unidadesProcesadas: Number(
             document.getElementById("opUnidades").value,
           ),
+          codigosSobrantes: opCodSobrantesResult.valor,
           observaciones: document
             .getElementById("opObservaciones")
             .value.trim(),
@@ -2387,6 +2450,7 @@
         document.getElementById("opSuplementoMin").value = "0";
         document.getElementById("opUnidades").value = "";
         document.getElementById("opAlertaUnidades").innerHTML = "";
+        document.getElementById("opCodigosSobrantes").value = "";
         document.getElementById("opObservaciones").value = "";
         document.getElementById("opFecha").valueAsDate = new Date();
         document.getElementById("opHoraInicio").value = "";
