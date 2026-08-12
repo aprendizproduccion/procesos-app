@@ -1056,7 +1056,7 @@
           class="btn-submit"
           id="btnJustificarCerrar"
           style="background: #059669"
-          onclick="enviarJustificacion(true)"
+          onclick="enviarJustificacion()"
         >
           Justificar y cerrar
         </button>
@@ -1088,12 +1088,6 @@
         if (rol === "supervisor") {
           document.getElementById("loginPassword").focus();
         }
-      }
-
-      function cancelarSeleccionRol() {
-        rolActual = null;
-        document.getElementById("loginPasswordBox").style.display = "none";
-        document.getElementById("loginBotones").style.display = "flex";
       }
 
       function cancelarSeleccionRol() {
@@ -1215,7 +1209,6 @@
           opPedidoValidado =
             "";
         unidadesEsperadas = unidadesRestantes = rolActual = null;
-        opFormularioBloqueado = false;
         operarios = [];
         justEanSeleccionado = "";
         restanteNetoSeleccionado = null;
@@ -1331,19 +1324,6 @@
           document.getElementById("btnSubmit").disabled = true;
         }
       });
-
-      if (codigoEan && pedidoInput.value.trim() !== pedidoValidado) {
-        codigoEan = "";
-        unidadesEsperadas = null;
-        unidadesRestantes = null;
-        const confirmado = document.getElementById("eanConfirmado");
-        confirmado.textContent = "";
-        confirmado.style.display = "none";
-        document.getElementById("alertaEan").innerHTML =
-          '<div class="msg warn">AVISO: Cambiaste el número de pedido. Vuelve a escanear el EAN para validar de nuevo.</div>';
-        document.getElementById("btnSubmit").disabled = true;
-        resetContadorPedido();
-      }
 
       // ---------------- CARGA DE DATOS INICIALES ----------------
 
@@ -1705,7 +1685,7 @@
           hint.textContent = "";
           btnLink.style.display = "none";
         } else if (p) {
-          hint.textContent = `Tasa Estandar: ${p.unidadesHora} unidades/hora`;
+          hint.textContent = `Tasa Estándar: ${p.unidadesHora} unidades/hora`;
           btnLink.style.display = p.link ? "block" : "none";
         } else {
           hint.innerHTML =
@@ -2198,7 +2178,6 @@
       let opCedulaConfirmada = "";
       let opCodigoEan = "";
       let opPedidoValidado = "";
-      let opFormularioBloqueado = false;
       let cedulaEnvioEnCurso = false;
 
       function confirmarCedula() {
