@@ -305,6 +305,10 @@
         line-height: 1.4;
       }
 
+      #modalAvisoTexto {
+        white-space: pre-line;
+      }
+
       .modal-box .row2 button {
         border: none;
         border-radius: 6px;
@@ -885,7 +889,7 @@
 
     <div id="modalAviso" class="modal-overlay">
       <div class="modal-box">
-        <h3 style="color: #166534">Justificación guardada</h3>
+        <h3 style="color: #166534" id="modalAvisoTitulo">Justificación guardada</h3>
         <p id="modalAvisoTexto"></p>
         <div class="row2">
           <button
@@ -1305,6 +1309,7 @@
       document.getElementById("fecha").valueAsDate = new Date();
       let codigoEan = "";
       let pedidoValidado = "";
+      let envioRegistroEnCurso = false;
       const eanInput = document.getElementById("eanInput");
       const pedidoInput = document.getElementById("pedido");
 
@@ -1746,6 +1751,7 @@
 
       // ---------------- ENVÍO DE DATOS ----------------
       function enviar() {
+        if (envioRegistroEnCurso) return; // evita doble envío (doble Enter/tap en móvil)
         const codSobrantesResult =
           obtenerCodigosSobrantesValidados("codigosSobrantes");
         const payload = {
@@ -1763,7 +1769,9 @@
           horaInicio: document.getElementById("horaInicio").value,
           horaFin: document.getElementById("horaFin").value,
           suplementoMin: Number(document.getElementById("suplementoMin").value),
-          codigosSobrantes: codSobrantesResult.ok ? codSobrantesResult.valor : 0,
+          codigosSobrantes: codSobrantesResult.ok
+            ? codSobrantesResult.valor
+            : 0,
           observaciones: document.getElementById("observaciones").value.trim(),
           totalUnidades: Number(document.getElementById("totalUnidades").value),
           operarios: operarios,
@@ -1799,6 +1807,7 @@
           return mostrarMsg("Agrega al menos un operario o un equipo.", false);
 
         const btn = document.getElementById("btnSubmit");
+        envioRegistroEnCurso = true;
         btn.disabled = true;
         btn.textContent = "Enviando...";
 
@@ -1806,6 +1815,21 @@
           .then(function (res) {
             if (res.success) {
               mostrarMsg("Registro guardado correctamente", true);
+              mostrarModalAviso(
+                "Pedido: " +
+                  payload.pedido +
+                  "\nEAN: " +
+                  payload.codigoEan +
+                  "\nProceso: " +
+                  payload.proceso +
+                  "\nUnidades: " +
+                  payload.totalUnidades +
+                  "\nOperarios: " +
+                  payload.operarios.join(", ") +
+                  "\nID de lote: " +
+                  res.loteId,
+                "Registro guardado correctamente",
+              );
               operarios = [];
               renderChips();
               document.getElementById("totalUnidades").value = "";
@@ -1832,6 +1856,9 @@
             mostrarMsg("Error de conexión: " + err.message, false);
             btn.disabled = false;
             btn.textContent = "Enviar registro";
+          })
+          .finally(function () {
+            envioRegistroEnCurso = false;
           });
       }
 
@@ -2040,7 +2067,9 @@
           }
         });
 
-      function mostrarModalAviso(texto) {
+      function mostrarModalAviso(texto, titulo) {
+        document.getElementById("modalAvisoTitulo").textContent =
+          titulo || "Aviso";
         document.getElementById("modalAvisoTexto").textContent = texto;
         document.getElementById("modalAviso").classList.add("visible");
       }
@@ -2150,7 +2179,7 @@
               const mensaje = res.pedidoCompleto
                 ? "Justificación guardada y pedido completado."
                 : "Justificación guardada y EAN cerrado.";
-              mostrarModalAviso(mensaje);
+              mostrarModalAviso(mensaje, "Justificación guardada");
               abrirVistaJustificacion(payload.pedido);
             } else {
               alertaDiv.innerHTML = `<div class="msg err">Error: ${res.message}</div>`;
@@ -2179,6 +2208,7 @@
       let opCodigoEan = "";
       let opPedidoValidado = "";
       let cedulaEnvioEnCurso = false;
+      let opEnvioRegistroEnCurso = false;
 
       function confirmarCedula() {
         const valor = document.getElementById("opCedula").value.trim();
@@ -2335,11 +2365,11 @@
       }
 
       function enviarOperario() {
+        if (opEnvioRegistroEnCurso) return; // evita doble envío (doble Enter/tap en móvil)
         if (!opCedulaConfirmada)
           return mostrarMsgOperario("Confirma tu cédula primero.", false);
-        const opCodSobrantesResult = obtenerCodigosSobrantesValidados(
-          "opCodigosSobrantes",
-        );
+        const opCodSobrantesResult =
+          obtenerCodigosSobrantesValidados("opCodigosSobrantes");
         if (!opCodSobrantesResult.ok)
           return mostrarMsgOperario(
             "Los códigos sobrantes deben ser un número entero (sin letras ni decimales).",
@@ -2386,6 +2416,7 @@
           );
 
         const btn = document.getElementById("opBtnSubmit");
+        opEnvioRegistroEnCurso = true;
         btn.disabled = true;
         btn.textContent = "Enviando...";
 
@@ -2395,6 +2426,21 @@
             btn.textContent = "Enviar registro";
             if (res.success) {
               mostrarMsgOperario("Registro guardado correctamente", true);
+              mostrarModalAviso(
+                "Pedido: " +
+                  payload.pedido +
+                  "\nEAN: " +
+                  payload.codigoEan +
+                  "\nProceso: " +
+                  payload.proceso +
+                  "\nUnidades: " +
+                  payload.unidadesProcesadas +
+                  "\nOperario: " +
+                  opNombreOperario +
+                  "\nID de lote: " +
+                  res.loteId,
+                "Registro guardado correctamente",
+              );
               resetFormularioOperario();
             } else if (
               res.message &&
@@ -2409,6 +2455,9 @@
             btn.disabled = false;
             btn.textContent = "Enviar registro";
             mostrarMsgOperario("Error de conexión: " + err.message, false);
+          })
+          .finally(function () {
+            opEnvioRegistroEnCurso = false;
           });
       }
 
