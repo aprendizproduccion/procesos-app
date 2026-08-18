@@ -38,6 +38,7 @@ export default {
 // en los próximos pasos del plan. Por ahora queda vacío a propósito.
 const ACCIONES = {
   ...accionesLectura,
+  ...accionesAuth,
   // Las acciones de escritura (submitRegistro, etc.) se agregan en los próximos pasos.
 };
 
