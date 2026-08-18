@@ -1,4 +1,6 @@
 import { accionesLectura } from "./acciones-lectura.js";
+import { accionesAuth } from "./acciones-auth.js";
+
 export default {
   async fetch(request, env) {
     if (request.method !== "POST") {
