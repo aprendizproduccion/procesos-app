@@ -1,17 +1,24 @@
 import { accionesLectura } from "./acciones-lectura.js";
 import { accionesAuth } from "./acciones-auth.js";
+import { accionesEscritura } from "./acciones-escritura.js";
 
 export default {
   async fetch(request, env) {
     if (request.method !== "POST") {
-      return json({ status: "ok", mensaje: "API de Registro de Producción activa" });
+      return json({
+        status: "ok",
+        mensaje: "API de Registro de Producción activa",
+      });
     }
 
     let body;
     try {
       body = await request.json();
     } catch (err) {
-      return json({ success: false, message: "Cuerpo de solicitud inválido" }, 400);
+      return json(
+        { success: false, message: "Cuerpo de solicitud inválido" },
+        400,
+      );
     }
 
     const { action, token, datos } = body;
@@ -22,7 +29,10 @@ export default {
 
     const handler = ACCIONES[action];
     if (!handler) {
-      return json({ success: false, message: "Acción no reconocida: " + action }, 400);
+      return json(
+        { success: false, message: "Acción no reconocida: " + action },
+        400,
+      );
     }
 
     try {
@@ -39,7 +49,8 @@ export default {
 const ACCIONES = {
   ...accionesLectura,
   ...accionesAuth,
-  // Las acciones de escritura (submitRegistro, etc.) se agregan en los próximos pasos.
+  ...accionesEscritura,
+  // guardarJustificacion y submitRegistroOperario se agregan a continuación.
 };
 
 function json(data, status = 200) {
