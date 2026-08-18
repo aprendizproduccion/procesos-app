@@ -1,3 +1,4 @@
+import { accionesLectura } from "./acciones-lectura.js";
 export default {
   async fetch(request, env) {
     if (request.method !== "POST") {
@@ -33,7 +34,10 @@ export default {
 
 // Las acciones reales (getProcesos, submitRegistro, etc.) se registran aquí
 // en los próximos pasos del plan. Por ahora queda vacío a propósito.
-const ACCIONES = {};
+const ACCIONES = {
+  ...accionesLectura,
+  // Las acciones de escritura (submitRegistro, etc.) se agregan en los próximos pasos.
+};
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
