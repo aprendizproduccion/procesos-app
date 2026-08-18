@@ -221,14 +221,15 @@ export const accionesEscritura = {
     }
   },
 
-    async submitRegistroOperario(payload, env) {
+  async submitRegistroOperario(payload, env) {
     const huella = await _huellaPayload("submitRegistroOperario", payload);
     const chequeo = await _chequearIdempotencia(env, huella);
     if (chequeo.duplicado) return chequeo.respuesta;
     if (chequeo.enProceso) {
       return {
         success: false,
-        message: "Este registro ya se está procesando (posible doble envío). Espera unos segundos y verifica en Registros antes de reintentar.",
+        message:
+          "Este registro ya se está procesando (posible doble envío). Espera unos segundos y verifica en Registros antes de reintentar.",
       };
     }
 
@@ -237,50 +238,81 @@ export const accionesEscritura = {
       if (!cedula) throw new Error("Falta la cédula del operario.");
 
       const operarioMatch = await env.DB.prepare(
-        "SELECT nombre_operario AS nombre, cedula FROM operarios WHERE cedula = ? AND activo = 1"
-      ).bind(cedula).first();
-      if (!operarioMatch) throw new Error('La cédula "' + cedula + '" no existe en el catálogo de Operarios.');
+        "SELECT nombre_operario AS nombre, cedula FROM operarios WHERE cedula = ? AND activo = 1",
+      )
+        .bind(cedula)
+        .first();
+      if (!operarioMatch)
+        throw new Error(
+          'La cédula "' + cedula + '" no existe en el catálogo de Operarios.',
+        );
 
-      const { coordinador, supernumerario } = await _validarSupervisorYSupernumerario(
-        env, String(payload.coordinador || "").trim(), String(payload.supernumerario || "").trim()
-      );
+      const { coordinador, supernumerario } =
+        await _validarSupervisorYSupernumerario(
+          env,
+          String(payload.coordinador || "").trim(),
+          String(payload.supernumerario || "").trim(),
+        );
 
       const pedido = String(payload.pedido || "").trim();
       if (!pedido) throw new Error("Falta el número de pedido.");
       const codigoEan = String(payload.codigoEan || "").trim();
-      if (!codigoEan) throw new Error("Falta escanear el código EAN del producto.");
+      if (!codigoEan)
+        throw new Error("Falta escanear el código EAN del producto.");
 
       const total = Number(payload.unidadesProcesadas);
-      if (!Number.isFinite(total) || total <= 0) throw new Error("Unidades procesadas inválidas.");
+      if (!Number.isFinite(total) || total <= 0)
+        throw new Error("Unidades procesadas inválidas.");
 
       const validacion = await _localizarValidacionEan(env, pedido, codigoEan);
       const unidadesEsperadas = validacion.unidades_totales;
       const sublinea = validacion.sublinea;
       const datosPedido = await _obtenerDatosPedido(env, pedido, sublinea);
 
-      const codigosSobrantes = _validarCodigosSobrantes(payload.codigosSobrantes);
-      const restantes = unidadesEsperadas - validacion.unidades_procesadas - validacion.justificado - validacion.codigos_sobrantes;
+      const codigosSobrantes = _validarCodigosSobrantes(
+        payload.codigosSobrantes,
+      );
+      const restantes =
+        unidadesEsperadas -
+        validacion.unidades_procesadas -
+        validacion.justificado -
+        validacion.codigos_sobrantes;
       if (total + codigosSobrantes > restantes) {
         throw new Error(
-          "La cantidad ingresada (" + total +
-            (codigosSobrantes > 0 ? " unidades + " + codigosSobrantes + " sobrantes" : " unidades") +
-            ") no corresponde con lo disponible de este pedido"
+          "La cantidad ingresada (" +
+            total +
+            (codigosSobrantes > 0
+              ? " unidades + " + codigosSobrantes + " sobrantes"
+              : " unidades") +
+            ") no corresponde con lo disponible de este pedido",
         );
       }
 
-      const procesoValidado = await _obtenerProcesoValidado(env, payload.proceso, pedido);
+      const procesoValidado = await _obtenerProcesoValidado(
+        env,
+        payload.proceso,
+        pedido,
+      );
       const tasaEstandar = procesoValidado.unidadesHora;
       const suplementoMin = Number(payload.suplementoMin) || 0;
       const fecha = _fechaHoyBogota();
       const horaInicio = String(payload.horaInicio || "").trim();
       const horaFin = String(payload.horaFin || "").trim();
-      const { duracionBrutaMin, duracionRealMin } = _calcularDuracionValidada(horaInicio, horaFin, suplementoMin);
+      const { duracionBrutaMin, duracionRealMin } = _calcularDuracionValidada(
+        horaInicio,
+        horaFin,
+        suplementoMin,
+      );
 
       const observaciones = String(payload.observaciones || "").trim();
       const loteId = crypto.randomUUID();
       const ahora = _ahoraISO();
       const durHoras = Math.round((duracionRealMin / 60) * 100) / 100;
-      const { unidadesHoraReal, eficiencia } = _calcularMetricasProduccion(total, tasaEstandar, durHoras);
+      const { unidadesHoraReal, eficiencia } = _calcularMetricasProduccion(
+        total,
+        tasaEstandar,
+        durHoras,
+      );
 
       await _marcarPedidoIniciado(env, pedido, ahora);
 
@@ -292,24 +324,45 @@ export const accionesEscritura = {
           "actualizado_en = ? " +
           "WHERE numero_pedido = ? AND ean_producto = ? " +
           "AND (unidades_procesadas + ? + codigos_sobrantes + ? + " +
-          "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) <= unidades_totales"
-      ).bind(
-        total, codigosSobrantes, total, codigosSobrantes, ahora,
-        pedido, codigoEan, total, codigosSobrantes, pedido, codigoEan
-      ).run();
+          "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) <= unidades_totales",
+      )
+        .bind(
+          total,
+          codigosSobrantes,
+          total,
+          codigosSobrantes,
+          ahora,
+          pedido,
+          codigoEan,
+          total,
+          codigosSobrantes,
+          pedido,
+          codigoEan,
+        )
+        .run();
 
       if (reserva.meta.changes === 0) {
-        throw new Error("Otro envío concurrente ya ocupó estas unidades. Verifica el estado actual del pedido antes de reintentar.");
+        throw new Error(
+          "Otro envío concurrente ya ocupó estas unidades. Verifica el estado actual del pedido antes de reintentar.",
+        );
       }
 
       const filaOperarios = await env.DB.prepare(
-        "SELECT operarios FROM validacion_eanes WHERE numero_pedido = ? AND ean_producto = ?"
-      ).bind(pedido, codigoEan).first();
-      const listaActual = (filaOperarios.operarios || "").split(" - ").map((s) => s.trim()).filter(Boolean);
-      if (!listaActual.includes(operarioMatch.nombre)) listaActual.push(operarioMatch.nombre);
+        "SELECT operarios FROM validacion_eanes WHERE numero_pedido = ? AND ean_producto = ?",
+      )
+        .bind(pedido, codigoEan)
+        .first();
+      const listaActual = (filaOperarios.operarios || "")
+        .split(" - ")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (!listaActual.includes(operarioMatch.nombre))
+        listaActual.push(operarioMatch.nombre);
       await env.DB.prepare(
-        "UPDATE validacion_eanes SET operarios = ? WHERE numero_pedido = ? AND ean_producto = ?"
-      ).bind(listaActual.join(" - "), pedido, codigoEan).run();
+        "UPDATE validacion_eanes SET operarios = ? WHERE numero_pedido = ? AND ean_producto = ?",
+      )
+        .bind(listaActual.join(" - "), pedido, codigoEan)
+        .run();
 
       const statements = [
         env.DB.prepare(
@@ -317,12 +370,33 @@ export const accionesEscritura = {
             "proceso, unidades_hora_estandar, sublinea, evento, numero_pedido, ean, unidades_totales_procesadas, " +
             "hora_inicio, hora_final, suplemento, observacion, clasificacion_proceso, duracion_bruta_min, tiempo_total, " +
             "unidades_procesadas_operario, unidades_hora_real, eficiencia, creado_en) " +
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         ).bind(
-          loteId, fecha, coordinador, operarioMatch.cedula, operarioMatch.nombre, supernumerario, datosPedido.cliente,
-          procesoValidado.nombre, tasaEstandar, sublinea, datosPedido.evento, pedido, codigoEan, total,
-          horaInicio, horaFin, suplementoMin, observaciones, datosPedido.clasificacionProceso,
-          duracionBrutaMin, durHoras, total, unidadesHoraReal, eficiencia, ahora
+          loteId,
+          fecha,
+          coordinador,
+          operarioMatch.cedula,
+          operarioMatch.nombre,
+          supernumerario,
+          datosPedido.cliente,
+          procesoValidado.nombre,
+          tasaEstandar,
+          sublinea,
+          datosPedido.evento,
+          pedido,
+          codigoEan,
+          total,
+          horaInicio,
+          horaFin,
+          suplementoMin,
+          observaciones,
+          datosPedido.clasificacionProceso,
+          duracionBrutaMin,
+          durHoras,
+          total,
+          unidadesHoraReal,
+          eficiencia,
+          ahora,
         ),
       ];
 
@@ -330,8 +404,8 @@ export const accionesEscritura = {
         statements.push(
           env.DB.prepare(
             "INSERT INTO control_produccion (numero_pedido, estado, actualizado_en) VALUES (?, 'Completado', ?) " +
-              "ON CONFLICT(numero_pedido) DO UPDATE SET estado = 'Completado', actualizado_en = excluded.actualizado_en"
-          ).bind(pedido, ahora)
+              "ON CONFLICT(numero_pedido) DO UPDATE SET estado = 'Completado', actualizado_en = excluded.actualizado_en",
+          ).bind(pedido, ahora),
         );
       }
 
@@ -344,5 +418,92 @@ export const accionesEscritura = {
       await _liberarIdempotencia(env, huella);
       throw err;
     }
+  },
+
+  async guardarJustificacion(payload, env) {
+    const pedido = String(payload.pedido || "").trim();
+    const ean = String(payload.ean || "").trim();
+    const motivo = String(payload.motivo || "").trim();
+    const unidadesAJustificar = Number(payload.unidadesAJustificar);
+    const supernumerario = String(payload.supernumerario || "").trim();
+
+    if (!pedido) throw new Error("Falta el número de pedido.");
+    if (!ean) throw new Error("Falta el código EAN.");
+    if (!motivo) throw new Error("Debes escribir el motivo de la novedad.");
+    if (!Number.isFinite(unidadesAJustificar) || unidadesAJustificar <= 0) {
+      throw new Error("Las unidades a justificar deben ser mayores a cero.");
+    }
+    if (!supernumerario) throw new Error("Falta el nombre del supernumerario.");
+
+    // Chequeo informativo previo, para un mensaje de error claro.
+    // La autoridad real es el UPDATE atómico de abajo, que vuelve a leer en frío.
+    const validacion = await _localizarValidacionEan(env, pedido, ean);
+    const restanteNeto =
+      validacion.unidades_totales -
+      validacion.unidades_procesadas -
+      validacion.justificado -
+      validacion.codigos_sobrantes;
+
+    if (restanteNeto <= 0) {
+      throw new Error(
+        "Este EAN ya no tiene faltante pendiente por justificar.",
+      );
+    }
+    if (unidadesAJustificar !== restanteNeto) {
+      throw new Error(
+        "Debes justificar exactamente " +
+          restanteNeto +
+          " unidades (el faltante total de este EAN) para poder cerrarlo. Ni más ni menos.",
+      );
+    }
+
+    const ahora = _ahoraISO();
+    const hoy = _fechaHoyBogota();
+
+    // UPDATE atómico: cierra el EAN solo si el faltante fresco sigue coincidiendo
+    // exactamente en este instante. Esto es lo que cierra el hueco de concurrencia
+    // que había quedado pendiente en el Apps Script original.
+    const cierre = await env.DB.prepare(
+      "UPDATE validacion_eanes SET estado = 'Completado', actualizado_en = ? " +
+        "WHERE numero_pedido = ? AND ean_producto = ? " +
+        "AND (unidades_totales - unidades_procesadas - codigos_sobrantes - " +
+        "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) = ?",
+    )
+      .bind(ahora, pedido, ean, pedido, ean, unidadesAJustificar)
+      .run();
+
+    if (cierre.meta.changes === 0) {
+      throw new Error(
+        "El estado de este EAN cambió justo antes de confirmar. Verifica el faltante actual antes de reintentar.",
+      );
+    }
+
+    const statements = [
+      env.DB.prepare(
+        "INSERT INTO justificaciones (fecha, supernumerario, pedido, ean, faltante, motivo, creado_en) VALUES (?,?,?,?,?,?,?)",
+      ).bind(
+        hoy,
+        supernumerario,
+        pedido,
+        ean,
+        unidadesAJustificar,
+        motivo,
+        ahora,
+      ),
+    ];
+
+    const pedidoCompleto = await _pedidoEstaCompleto(env, pedido);
+    if (pedidoCompleto) {
+      statements.push(
+        env.DB.prepare(
+          "INSERT INTO control_produccion (numero_pedido, estado, actualizado_en) VALUES (?, 'Completado', ?) " +
+            "ON CONFLICT(numero_pedido) DO UPDATE SET estado = 'Completado', actualizado_en = excluded.actualizado_en",
+        ).bind(pedido, ahora),
+      );
+    }
+
+    await env.DB.batch(statements);
+
+    return { success: true, pedidoCompleto };
   },
 };
