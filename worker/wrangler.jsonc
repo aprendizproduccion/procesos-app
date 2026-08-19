@@ -8,5 +8,15 @@
       "database_name": "registro-produccion",
       "database_id": "50f16016-83d5-4600-b088-e33749a1ef3d"
     }
-  ]
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+      "invocation_logs": true
+    }
+  }
 }
