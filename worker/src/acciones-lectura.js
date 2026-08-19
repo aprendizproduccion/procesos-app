@@ -3,9 +3,11 @@
 export const accionesLectura = {
   async getSupervisoresData(datos, env) {
     const { results } = await env.DB.prepare(
-      "SELECT tipo, nombre FROM supervisores ORDER BY tipo, nombre"
+      "SELECT tipo, nombre FROM supervisores ORDER BY tipo, nombre",
     ).all();
-    const coordinadores = results.filter((r) => r.tipo === "coordinador").map((r) => r.nombre);
+    const coordinadores = results
+      .filter((r) => r.tipo === "coordinador")
+      .map((r) => r.nombre);
     const supernumerarios = results
       .filter((r) => r.tipo === "supernumerario")
       .map((r) => ({ nombre: r.nombre }));
@@ -15,14 +17,14 @@ export const accionesLectura = {
   async getProcesos(datos, env) {
     const { results } = await env.DB.prepare(
       "SELECT nombre_proceso AS nombre, unidades_hora_estandar AS unidadesHora, " +
-        "numero_pedido AS pedido, link_procesos AS link FROM procesos"
+        "numero_pedido AS pedido, link_procesos AS link FROM procesos",
     ).all();
     return { success: true, data: results };
   },
 
   async getOperariosData(datos, env) {
     const { results } = await env.DB.prepare(
-      "SELECT nombre_operario AS nombre, equipo, cedula FROM operarios WHERE activo = 1"
+      "SELECT nombre_operario AS nombre, equipo, cedula FROM operarios WHERE activo = 1",
     ).all();
     return { success: true, data: results };
   },
@@ -32,13 +34,16 @@ export const accionesLectura = {
     if (!cedula) return { success: false, message: "Falta la cédula." };
 
     const row = await env.DB.prepare(
-      "SELECT nombre_operario AS nombre, equipo FROM operarios WHERE cedula = ? AND activo = 1"
+      "SELECT nombre_operario AS nombre, equipo FROM operarios WHERE cedula = ? AND activo = 1",
     )
       .bind(cedula)
       .first();
 
     if (!row) {
-      return { success: false, message: "Cédula no encontrada en el catálogo de Operarios." };
+      return {
+        success: false,
+        message: "Cédula no encontrada en el catálogo de Operarios.",
+      };
     }
     return { success: true, nombre: row.nombre, equipo: row.equipo };
   },
@@ -50,7 +55,7 @@ export const accionesLectura = {
     const row = await env.DB.prepare(
       "SELECT sublinea, unidades_totales, unidades_procesadas, codigos_sobrantes, " +
         "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?) AS justificado " +
-        "FROM validacion_eanes WHERE numero_pedido = ? AND ean_producto = ?"
+        "FROM validacion_eanes WHERE numero_pedido = ? AND ean_producto = ?",
     )
       .bind(pedido, ean, pedido, ean)
       .first();
@@ -58,7 +63,12 @@ export const accionesLectura = {
     if (!row) {
       return {
         success: false,
-        message: "El pedido " + pedido + " con el EAN " + ean + " no existe en la hoja de Validación.",
+        message:
+          "El pedido " +
+          pedido +
+          " con el EAN " +
+          ean +
+          " no existe en la hoja de Validación.",
       };
     }
 
@@ -66,7 +76,11 @@ export const accionesLectura = {
       success: true,
       subLinea: row.sublinea,
       unidadesEsperadas: row.unidades_totales,
-      restantes: row.unidades_totales - row.unidades_procesadas - row.justificado - row.codigos_sobrantes,
+      restantes:
+        row.unidades_totales -
+        row.unidades_procesadas -
+        row.justificado -
+        row.codigos_sobrantes,
     };
   },
 
@@ -83,10 +97,19 @@ export const accionesLectura = {
       justificado: e.justificado,
     }));
     const totalPedido = eanes.reduce((s, e) => s + e.esperadas, 0);
-    const procesadoPedido = eanes.reduce((s, e) => s + e.procesadas + e.sobrantes, 0);
+    const procesadoPedido = eanes.reduce(
+      (s, e) => s + e.procesadas + e.sobrantes,
+      0,
+    );
     const restantePedido = eanes.reduce((s, e) => s + e.restantes, 0);
 
-    return { success: true, totalPedido, procesadoPedido, restantePedido, detalleEanes: eanes };
+    return {
+      success: true,
+      totalPedido,
+      procesadoPedido,
+      restantePedido,
+      detalleEanes: eanes,
+    };
   },
 
   async obtenerEanesParaJustificar(datos, env) {
@@ -109,7 +132,12 @@ export const accionesLectura = {
     if (!match) {
       return {
         success: false,
-        message: "El EAN " + ean + " no existe en el pedido " + pedido + " según Validación eanes.",
+        message:
+          "El EAN " +
+          ean +
+          " no existe en el pedido " +
+          pedido +
+          " según Validación eanes.",
       };
     }
     return {
@@ -129,7 +157,7 @@ async function _detalleEanesPedido(env, pedido) {
       "codigos_sobrantes AS sobrantes, estado, " +
       "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones j " +
       " WHERE j.pedido = v.numero_pedido AND j.ean = v.ean_producto) AS justificado " +
-      "FROM validacion_eanes v WHERE numero_pedido = ?"
+      "FROM validacion_eanes v WHERE numero_pedido = ?",
   )
     .bind(pedido)
     .all();
