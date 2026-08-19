@@ -1,8 +1,14 @@
-// api.js — wrapper de comunicación con el backend Apps Script (Registro de Producción)
+// api.js — wrapper de comunicación con el backend (Registro de Producción)
 
-var API_URL =
-  "https://script.google.com/macros/s/AKfycbwWu28Gji-rjknzhVNsdqqNHUtZiSPqFfe3TLFZo7BGVQqWDNBIt9TX0YOhfMYb_N4/exec";
-var API_TOKEN = "937dc94c-cdb2-428e-8b04-b1dfb3b52280";
+var USAR_WORKER_NUEVO = false; // true = Worker + D1 | false = Apps Script (histórico). Único punto de corte.
+
+var API_URL = USAR_WORKER_NUEVO
+  ? "https://registro-produccion-api.glovanze.workers.dev/"
+  : "https://script.google.com/macros/s/AKfycbwWu28Gji-rjknzhVNsdqqNHUtZiSPqFfe3TLFZo7BGVQqWDNBIt9TX0YOhfMYb_N4/exec";
+
+var API_TOKEN = USAR_WORKER_NUEVO
+  ? "cfut_MSSAyFjQj2jOxDrCEiQMc9cAiTvwF06PbZcuAmTu47b208cb" 
+  : "937dc94c-cdb2-428e-8b04-b1dfb3b52280";
 
 function llamarAPI(action, datos, intento) {
   intento = intento || 1;
