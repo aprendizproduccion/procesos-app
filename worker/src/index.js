@@ -21,14 +21,19 @@ export default {
       );
     }
 
-    console.log("largo recibido:", token ? token.length : 0, "| largo esperado:", env.TOKEN_API.length);
-
+    // Orden correcto:
     const { action, token, datos } = body;
+
+    console.log(
+      "largo recibido:",
+      token ? token.length : 0,
+      "| largo esperado:",
+      env.TOKEN_API.length,
+    );
 
     if (token !== env.TOKEN_API) {
       return json({ success: false, message: "Token inválido" }, 401);
     }
-
     const handler = ACCIONES[action];
     if (!handler) {
       return json(
