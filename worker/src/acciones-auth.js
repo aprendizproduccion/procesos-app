@@ -2,7 +2,9 @@
 
 export const accionesAuth = {
   async validarLogin(datos, env) {
-    const rol = String(datos.rol || "").trim().toLowerCase();
+    const rol = String(datos.rol || "")
+      .trim()
+      .toLowerCase();
     const clave = String(datos.password || "");
 
     if (rol === "operario") {
@@ -18,7 +20,8 @@ export const accionesAuth = {
     if (!claveGuardada) {
       return {
         success: false,
-        message: "No hay contraseña configurada para este rol. Contacta al administrador.",
+        message:
+          "No hay contraseña configurada para este rol. Contacta al administrador.",
       };
     }
 
