@@ -91,6 +91,7 @@ export const accionesEscritura = {
       }
 
       const suplementoMin = Number(payload.suplementoMin) || 0;
+
       const { duracionBrutaMin, duracionRealMin } = _calcularDuracionValidada(
         payload.horaInicio,
         payload.horaFin,
@@ -244,14 +245,23 @@ export const accionesEscritura = {
       ]);
 
       const resultadosBatch = await env.DB.batch(statements);
-
-      const idsRegistros = resultadosBatch
-        .slice(0, operarios.length)
-        .map((r) => r.meta.last_row_id);
-      ctx.waitUntil(_pushRegistrosYMarcar(env, idsRegistros, filasParaSheets));
-
       const respuestaFinal = { success: true, loteId };
-      await _confirmarIdempotencia(env, huella, respuestaFinal);
+
+      // A partir de aquí D1 ya tiene el estado correcto — cualquier fallo de acá
+      // en adelante NO debe liberar la idempotencia ni fallarle al usuario.
+      try {
+        await _confirmarIdempotencia(env, huella, respuestaFinal);
+        const idsRegistros = resultadosBatch
+          .slice(0, operarios.length)
+          .map((r) => r.meta.last_row_id);
+        ctx.waitUntil(
+          _pushRegistrosYMarcar(env, idsRegistros, filasParaSheets),
+        );
+      } catch (errPostCommit) {
+        // No relanzamos: el registro ya es válido en D1. Queda sin push
+        // inmediato, pero la reconciliación periódica lo recoge.
+      }
+
       return respuestaFinal;
     } catch (err) {
       await _liberarIdempotencia(env, huella);
@@ -475,17 +485,21 @@ export const accionesEscritura = {
       ];
 
       const resultadosBatch = await env.DB.batch(statements);
-
-      ctx.waitUntil(
-        _pushRegistrosYMarcar(
-          env,
-          [resultadosBatch[0].meta.last_row_id],
-          [filaParaSheets],
-        ),
-      );
-
       const respuestaFinal = { success: true, loteId, horaInicio, horaFin };
-      await _confirmarIdempotencia(env, huella, respuestaFinal);
+
+      try {
+        await _confirmarIdempotencia(env, huella, respuestaFinal);
+        ctx.waitUntil(
+          _pushRegistrosYMarcar(
+            env,
+            [resultadosBatch[0].meta.last_row_id],
+            [filaParaSheets],
+          ),
+        );
+      } catch (errPostCommit) {
+        // No relanzamos: el registro ya es válido en D1.
+      }
+
       return respuestaFinal;
     } catch (err) {
       await _liberarIdempotencia(env, huella);
@@ -576,18 +590,23 @@ export const accionesEscritura = {
     }
 
     const resultadosBatch = await env.DB.batch(statements);
+    const respuestaFinal = { success: true, pedidoCompleto };
 
-    ctx.waitUntil(
-      _pushJustificacionYMarcar(env, resultadosBatch[0].meta.last_row_id, [
-        hoy,
-        supernumerario,
-        pedido,
-        ean,
-        unidadesAJustificar,
-        motivo,
-      ]),
-    );
+    try {
+      ctx.waitUntil(
+        _pushJustificacionYMarcar(env, resultadosBatch[0].meta.last_row_id, [
+          hoy,
+          supernumerario,
+          pedido,
+          ean,
+          unidadesAJustificar,
+          motivo,
+        ]),
+      );
+    } catch (errPostCommit) {
+      // No relanzamos: la justificación ya quedó registrada en D1.
+    }
 
-    return { success: true, pedidoCompleto };
+    return respuestaFinal;
   },
 };
