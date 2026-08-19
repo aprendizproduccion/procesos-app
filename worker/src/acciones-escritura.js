@@ -90,6 +90,7 @@ export const accionesEscritura = {
         );
       }
 
+      const suplementoMin = Number(payload.suplementoMin) || 0;
       const { duracionBrutaMin, duracionRealMin } = _calcularDuracionValidada(
         payload.horaInicio,
         payload.horaFin,
