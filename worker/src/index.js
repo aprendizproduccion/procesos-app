@@ -21,6 +21,8 @@ export default {
       );
     }
 
+    console.log("largo recibido:", token ? token.length : 0, "| largo esperado:", env.TOKEN_API.length);
+
     const { action, token, datos } = body;
 
     if (token !== env.TOKEN_API) {
