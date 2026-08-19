@@ -1,6 +1,6 @@
 // api.js — wrapper de comunicación con el backend (Registro de Producción)
 
-var USAR_WORKER_NUEVO = false; // true = Worker + D1 | false = Apps Script (histórico). Único punto de corte.
+var USAR_WORKER_NUEVO = true; // true = Worker + D1 | false = Apps Script (histórico). Único punto de corte.
 
 var API_URL = USAR_WORKER_NUEVO
   ? "https://registro-produccion-api.glovanze.workers.dev/"
