@@ -17,8 +17,13 @@ import {
   _ahoraISO,
 } from "./d1-negocio.js";
 
+import {
+  _pushRegistrosYMarcar,
+  _pushJustificacionYMarcar,
+} from "./push-sheets.js";
+
 export const accionesEscritura = {
-  async submitRegistro(payload, env) {
+  async submitRegistro(payload, env, ctx) {
     const huella = await _huellaPayload("submitRegistro", payload);
     const chequeo = await _chequearIdempotencia(env, huella);
     if (chequeo.duplicado) return chequeo.respuesta;
@@ -210,7 +215,39 @@ export const accionesEscritura = {
         );
       }
 
-      await env.DB.batch(statements);
+      const filasParaSheets = operarios.map((nombre, i) => [
+        loteId,
+        fecha,
+        coordinador,
+        cedulas[i],
+        nombre,
+        supernumerario,
+        datosPedido.cliente,
+        procesoValidado.nombre,
+        tasaEstandar,
+        sublinea,
+        datosPedido.evento,
+        pedido,
+        codigoEan,
+        total,
+        payload.horaInicio,
+        payload.horaFin,
+        suplementoMin,
+        observaciones,
+        duracionBrutaMin,
+        datosPedido.clasificacionProceso,
+        durHoras,
+        unidadesPorOperario,
+        unidadesHoraReal,
+        eficiencia,
+      ]);
+
+      const resultadosBatch = await env.DB.batch(statements);
+
+      const idsRegistros = resultadosBatch
+        .slice(0, operarios.length)
+        .map((r) => r.meta.last_row_id);
+      ctx.waitUntil(_pushRegistrosYMarcar(env, idsRegistros, filasParaSheets));
 
       const respuestaFinal = { success: true, loteId };
       await _confirmarIdempotencia(env, huella, respuestaFinal);
@@ -221,7 +258,7 @@ export const accionesEscritura = {
     }
   },
 
-  async submitRegistroOperario(payload, env) {
+  async submitRegistroOperario(payload, env, ctx) {
     const huella = await _huellaPayload("submitRegistroOperario", payload);
     const chequeo = await _chequearIdempotencia(env, huella);
     if (chequeo.duplicado) return chequeo.respuesta;
@@ -409,7 +446,42 @@ export const accionesEscritura = {
         );
       }
 
-      await env.DB.batch(statements);
+      const filaParaSheets = [
+        loteId,
+        fecha,
+        coordinador,
+        operarioMatch.cedula,
+        operarioMatch.nombre,
+        supernumerario,
+        datosPedido.cliente,
+        procesoValidado.nombre,
+        tasaEstandar,
+        sublinea,
+        datosPedido.evento,
+        pedido,
+        codigoEan,
+        total,
+        horaInicio,
+        horaFin,
+        suplementoMin,
+        observaciones,
+        duracionBrutaMin,
+        datosPedido.clasificacionProceso,
+        durHoras,
+        total,
+        unidadesHoraReal,
+        eficiencia,
+      ];
+
+      const resultadosBatch = await env.DB.batch(statements);
+
+      ctx.waitUntil(
+        _pushRegistrosYMarcar(
+          env,
+          [resultadosBatch[0].meta.last_row_id],
+          [filaParaSheets],
+        ),
+      );
 
       const respuestaFinal = { success: true, loteId, horaInicio, horaFin };
       await _confirmarIdempotencia(env, huella, respuestaFinal);
@@ -420,7 +492,7 @@ export const accionesEscritura = {
     }
   },
 
-  async guardarJustificacion(payload, env) {
+  async guardarJustificacion(payload, env, ctx) {
     const pedido = String(payload.pedido || "").trim();
     const ean = String(payload.ean || "").trim();
     const motivo = String(payload.motivo || "").trim();
@@ -502,7 +574,18 @@ export const accionesEscritura = {
       );
     }
 
-    await env.DB.batch(statements);
+    const resultadosBatch = await env.DB.batch(statements);
+
+    ctx.waitUntil(
+      _pushJustificacionYMarcar(env, resultadosBatch[0].meta.last_row_id, [
+        hoy,
+        supernumerario,
+        pedido,
+        ean,
+        unidadesAJustificar,
+        motivo,
+      ]),
+    );
 
     return { success: true, pedidoCompleto };
   },
