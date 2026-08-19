@@ -3,7 +3,7 @@ import { accionesAuth } from "./acciones-auth.js";
 import { accionesEscritura } from "./acciones-escritura.js";
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method !== "POST") {
       return json({
         status: "ok",
@@ -36,7 +36,7 @@ export default {
     }
 
     try {
-      const resultado = await handler(datos || {}, env);
+      const resultado = await handler(datos || {}, env, ctx);
       return json(resultado);
     } catch (err) {
       return json({ success: false, message: err.message }, 500);
