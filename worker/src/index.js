@@ -21,10 +21,7 @@ export default {
       );
     }
 
-    // Orden correcto:
     const { action, token, datos } = body;
-
-    console.log("token recibido (JSON):", JSON.stringify(token));
 
     if (token !== env.TOKEN_API) {
       return json({ success: false, message: "Token inválido" }, 401);
