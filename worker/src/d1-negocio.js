@@ -173,7 +173,7 @@ export async function _obtenerProcesoValidado(env, nombreProceso, pedido) {
 
 export async function _buscarCedulaPorNombre(env, nombre) {
   const row = await env.DB.prepare(
-    "SELECT cedula FROM operarios WHERE lower(nombre_operario) = lower(?)",
+    "SELECT cedula FROM operarios WHERE lower(nombre_operario) = lower(?) AND activo = 1",
   )
     .bind(nombre)
     .first();
