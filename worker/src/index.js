@@ -21,9 +21,16 @@ export default {
       );
     }
 
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return json(
+        { success: false, message: "Cuerpo de solicitud inválido" },
+        400,
+      );
+    }
+
     const { action, token, datos } = body;
 
-    if (token !== env.TOKEN_API) {
+    if (!env.TOKEN_API || token !== env.TOKEN_API) {
       return json({ success: false, message: "Token inválido" }, 401);
     }
     const handler = ACCIONES[action];
@@ -35,7 +42,8 @@ export default {
     }
 
     try {
-      const resultado = await handler(datos || {}, env, ctx);
+      const ip = request.headers.get("CF-Connecting-IP") || "desconocida";
+      const resultado = await handler(datos || {}, env, ctx, ip);
       return json(resultado);
     } catch (err) {
       return json({ success: false, message: err.message }, 500);
@@ -43,13 +51,13 @@ export default {
   },
 };
 
-// Las acciones reales (getProcesos, submitRegistro, etc.) se registran aquí
-// en los próximos pasos del plan. Por ahora queda vacío a propósito.
+// Registro de todas las acciones disponibles del API, fusionando las tres
+// colecciones (lectura, auth, escritura). Todas las acciones del plan original
+// ya están registradas aquí.
 const ACCIONES = {
   ...accionesLectura,
   ...accionesAuth,
   ...accionesEscritura,
-  // guardarJustificacion y submitRegistroOperario se agregan a continuación.
 };
 
 function json(data, status = 200) {
