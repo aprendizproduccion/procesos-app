@@ -1117,6 +1117,28 @@
           <div id="calcResultado" class="calc-valor-fijo">--</div>
         </div>
       </div>
+
+      <label style="margin-top: 14px">Suplemento (descanso)</label>
+      <select id="calcSuplementoMin" onchange="actualizarCalculadora()">
+        <option value="0">Sin suplemento</option>
+        <option value="5">5 minutos</option>
+        <option value="10">10 minutos</option>
+        <option value="15">15 minutos</option>
+        <option value="20">20 minutos</option>
+        <option value="25">25 minutos</option>
+        <option value="30">30 minutos</option>
+        <option value="35">35 minutos</option>
+        <option value="40">40 minutos</option>
+        <option value="45">45 minutos</option>
+        <option value="50">50 minutos</option>
+        <option value="55">55 minutos</option>
+        <option value="60">1 hora</option>
+        <option value="65">1 hora 5 minutos</option>
+        <option value="70">1 hora 10 minutos</option>
+      </select>
+
+      <label style="margin-top: 10px">Tiempo con suplemento</label>
+      <div id="calcResultadoConSuplemento" class="calc-valor-fijo">--</div>
     </div>
 
     <div id="vistaJustificacion" class="card" style="display: none">
@@ -1263,19 +1285,31 @@
         const caja = parseFloat(
           document.getElementById("calcUnidadesCaja").value,
         );
+        const suplemento =
+          Number(document.getElementById("calcSuplementoMin").value) || 0;
         const resultadoEl = document.getElementById("calcResultado");
+        const resultadoSuplementoEl = document.getElementById(
+          "calcResultadoConSuplemento",
+        );
 
         if (!estandar || estandar <= 0 || !caja || caja <= 0) {
           resultadoEl.textContent = "--";
+          resultadoSuplementoEl.textContent = "--";
           return;
         }
 
         const minutosTotales = Math.round((caja * 60) / estandar);
-        const horas = Math.floor(minutosTotales / 60);
-        const minutos = minutosTotales % 60;
+        resultadoEl.textContent = _formatearMinutos(minutosTotales);
 
-        resultadoEl.textContent =
-          horas > 0 ? `${horas} h ${minutos} min` : `${minutos} min`;
+        const minutosConSuplemento = minutosTotales + suplemento;
+        resultadoSuplementoEl.textContent =
+          _formatearMinutos(minutosConSuplemento);
+      }
+
+      function _formatearMinutos(totalMin) {
+        const horas = Math.floor(totalMin / 60);
+        const minutos = totalMin % 60;
+        return horas > 0 ? `${horas} h ${minutos} min` : `${minutos} min`;
       }
 
       function volverALogin() {
@@ -1320,6 +1354,8 @@
         ];
         camposAVaciar.forEach((id) => (document.getElementById(id).value = ""));
         document.getElementById("calcResultado").textContent = "--";
+        document.getElementById("calcResultadoConSuplemento").textContent =
+          "--";
 
         // 3. Limpiar contenido de alertas, hints y confirmaciones
         const elementosACancelarText = [
@@ -1360,6 +1396,7 @@
         document.getElementById("fecha").valueAsDate = new Date();
         document.getElementById("suplementoMin").value = "0";
         document.getElementById("opSuplementoMin").value = "0";
+        document.getElementById("calcSuplementoMin").value = "0";
 
         const defaultOption =
           '<option value="">Ingresa un pedido primero...</option>';
