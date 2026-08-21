@@ -49,6 +49,56 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
       }
 
+      .dashboard-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+      .tarjetaApp {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 22px 10px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        color: #374151;
+        transition:
+          background 0.15s,
+          transform 0.1s;
+      }
+      .tarjetaApp:active {
+        transform: scale(0.97);
+      }
+      .tarjetaApp-icono {
+        font-size: 28px;
+      }
+      .calc-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      .calc-valor-fijo {
+        background: #f3f4f6;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-weight: 700;
+        color: #111827;
+        text-align: center;
+      }
+      .calc-resultado .calc-valor-fijo {
+        background: #ecfdf5;
+        border-color: #6ee7b7;
+        color: #065f46;
+      }
+
       label {
         display: block;
         font-size: 13px;
@@ -520,14 +570,49 @@
         </div>
       </div>
     </div>
+
+    <div
+      id="vistaDashboard"
+      class="card"
+      style="display: none; max-width: 400px; margin: 60px auto"
+    >
+      <h1 style="margin-top: 0; font-size: 20px">Menú</h1>
+      <div class="dashboard-grid">
+        <button
+          type="button"
+          class="tarjetaApp"
+          onclick="abrirRegistroDesdeDashboard()"
+        >
+          <span class="tarjetaApp-icono">📋</span>
+          <span>Registro de producción</span>
+        </button>
+        <button
+          type="button"
+          class="tarjetaApp"
+          onclick="abrirCalculadoraDesdeDashboard()"
+        >
+          <span class="tarjetaApp-icono">⏱️</span>
+          <span>Calculadora de tiempos</span>
+        </button>
+      </div>
+      <button
+        type="button"
+        class="btn-submit"
+        style="background: #6b7280; margin-top: 18px"
+        onclick="volverALogin()"
+      >
+        ← Cerrar sesión
+      </button>
+    </div>
+
     <div id="vistaPrincipal" style="display: none">
       <button
         type="button"
         class="btn-submit"
         style="background: #6b7280; margin-bottom: 14px"
-        onclick="volverALogin()"
+        onclick="volverAlDashboard()"
       >
-        ← Volver al login
+        ← Volver al dashboard
       </button>
       <div class="card">
         <div class="row2">
@@ -734,9 +819,9 @@
         type="button"
         class="btn-submit"
         style="background: #6b7280; margin-bottom: 14px"
-        onclick="volverALogin()"
+        onclick="volverAlDashboard()"
       >
-        ← Volver al login
+        ← Volver al dashboard
       </button>
       <h1>Registro de Producción — Operario</h1>
 
@@ -989,6 +1074,51 @@
       </div>
     </div>
 
+    <div
+      id="vistaCalculadora"
+      class="card"
+      style="display: none; max-width: 400px; margin: 60px auto"
+    >
+      <button
+        type="button"
+        class="btn-submit"
+        style="background: #6b7280; margin-bottom: 14px"
+        onclick="volverAlDashboard()"
+      >
+        ← Volver al dashboard
+      </button>
+      <h1 style="margin-top: 0; font-size: 20px">Calculadora de tiempos</h1>
+
+      <div class="calc-grid">
+        <div>
+          <label>Unidades estándar</label>
+          <input
+            type="number"
+            id="calcUnidadesEstandar"
+            placeholder="Ej: 600"
+            oninput="actualizarCalculadora()"
+          />
+        </div>
+        <div>
+          <label>Tiempo</label>
+          <div class="calc-valor-fijo">1 hora (60 min)</div>
+        </div>
+        <div>
+          <label>Unidades caja</label>
+          <input
+            type="number"
+            id="calcUnidadesCaja"
+            placeholder="Ej: 24"
+            oninput="actualizarCalculadora()"
+          />
+        </div>
+        <div class="calc-resultado">
+          <label>Tiempo total</label>
+          <div id="calcResultado" class="calc-valor-fijo">--</div>
+        </div>
+      </div>
+    </div>
+
     <div id="vistaJustificacion" class="card" style="display: none">
       <label
         style="
@@ -1103,13 +1233,62 @@
         resetBotonLogin();
       }
 
-      function volverALogin() {
-        // 1. Ocultar vistas
-        ["vistaPrincipal", "vistaOperario", "vistaJustificacion"].forEach(
+      function abrirRegistroDesdeDashboard() {
+        document.getElementById("vistaDashboard").style.display = "none";
+        if (rolActual === "operario") {
+          document.getElementById("vistaOperario").style.display = "block";
+        } else {
+          document.getElementById("vistaPrincipal").style.display = "block";
+        }
+      }
+
+      function abrirCalculadoraDesdeDashboard() {
+        document.getElementById("vistaDashboard").style.display = "none";
+        document.getElementById("vistaCalculadora").style.display = "block";
+      }
+
+      function volverAlDashboard() {
+        ["vistaPrincipal", "vistaOperario", "vistaCalculadora"].forEach(
           (id) => {
             document.getElementById(id).style.display = "none";
           },
         );
+        document.getElementById("vistaDashboard").style.display = "block";
+      }
+
+      function actualizarCalculadora() {
+        const estandar = parseFloat(
+          document.getElementById("calcUnidadesEstandar").value,
+        );
+        const caja = parseFloat(
+          document.getElementById("calcUnidadesCaja").value,
+        );
+        const resultadoEl = document.getElementById("calcResultado");
+
+        if (!estandar || estandar <= 0 || !caja || caja <= 0) {
+          resultadoEl.textContent = "--";
+          return;
+        }
+
+        const minutosTotales = Math.round((caja * 60) / estandar);
+        const horas = Math.floor(minutosTotales / 60);
+        const minutos = minutosTotales % 60;
+
+        resultadoEl.textContent =
+          horas > 0 ? `${horas} h ${minutos} min` : `${minutos} min`;
+      }
+
+      function volverALogin() {
+        // 1. Ocultar vistas
+        [
+          "vistaPrincipal",
+          "vistaOperario",
+          "vistaJustificacion",
+          "vistaDashboard",
+          "vistaCalculadora",
+        ].forEach((id) => {
+          document.getElementById(id).style.display = "none";
+        });
 
         // 2. Vaciar inputs, textareas y selects simples
         const camposAVaciar = [
@@ -1136,8 +1315,11 @@
           "opCodigosSobrantes",
           "opObservaciones",
           "loginPassword",
+          "calcUnidadesEstandar",
+          "calcUnidadesCaja",
         ];
         camposAVaciar.forEach((id) => (document.getElementById(id).value = ""));
+        document.getElementById("calcResultado").textContent = "--";
 
         // 3. Limpiar contenido de alertas, hints y confirmaciones
         const elementosACancelarText = [
@@ -1241,18 +1423,14 @@
             if (res.success) {
               document.getElementById("vistaLogin").style.display = "none";
               if (rolActual === "operario") {
-                document.getElementById("vistaOperario").style.display =
-                  "block";
                 document.getElementById("coordinador") &&
                   (document.getElementById("opCoordinador").innerHTML =
                     document.getElementById("coordinador").innerHTML);
                 document.getElementById("supernumerario") &&
                   (document.getElementById("opSupernumerario").innerHTML =
                     document.getElementById("supernumerario").innerHTML);
-              } else {
-                document.getElementById("vistaPrincipal").style.display =
-                  "block";
               }
+              document.getElementById("vistaDashboard").style.display = "block";
             } else {
               document.getElementById("loginError").innerHTML =
                 `<div class="msg err">${res.message}</div>`;
