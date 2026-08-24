@@ -320,7 +320,7 @@ export const accionesEscritura = {
         throw new Error("Falta escanear el código EAN del producto.");
 
       const total = Number(payload.unidadesProcesadas);
-      if (!Number.isFinite(total) || total <= 0)
+      if (!Number.isFinite(total) || total < 0)
         throw new Error("Unidades procesadas inválidas.");
 
       const validacion = await _localizarValidacionEan(env, pedido, codigoEan);
