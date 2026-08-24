@@ -1,5 +1,7 @@
 // Acciones de solo lectura — traducción mecánica de code.js a D1.
 
+import { _localizarValidacionEan } from "./d1-negocio.js";
+
 export const accionesLectura = {
   async getSupervisoresData(datos, env) {
     const { results } = await env.DB.prepare(
@@ -48,28 +50,15 @@ export const accionesLectura = {
     return { success: true, nombre: row.nombre, equipo: row.equipo };
   },
 
-  async obtenerDatosValidacion(datos, env) {
+    async obtenerDatosValidacion(datos, env) {
     const pedido = String(datos.pedido || "").trim();
     const ean = String(datos.ean || "").trim();
 
-    const row = await env.DB.prepare(
-      "SELECT sublinea, unidades_totales, unidades_procesadas, codigos_sobrantes, " +
-        "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?) AS justificado " +
-        "FROM validacion_eanes WHERE numero_pedido = ? AND ean_producto = ?",
-    )
-      .bind(pedido, ean, pedido, ean)
-      .first();
-
-    if (!row) {
-      return {
-        success: false,
-        message:
-          "El pedido " +
-          pedido +
-          " con el EAN " +
-          ean +
-          " no existe en la hoja de Validación.",
-      };
+    let row;
+    try {
+      row = await _localizarValidacionEan(env, pedido, ean);
+    } catch (err) {
+      return { success: false, message: err.message };
     }
 
     return {
