@@ -15,6 +15,8 @@ import {
   _pedidoEstaCompleto,
   _fechaHoyBogota,
   _ahoraISO,
+  _revertirReserva,
+  _revertirCierre,
 } from "./d1-negocio.js";
 
 import {
@@ -34,6 +36,8 @@ export const accionesEscritura = {
           "Este registro ya se está procesando (posible doble envío). Espera unos segundos y verifica en Registros antes de reintentar.",
       };
     }
+
+    let reservaAplicada = null;
 
     try {
       const pedido = String(payload.pedido || "").trim();
@@ -148,6 +152,8 @@ export const accionesEscritura = {
           "Otro envío concurrente ya ocupó estas unidades. Verifica el estado actual del pedido antes de reintentar.",
         );
       }
+      // A partir de aquí, si algo falla, hay que revertir esta reserva antes de fallar.
+      reservaAplicada = { pedido, ean: codigoEan, total, codigosSobrantes };
 
       // Lista de operarios — informativa, best-effort (ver nota de diseño de la sesión anterior).
       const filaOperarios = await env.DB.prepare(
@@ -264,6 +270,9 @@ export const accionesEscritura = {
 
       return respuestaFinal;
     } catch (err) {
+      if (reservaAplicada) {
+        await _revertirReserva(env, reservaAplicada);
+      }
       await _liberarIdempotencia(env, huella);
       throw err;
     }
@@ -280,6 +289,8 @@ export const accionesEscritura = {
           "Este registro ya se está procesando (posible doble envío). Espera unos segundos y verifica en Registros antes de reintentar.",
       };
     }
+
+    let reservaAplicada = null;
 
     try {
       const cedula = String(payload.cedula || "").trim();
@@ -394,6 +405,8 @@ export const accionesEscritura = {
           "Otro envío concurrente ya ocupó estas unidades. Verifica el estado actual del pedido antes de reintentar.",
         );
       }
+      // A partir de aquí, si algo falla, hay que revertir esta reserva antes de fallar.
+      reservaAplicada = { pedido, ean: codigoEan, total, codigosSobrantes };
 
       const filaOperarios = await env.DB.prepare(
         "SELECT operarios FROM validacion_eanes WHERE numero_pedido = ? AND ean_producto = ?",
@@ -502,111 +515,138 @@ export const accionesEscritura = {
 
       return respuestaFinal;
     } catch (err) {
+      if (reservaAplicada) {
+        await _revertirReserva(env, reservaAplicada);
+      }
       await _liberarIdempotencia(env, huella);
       throw err;
     }
   },
 
   async guardarJustificacion(payload, env, ctx) {
-    const pedido = String(payload.pedido || "").trim();
-    const ean = String(payload.ean || "").trim();
-    const motivo = String(payload.motivo || "").trim();
-    const unidadesAJustificar = Number(payload.unidadesAJustificar);
-    const supernumerario = String(payload.supernumerario || "").trim();
-
-    if (!pedido) throw new Error("Falta el número de pedido.");
-    if (!ean) throw new Error("Falta el código EAN.");
-    if (!motivo) throw new Error("Debes escribir el motivo de la novedad.");
-    if (!Number.isFinite(unidadesAJustificar) || unidadesAJustificar <= 0) {
-      throw new Error("Las unidades a justificar deben ser mayores a cero.");
-    }
-    if (!supernumerario) throw new Error("Falta el nombre del supernumerario.");
-
-    // Chequeo informativo previo, para un mensaje de error claro.
-    // La autoridad real es el UPDATE atómico de abajo, que vuelve a leer en frío.
-    const validacion = await _localizarValidacionEan(env, pedido, ean);
-    const restanteNeto =
-      validacion.unidades_totales -
-      validacion.unidades_procesadas -
-      validacion.justificado -
-      validacion.codigos_sobrantes;
-
-    if (restanteNeto <= 0) {
-      throw new Error(
-        "Este EAN ya no tiene faltante pendiente por justificar.",
-      );
-    }
-    if (unidadesAJustificar !== restanteNeto) {
-      throw new Error(
-        "Debes justificar exactamente " +
-          restanteNeto +
-          " unidades (el faltante total de este EAN) para poder cerrarlo. Ni más ni menos.",
-      );
+    const huella = await _huellaPayload("guardarJustificacion", payload);
+    const chequeo = await _chequearIdempotencia(env, huella);
+    if (chequeo.duplicado) return chequeo.respuesta;
+    if (chequeo.enProceso) {
+      return {
+        success: false,
+        message:
+          "Esta justificación ya se está procesando (posible doble envío). Espera unos segundos y verifica antes de reintentar.",
+      };
     }
 
-    const ahora = _ahoraISO();
-    const hoy = _fechaHoyBogota();
-
-    // UPDATE atómico: cierra el EAN solo si el faltante fresco sigue coincidiendo
-    // exactamente en este instante. Esto es lo que cierra el hueco de concurrencia
-    // que había quedado pendiente en el Apps Script original.
-    const cierre = await env.DB.prepare(
-      "UPDATE validacion_eanes SET estado = 'Completado', actualizado_en = ? " +
-        "WHERE numero_pedido = ? AND ean_producto = ? " +
-        "AND (unidades_totales - unidades_procesadas - codigos_sobrantes - " +
-        "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) = ?",
-    )
-      .bind(ahora, pedido, ean, pedido, ean, unidadesAJustificar)
-      .run();
-
-    if (cierre.meta.changes === 0) {
-      throw new Error(
-        "El estado de este EAN cambió justo antes de confirmar. Verifica el faltante actual antes de reintentar.",
-      );
-    }
-
-    const statements = [
-      env.DB.prepare(
-        "INSERT INTO justificaciones (fecha, supernumerario, pedido, ean, faltante, motivo, creado_en) VALUES (?,?,?,?,?,?,?)",
-      ).bind(
-        hoy,
-        supernumerario,
-        pedido,
-        ean,
-        unidadesAJustificar,
-        motivo,
-        ahora,
-      ),
-    ];
-
-    const pedidoCompleto = await _pedidoEstaCompleto(env, pedido);
-    if (pedidoCompleto) {
-      statements.push(
-        env.DB.prepare(
-          "INSERT INTO control_produccion (numero_pedido, estado, actualizado_en) VALUES (?, 'Completado', ?) " +
-            "ON CONFLICT(numero_pedido) DO UPDATE SET estado = 'Completado', actualizado_en = excluded.actualizado_en",
-        ).bind(pedido, ahora),
-      );
-    }
-
-    const resultadosBatch = await env.DB.batch(statements);
-    const respuestaFinal = { success: true, pedidoCompleto };
+    let cierreAplicado = null;
 
     try {
-      ctx.waitUntil(
-        _pushJustificacionYMarcar(env, resultadosBatch[0].meta.last_row_id, [
+      const pedido = String(payload.pedido || "").trim();
+      const ean = String(payload.ean || "").trim();
+      const motivo = String(payload.motivo || "").trim();
+      const unidadesAJustificar = Number(payload.unidadesAJustificar);
+      const supernumerario = String(payload.supernumerario || "").trim();
+
+      if (!pedido) throw new Error("Falta el número de pedido.");
+      if (!ean) throw new Error("Falta el código EAN.");
+      if (!motivo) throw new Error("Debes escribir el motivo de la novedad.");
+      if (!Number.isFinite(unidadesAJustificar) || unidadesAJustificar <= 0) {
+        throw new Error("Las unidades a justificar deben ser mayores a cero.");
+      }
+      if (!supernumerario)
+        throw new Error("Falta el nombre del supernumerario.");
+
+      // Chequeo informativo previo, para un mensaje de error claro.
+      // La autoridad real es el UPDATE atómico de abajo, que vuelve a leer en frío.
+      const validacion = await _localizarValidacionEan(env, pedido, ean);
+      const restanteNeto =
+        validacion.unidades_totales -
+        validacion.unidades_procesadas -
+        validacion.justificado -
+        validacion.codigos_sobrantes;
+
+      if (restanteNeto <= 0) {
+        throw new Error(
+          "Este EAN ya no tiene faltante pendiente por justificar.",
+        );
+      }
+      if (unidadesAJustificar !== restanteNeto) {
+        throw new Error(
+          "Debes justificar exactamente " +
+            restanteNeto +
+            " unidades (el faltante total de este EAN) para poder cerrarlo. Ni más ni menos.",
+        );
+      }
+
+      const ahora = _ahoraISO();
+      const hoy = _fechaHoyBogota();
+
+      // UPDATE atómico: cierra el EAN solo si el faltante fresco sigue coincidiendo
+      // exactamente en este instante. Esto es lo que cierra el hueco de concurrencia
+      // que había quedado pendiente en el Apps Script original.
+      const cierre = await env.DB.prepare(
+        "UPDATE validacion_eanes SET estado = 'Completado', actualizado_en = ? " +
+          "WHERE numero_pedido = ? AND ean_producto = ? " +
+          "AND (unidades_totales - unidades_procesadas - codigos_sobrantes - " +
+          "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) = ?",
+      )
+        .bind(ahora, pedido, ean, pedido, ean, unidadesAJustificar)
+        .run();
+
+      if (cierre.meta.changes === 0) {
+        throw new Error(
+          "El estado de este EAN cambió justo antes de confirmar. Verifica el faltante actual antes de reintentar.",
+        );
+      }
+      cierreAplicado = { pedido, ean };
+
+      const statements = [
+        env.DB.prepare(
+          "INSERT INTO justificaciones (fecha, supernumerario, pedido, ean, faltante, motivo, creado_en) VALUES (?,?,?,?,?,?,?)",
+        ).bind(
           hoy,
           supernumerario,
           pedido,
           ean,
           unidadesAJustificar,
           motivo,
-        ]),
-      );
-    } catch (errPostCommit) {
-      // No relanzamos: la justificación ya quedó registrada en D1.
-    }
+          ahora,
+        ),
+      ];
 
-    return respuestaFinal;
+      const pedidoCompleto = await _pedidoEstaCompleto(env, pedido);
+      if (pedidoCompleto) {
+        statements.push(
+          env.DB.prepare(
+            "INSERT INTO control_produccion (numero_pedido, estado, actualizado_en) VALUES (?, 'Completado', ?) " +
+              "ON CONFLICT(numero_pedido) DO UPDATE SET estado = 'Completado', actualizado_en = excluded.actualizado_en",
+          ).bind(pedido, ahora),
+        );
+      }
+
+      const resultadosBatch = await env.DB.batch(statements);
+      const respuestaFinal = { success: true, pedidoCompleto };
+
+      try {
+        await _confirmarIdempotencia(env, huella, respuestaFinal);
+        ctx.waitUntil(
+          _pushJustificacionYMarcar(env, resultadosBatch[0].meta.last_row_id, [
+            hoy,
+            supernumerario,
+            pedido,
+            ean,
+            unidadesAJustificar,
+            motivo,
+          ]),
+        );
+      } catch (errPostCommit) {
+        // No relanzamos: la justificación ya quedó registrada en D1.
+      }
+
+      return respuestaFinal;
+    } catch (err) {
+      if (cierreAplicado) {
+        await _revertirCierre(env, cierreAplicado.pedido, cierreAplicado.ean);
+      }
+      await _liberarIdempotencia(env, huella);
+      throw err;
+    }
   },
 };
