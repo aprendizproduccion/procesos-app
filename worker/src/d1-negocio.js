@@ -210,6 +210,34 @@ export async function _pedidoEstaCompleto(env, pedido) {
   return row.total > 0 && row.pendientes === 0;
 }
 
+// Revierte una reserva de unidades ya aplicada, para cuando el INSERT de
+// registros falla DESPUÉS de que la reserva ya comprometió cambios en D1.
+export async function _revertirReserva(
+  env,
+  { pedido, ean, total, codigosSobrantes },
+) {
+  await env.DB.prepare(
+    "UPDATE validacion_eanes SET " +
+      "unidades_procesadas = unidades_procesadas - ?, " +
+      "codigos_sobrantes = codigos_sobrantes - ?, " +
+      "estado = CASE WHEN (unidades_procesadas - ? - codigos_sobrantes - ?) >= unidades_totales " +
+      "THEN 'Completado' ELSE 'En proceso' END " +
+      "WHERE numero_pedido = ? AND ean_producto = ?",
+  )
+    .bind(total, codigosSobrantes, total, codigosSobrantes, pedido, ean)
+    .run();
+}
+
+// Revierte un cierre de EAN ya aplicado, para cuando el INSERT de la
+// justificación falla DESPUÉS de que el cierre ya comprometió cambios en D1.
+export async function _revertirCierre(env, pedido, ean) {
+  await env.DB.prepare(
+    "UPDATE validacion_eanes SET estado = 'En proceso' WHERE numero_pedido = ? AND ean_producto = ?",
+  )
+    .bind(pedido, ean)
+    .run();
+}
+
 export function _duracionMinutos(horaInicio, horaFin) {
   const [h1, m1] = String(horaInicio).split(":").map(Number);
   const [h2, m2] = String(horaFin).split(":").map(Number);
