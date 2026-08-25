@@ -1459,14 +1459,6 @@
           .then(function (res) {
             if (res.success) {
               document.getElementById("vistaLogin").style.display = "none";
-              if (rolActual === "operario") {
-                document.getElementById("coordinador") &&
-                  (document.getElementById("opCoordinador").innerHTML =
-                    document.getElementById("coordinador").innerHTML);
-                document.getElementById("supernumerario") &&
-                  (document.getElementById("opSupernumerario").innerHTML =
-                    document.getElementById("supernumerario").innerHTML);
-              }
               document.getElementById("vistaDashboard").style.display = "block";
             } else {
               document.getElementById("loginError").innerHTML =
