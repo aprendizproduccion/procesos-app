@@ -1601,16 +1601,23 @@
           }
           const data = resp.data;
           datosSupervisores = data;
-          document.getElementById("coordinador").innerHTML =
+          const htmlCoordinadores =
             '<option value="">Selecciona un coordinador...</option>' +
             data.coordinadores
               .map((c) => `<option value="${c}">${c}</option>`)
               .join("");
-          document.getElementById("supernumerario").innerHTML =
+          const htmlSupernumerarios =
             '<option value="">Selecciona un supernumerario...</option>' +
             data.supernumerarios
               .map((s) => `<option value="${s.nombre}">${s.nombre}</option>`)
               .join("");
+          document.getElementById("coordinador").innerHTML = htmlCoordinadores;
+          document.getElementById("supernumerario").innerHTML =
+            htmlSupernumerarios;
+          document.getElementById("opCoordinador").innerHTML =
+            htmlCoordinadores;
+          document.getElementById("opSupernumerario").innerHTML =
+            htmlSupernumerarios;
         })
         .catch(function (err) {
           console.error(
