@@ -698,23 +698,7 @@
         </div>
 
         <label>Suplemento (descanso)</label>
-        <select id="suplementoMin">
-          <option value="0">Sin suplemento</option>
-          <option value="5">5 minutos</option>
-          <option value="10">10 minutos</option>
-          <option value="15">15 minutos</option>
-          <option value="20">20 minutos</option>
-          <option value="25">25 minutos</option>
-          <option value="30">30 minutos</option>
-          <option value="35">35 minutos</option>
-          <option value="40">40 minutos</option>
-          <option value="45">45 minutos</option>
-          <option value="50">50 minutos</option>
-          <option value="55">55 minutos</option>
-          <option value="60">1 hora</option>
-          <option value="65">1 hora 5 minutos</option>
-          <option value="70">1 hora 10 minutos</option>
-        </select>
+        <select id="suplementoMin"></select>
 
         <label>Total de unidades (según escaneo final de banda)</label>
         <input
@@ -915,23 +899,7 @@
       <div class="row2">
         <div>
           <label>Suplemento (descanso)</label>
-          <select id="opSuplementoMin">
-            <option value="0">Sin suplemento</option>
-            <option value="5">5 minutos</option>
-            <option value="10">10 minutos</option>
-            <option value="15">15 minutos</option>
-            <option value="20">20 minutos</option>
-            <option value="25">25 minutos</option>
-            <option value="30">30 minutos</option>
-            <option value="35">35 minutos</option>
-            <option value="40">40 minutos</option>
-            <option value="45">45 minutos</option>
-            <option value="50">50 minutos</option>
-            <option value="55">55 minutos</option>
-            <option value="60">1 hora</option>
-            <option value="65">1 hora 5 minutos</option>
-            <option value="70">1 hora 10 minutos</option>
-          </select>
+          <select id="opSuplementoMin"></select>
         </div>
       </div>
       <div class="row2">
@@ -1119,23 +1087,10 @@
       </div>
 
       <label style="margin-top: 14px">Suplemento (descanso)</label>
-      <select id="calcSuplementoMin" onchange="actualizarCalculadora()">
-        <option value="0">Sin suplemento</option>
-        <option value="5">5 minutos</option>
-        <option value="10">10 minutos</option>
-        <option value="15">15 minutos</option>
-        <option value="20">20 minutos</option>
-        <option value="25">25 minutos</option>
-        <option value="30">30 minutos</option>
-        <option value="35">35 minutos</option>
-        <option value="40">40 minutos</option>
-        <option value="45">45 minutos</option>
-        <option value="50">50 minutos</option>
-        <option value="55">55 minutos</option>
-        <option value="60">1 hora</option>
-        <option value="65">1 hora 5 minutos</option>
-        <option value="70">1 hora 10 minutos</option>
-      </select>
+      <select
+        id="calcSuplementoMin"
+        onchange="actualizarCalculadora()"
+      ></select>
 
       <label style="margin-top: 10px">Tiempo con suplemento</label>
       <div id="calcResultadoConSuplemento" class="calc-valor-fijo">--</div>
@@ -1232,6 +1187,33 @@
     <script src="api.js?v=20260819"></script>
     <script>
       let rolActual = null;
+
+      // ---------------- OPCIONES DE SUPLEMENTO (fuente única) ----------------
+      const OPCIONES_SUPLEMENTO_MIN = [
+        0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70,
+      ];
+
+      function _etiquetaSuplemento(min) {
+        if (min === 0) return "Sin suplemento";
+        const horas = Math.floor(min / 60);
+        const minutos = min % 60;
+        if (horas === 0) return `${minutos} minutos`;
+        if (minutos === 0) return horas === 1 ? "1 hora" : `${horas} horas`;
+        return `${horas} hora${horas > 1 ? "s" : ""} ${minutos} minutos`;
+      }
+
+      function _generarOpcionesSuplemento() {
+        return OPCIONES_SUPLEMENTO_MIN.map(
+          (min) =>
+            `<option value="${min}">${_etiquetaSuplemento(min)}</option>`,
+        ).join("");
+      }
+
+      ["suplementoMin", "opSuplementoMin", "calcSuplementoMin"].forEach(
+        (id) => {
+          document.getElementById(id).innerHTML = _generarOpcionesSuplemento();
+        },
+      );
 
       function seleccionarRol(rol) {
         rolActual = rol;
@@ -1427,7 +1409,6 @@
         // 9. Resetear variables globales
         codigoEan =
           pedidoValidado =
-          estadoPaquete =
           opNombreOperario =
           opCedulaConfirmada =
           opCodigoEan =
@@ -1507,7 +1488,6 @@
           }
         });
 
-      let estadoPaquete = "";
       let procesos = [];
       let operarios = [];
       let catalogoOperarios = [];
@@ -1996,7 +1976,6 @@
           observaciones: document.getElementById("observaciones").value.trim(),
           totalUnidades: Number(document.getElementById("totalUnidades").value),
           operarios: operarios,
-          estadoPaquete: estadoPaquete,
         };
 
         if (!codSobrantesResult.ok)
@@ -2064,7 +2043,6 @@
               document.getElementById("fecha").valueAsDate = new Date();
               document.getElementById("horaInicio").value = "";
               document.getElementById("horaFin").value = "";
-              estadoPaquete = "";
               document.getElementById("alertaCantidad").innerHTML = "";
               document.getElementById("previewCard").style.display = "none";
               const pedidoActual = document
