@@ -593,6 +593,16 @@
           <span class="tarjetaApp-icono">⏱️</span>
           <span>Calculadora de tiempos</span>
         </button>
+        <button
+          type="button"
+          class="tarjetaApp"
+          id="btnEdicionDashboard"
+          style="display: none"
+          onclick="abrirEdicionDesdeDashboard()"
+        >
+          <span class="tarjetaApp-icono">✏️</span>
+          <span>Editar registros</span>
+        </button>
       </div>
       <button
         type="button"
@@ -602,6 +612,21 @@
       >
         ← Cerrar sesión
       </button>
+    </div>
+
+    <div id="vistaEdicionRegistros" style="display: none">
+      <button
+        type="button"
+        class="btn-submit"
+        style="background: #6b7280; margin-bottom: 14px"
+        onclick="volverAlDashboard()"
+      >
+        ← Volver al dashboard
+      </button>
+      <h1>Editar registros</h1>
+      <div class="card">
+        <!-- Búsqueda y lista de registros: se agrega en el siguiente paso -->
+      </div>
     </div>
 
     <div id="vistaPrincipal" style="display: none">
@@ -1261,12 +1286,21 @@
         document.getElementById("vistaCalculadora").style.display = "block";
       }
 
+      function abrirEdicionDesdeDashboard() {
+        document.getElementById("vistaDashboard").style.display = "none";
+        document.getElementById("vistaEdicionRegistros").style.display =
+          "block";
+      }
+
       function volverAlDashboard() {
-        ["vistaPrincipal", "vistaOperario", "vistaCalculadora"].forEach(
-          (id) => {
-            document.getElementById(id).style.display = "none";
-          },
-        );
+        [
+          "vistaPrincipal",
+          "vistaOperario",
+          "vistaCalculadora",
+          "vistaEdicionRegistros",
+        ].forEach((id) => {
+          document.getElementById(id).style.display = "none";
+        });
         document.getElementById("vistaDashboard").style.display = "block";
       }
 
@@ -1312,6 +1346,7 @@
           "vistaJustificacion",
           "vistaDashboard",
           "vistaCalculadora",
+          "vistaEdicionRegistros",
         ].forEach((id) => {
           document.getElementById(id).style.display = "none";
         });
@@ -1451,6 +1486,8 @@
             if (res.success) {
               document.getElementById("vistaLogin").style.display = "none";
               document.getElementById("vistaDashboard").style.display = "block";
+              document.getElementById("btnEdicionDashboard").style.display =
+                rolActual === "supervisor" ? "" : "none";
             } else {
               document.getElementById("loginError").innerHTML =
                 `<div class="msg err">${res.message}</div>`;
