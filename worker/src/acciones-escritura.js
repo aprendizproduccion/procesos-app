@@ -787,41 +787,69 @@ export const accionesEscritura = {
     return { success: true, id, pedidoCompleto };
   },
 
-  async anularRegistro(payload, env, ctx) {
+  async reactivarRegistro(payload, env, ctx) {
     const id = Number(payload.id);
     if (!Number.isInteger(id) || id <= 0)
-      throw new Error("Falta el ID del registro a anular.");
+      throw new Error("Falta el ID del registro a reactivar.");
 
     const motivo = String(payload.motivo || "").trim();
-    if (!motivo) throw new Error("Debes indicar el motivo de la anulación.");
+    if (!motivo) throw new Error("Debes indicar el motivo de la reactivación.");
 
-    const anuladoPor = String(payload.anuladoPor || "").trim();
-    if (!anuladoPor) throw new Error("Falta el nombre de quien anula.");
+    const reactivadoPor = String(payload.reactivadoPor || "").trim();
+    if (!reactivadoPor) throw new Error("Falta el nombre de quien reactiva.");
 
     const actual = await env.DB.prepare(
-      "SELECT numero_pedido, ean FROM registros WHERE id = ? AND anulado = 0",
+      "SELECT numero_pedido, ean, unidades_procesadas_operario, codigos_sobrantes " +
+        "FROM registros WHERE id = ? AND anulado = 1",
     )
       .bind(id)
       .first();
     if (!actual)
       throw new Error(
-        "El registro no existe o ya estaba anulado. Actualiza la lista e intenta de nuevo.",
+        "El registro no existe o no está anulado. Actualiza la lista e intenta de nuevo.",
       );
 
     const pedido = actual.numero_pedido;
     const ean = actual.ean;
-    const ahora = _ahoraISO();
 
-    const resultado = await env.DB.prepare(
-      "UPDATE registros SET anulado = 1, anulado_por = ?, anulado_en = ?, " +
-        "motivo_anulacion = ? WHERE id = ? AND anulado = 0",
+    const disponible = await env.DB.prepare(
+      "SELECT v.unidades_totales AS totales, " +
+        "(SELECT COALESCE(SUM(r.unidades_procesadas_operario + r.codigos_sobrantes), 0) " +
+        "FROM registros r WHERE r.numero_pedido = v.numero_pedido AND r.ean = v.ean_producto " +
+        "AND r.anulado = 0) AS ocupadoActivos, " +
+        "(SELECT COALESCE(SUM(faltante), 0) FROM justificaciones " +
+        "WHERE pedido = v.numero_pedido AND ean = v.ean_producto) AS justificado " +
+        "FROM validacion_eanes v WHERE v.numero_pedido = ? AND v.ean_producto = ?",
     )
-      .bind(anuladoPor, ahora, motivo, id)
+      .bind(pedido, ean)
+      .first();
+
+    const restante =
+      disponible.totales - disponible.ocupadoActivos - disponible.justificado;
+    const ocupaEstaFila =
+      actual.unidades_procesadas_operario + actual.codigos_sobrantes;
+    if (ocupaEstaFila > restante) {
+      throw new Error(
+        "No se puede reactivar: este registro ocupa " +
+          ocupaEstaFila +
+          " unidades y el pedido solo tiene " +
+          restante +
+          " disponibles ahora mismo (contando lo ya activo y lo justificado). " +
+          "Edita las unidades antes de reactivarlo, o revisa el pedido.",
+      );
+    }
+
+    const ahora = _ahoraISO();
+    const resultado = await env.DB.prepare(
+      "UPDATE registros SET anulado = 0, editado_por = ?, editado_en = ?, " +
+        "motivo_edicion = ? WHERE id = ? AND anulado = 1",
+    )
+      .bind(reactivadoPor, ahora, motivo, id)
       .run();
 
     if (resultado.meta.changes === 0) {
       throw new Error(
-        "El registro fue anulado por otro proceso justo antes. Actualiza la lista e intenta de nuevo.",
+        "El registro fue modificado por otro proceso justo antes. Actualiza la lista e intenta de nuevo.",
       );
     }
 
