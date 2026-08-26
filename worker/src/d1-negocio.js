@@ -210,6 +210,23 @@ export async function _pedidoEstaCompleto(env, pedido) {
   return row.total > 0 && row.pendientes === 0;
 }
 
+// Complementa _pedidoEstaCompleto: además de poder CERRAR un pedido (lo que ya
+// hacían submitRegistro/submitRegistroOperario/guardarJustificacion de forma
+// inline), esta función también puede REABRIRLO si una edición o anulación hizo
+// que ya no esté completo. Se usa solo desde edición/anulación de registros —
+// los tres flujos de envío normales siguen con su bloque inline, sin cambios.
+export async function _sincronizarEstadoPedido(env, pedido) {
+  const completo = await _pedidoEstaCompleto(env, pedido);
+  const ahora = _ahoraISO();
+  await env.DB.prepare(
+    "INSERT INTO control_produccion (numero_pedido, estado, actualizado_en) VALUES (?, ?, ?) " +
+      "ON CONFLICT(numero_pedido) DO UPDATE SET estado = excluded.estado, actualizado_en = excluded.actualizado_en",
+  )
+    .bind(pedido, completo ? "Completado" : "En proceso", ahora)
+    .run();
+  return completo;
+}
+
 // Revierte una reserva de unidades ya aplicada, para cuando el INSERT de
 // registros falla DESPUÉS de que la reserva ya comprometió cambios en D1.
 export async function _revertirReserva(
