@@ -50,7 +50,7 @@ export const accionesLectura = {
     return { success: true, nombre: row.nombre, equipo: row.equipo };
   },
 
-    async obtenerDatosValidacion(datos, env) {
+  async obtenerDatosValidacion(datos, env) {
     const pedido = String(datos.pedido || "").trim();
     const ean = String(datos.ean || "").trim();
 
@@ -136,6 +136,35 @@ export const accionesLectura = {
       restanteNeto: match.restanteNeto,
       estado: match.estado,
     };
+  },
+
+  async obtenerRegistrosParaEditar(datos, env) {
+    const pedido = String(datos.pedido || "").trim();
+    if (!pedido)
+      return { success: false, message: "Falta el número de pedido." };
+
+    const ean = String(datos.ean || "").trim();
+
+    let sql =
+      "SELECT id, fecha, coordinador, cedula_operario AS cedulaOperario, operario, " +
+      "supernumerario, proceso, ean, hora_inicio AS horaInicio, hora_final AS horaFinal, " +
+      "suplemento, observacion, unidades_procesadas_operario AS unidadesProcesadas, " +
+      "codigos_sobrantes AS codigosSobrantes, anulado, anulado_por AS anuladoPor, " +
+      "anulado_en AS anuladoEn, motivo_anulacion AS motivoAnulacion, " +
+      "editado_por AS editadoPor, editado_en AS editadoEn, motivo_edicion AS motivoEdicion " +
+      "FROM registros WHERE numero_pedido = ?";
+    const binds = [pedido];
+    if (ean) {
+      sql += " AND ean = ?";
+      binds.push(ean);
+    }
+    sql += " ORDER BY fecha DESC, hora_inicio DESC, id DESC";
+
+    const { results } = await env.DB.prepare(sql)
+      .bind(...binds)
+      .all();
+
+    return { success: true, registros: results };
   },
 };
 
