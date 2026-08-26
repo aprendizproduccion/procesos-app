@@ -625,7 +625,24 @@
       </button>
       <h1>Editar registros</h1>
       <div class="card">
-        <!-- Búsqueda y lista de registros: se agrega en el siguiente paso -->
+        <label>Número de pedido</label>
+        <div class="add-row" style="margin-bottom: 14px">
+          <input
+            id="edicionPedidoInput"
+            placeholder="Ej: 3200"
+            autocomplete="off"
+            enterkeyhint="search"
+          />
+          <button
+            type="button"
+            id="btnBuscarRegistrosEditar"
+            onclick="buscarRegistrosParaEditar()"
+          >
+            Buscar
+          </button>
+        </div>
+        <div id="edicionAlerta"></div>
+        <div id="listaRegistrosEditar"></div>
       </div>
     </div>
 
@@ -1290,7 +1307,94 @@
         document.getElementById("vistaDashboard").style.display = "none";
         document.getElementById("vistaEdicionRegistros").style.display =
           "block";
+        document.getElementById("edicionPedidoInput").value = "";
+        document.getElementById("edicionAlerta").innerHTML = "";
+        document.getElementById("listaRegistrosEditar").innerHTML = "";
       }
+
+      let buscarRegistrosEditarEnCurso = false;
+
+      function buscarRegistrosParaEditar() {
+        const pedido = document
+          .getElementById("edicionPedidoInput")
+          .value.trim();
+        const alertaDiv = document.getElementById("edicionAlerta");
+        const listaDiv = document.getElementById("listaRegistrosEditar");
+        alertaDiv.innerHTML = "";
+        if (!pedido) {
+          alertaDiv.innerHTML =
+            '<div class="msg err">Escribe un número de pedido.</div>';
+          return;
+        }
+        if (buscarRegistrosEditarEnCurso) return;
+        buscarRegistrosEditarEnCurso = true;
+
+        const btn = document.getElementById("btnBuscarRegistrosEditar");
+        const textoOriginal = btn.textContent;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>';
+
+        llamarAPI("obtenerRegistrosParaEditar", { pedido: pedido })
+          .then(function (res) {
+            if (res.success) {
+              renderListaRegistrosEditar(res.registros);
+            } else {
+              listaDiv.innerHTML = "";
+              alertaDiv.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
+            }
+          })
+          .catch(function (err) {
+            listaDiv.innerHTML = "";
+            alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
+          })
+          .finally(function () {
+            btn.disabled = false;
+            btn.textContent = textoOriginal;
+            buscarRegistrosEditarEnCurso = false;
+          });
+      }
+
+      function renderListaRegistrosEditar(registros) {
+        const listaDiv = document.getElementById("listaRegistrosEditar");
+        if (!registros || registros.length === 0) {
+          listaDiv.innerHTML =
+            '<p class="hint">Este pedido no tiene registros.</p>';
+          return;
+        }
+        listaDiv.innerHTML = registros
+          .map(function (r) {
+            const anulado = r.anulado === 1;
+            const estiloCard = anulado
+              ? "opacity:0.55; background:#f3f4f6;"
+              : "background:#f9fafb;";
+            const etiquetaAnulado = anulado
+              ? '<span style="color:#b91c1c; font-weight:700; font-size:12px;">ANULADO</span> '
+              : "";
+            const sobrantesTexto =
+              r.codigosSobrantes > 0
+                ? ` · ${r.codigosSobrantes} sobrantes`
+                : "";
+            return (
+              `<div data-id="${r.id}" style="border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin-bottom:10px; ${estiloCard}">` +
+              `<div style="font-size:13px; color:#6b7280; margin-bottom:4px;">${etiquetaAnulado}${escapeHtml(r.fecha)} · ${escapeHtml(r.horaInicio)}–${escapeHtml(r.horaFinal)}</div>` +
+              `<div style="font-weight:600; margin-bottom:2px;">${escapeHtml(r.operario)}</div>` +
+              `<div style="font-size:13px; color:#374151; margin-bottom:6px;">${escapeHtml(r.proceso)}</div>` +
+              `<div style="font-size:13px;"><strong>${r.unidadesProcesadas}</strong> unidades${sobrantesTexto}</div>` +
+              `<div style="font-size:12px; color:#6b7280; margin-top:4px;">Coord: ${escapeHtml(r.coordinador)} · Supernum: ${escapeHtml(r.supernumerario)}</div>` +
+              `</div>`
+            );
+          })
+          .join("");
+      }
+
+      const edicionPedidoInput = document.getElementById("edicionPedidoInput");
+      edicionPedidoInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          buscarRegistrosParaEditar();
+        }
+      });
+      edicionPedidoInput.addEventListener("search", buscarRegistrosParaEditar);
 
       function volverAlDashboard() {
         [
