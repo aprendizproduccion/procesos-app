@@ -17,6 +17,8 @@ import {
   _ahoraISO,
   _revertirReserva,
   _revertirCierre,
+  _recalcularContadorValidacion,
+  _sincronizarEstadoPedido,
 } from "./d1-negocio.js";
 
 import {
@@ -648,5 +650,140 @@ export const accionesEscritura = {
       await _liberarIdempotencia(env, huella);
       throw err;
     }
+  },
+
+  async editarRegistro(payload, env, ctx) {
+    const id = Number(payload.id);
+    if (!Number.isInteger(id) || id <= 0)
+      throw new Error("Falta el ID del registro a editar.");
+
+    const motivo = String(payload.motivo || "").trim();
+    if (!motivo) throw new Error("Debes indicar el motivo de la edición.");
+
+    const editadoPor = String(payload.editadoPor || "").trim();
+    if (!editadoPor) throw new Error("Falta el nombre de quien edita.");
+
+    const actual = await env.DB.prepare(
+      "SELECT numero_pedido, ean FROM registros WHERE id = ? AND anulado = 0",
+    )
+      .bind(id)
+      .first();
+    if (!actual)
+      throw new Error(
+        "El registro no existe o ya fue anulado. Actualiza la lista e intenta de nuevo.",
+      );
+
+    const pedido = actual.numero_pedido;
+    const ean = actual.ean;
+
+    const { coordinador, supernumerario } =
+      await _validarSupervisorYSupernumerario(
+        env,
+        String(payload.coordinador || "").trim(),
+        String(payload.supernumerario || "").trim(),
+      );
+
+    const procesoValidado = await _obtenerProcesoValidado(
+      env,
+      payload.proceso,
+      pedido,
+    );
+    const tasaEstandar = procesoValidado.unidadesHora;
+
+    const horaInicio = String(payload.horaInicio || "").trim();
+    const horaFin = String(payload.horaFin || "").trim();
+    const suplementoMin = Number(payload.suplementoMin) || 0;
+    const { duracionBrutaMin, duracionRealMin } = _calcularDuracionValidada(
+      horaInicio,
+      horaFin,
+      suplementoMin,
+    );
+    const durHoras = Math.round((duracionRealMin / 60) * 100) / 100;
+
+    const unidadesNuevas = Number(payload.unidadesProcesadas);
+    if (!Number.isFinite(unidadesNuevas) || unidadesNuevas < 0)
+      throw new Error("Unidades procesadas inválidas.");
+    const codigosSobrantesNuevos = _validarCodigosSobrantes(
+      payload.codigosSobrantes,
+    );
+
+    const observaciones = String(payload.observaciones || "").trim();
+
+    const disponible = await env.DB.prepare(
+      "SELECT v.unidades_totales AS totales, " +
+        "(SELECT COALESCE(SUM(r.unidades_procesadas_operario + r.codigos_sobrantes), 0) " +
+        "FROM registros r WHERE r.numero_pedido = v.numero_pedido AND r.ean = v.ean_producto " +
+        "AND r.anulado = 0 AND r.id != ?) AS ocupadoOtras, " +
+        "(SELECT COALESCE(SUM(faltante), 0) FROM justificaciones " +
+        "WHERE pedido = v.numero_pedido AND ean = v.ean_producto) AS justificado " +
+        "FROM validacion_eanes v WHERE v.numero_pedido = ? AND v.ean_producto = ?",
+    )
+      .bind(id, pedido, ean)
+      .first();
+
+    const restante =
+      disponible.totales - disponible.ocupadoOtras - disponible.justificado;
+    if (unidadesNuevas + codigosSobrantesNuevos > restante) {
+      throw new Error(
+        "La cantidad ingresada (" +
+          unidadesNuevas +
+          (codigosSobrantesNuevos > 0
+            ? " unidades + " + codigosSobrantesNuevos + " códigos sobrantes"
+            : " unidades") +
+          ") supera lo que el pedido tiene disponible (" +
+          restante +
+          " de " +
+          disponible.totales +
+          " totales, contando las demás filas y lo justificado). Verifica antes de continuar.",
+      );
+    }
+
+    const { unidadesHoraReal, eficiencia } = _calcularMetricasProduccion(
+      unidadesNuevas,
+      tasaEstandar,
+      durHoras,
+    );
+
+    const ahora = _ahoraISO();
+    const resultado = await env.DB.prepare(
+      "UPDATE registros SET coordinador = ?, supernumerario = ?, proceso = ?, " +
+        "unidades_hora_estandar = ?, hora_inicio = ?, hora_final = ?, suplemento = ?, " +
+        "observacion = ?, duracion_bruta_min = ?, tiempo_total = ?, " +
+        "unidades_procesadas_operario = ?, codigos_sobrantes = ?, unidades_hora_real = ?, " +
+        "eficiencia = ?, editado_por = ?, editado_en = ?, motivo_edicion = ? " +
+        "WHERE id = ? AND anulado = 0",
+    )
+      .bind(
+        coordinador,
+        supernumerario,
+        procesoValidado.nombre,
+        tasaEstandar,
+        horaInicio,
+        horaFin,
+        suplementoMin,
+        observaciones,
+        duracionBrutaMin,
+        durHoras,
+        unidadesNuevas,
+        codigosSobrantesNuevos,
+        unidadesHoraReal,
+        eficiencia,
+        editadoPor,
+        ahora,
+        motivo,
+        id,
+      )
+      .run();
+
+    if (resultado.meta.changes === 0) {
+      throw new Error(
+        "El registro fue anulado justo antes de guardar los cambios. Actualiza la lista e intenta de nuevo.",
+      );
+    }
+
+    await _recalcularContadorValidacion(env, pedido, ean);
+    const pedidoCompleto = await _sincronizarEstadoPedido(env, pedido);
+
+    return { success: true, id, pedidoCompleto };
   },
 };
