@@ -1188,6 +1188,16 @@
     <script>
       let rolActual = null;
 
+      // ---------------- ESCAPE DE HTML (seguridad) ----------------
+      function escapeHtml(texto) {
+        return String(texto)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
       // ---------------- OPCIONES DE SUPLEMENTO (fuente única) ----------------
       const OPCIONES_SUPLEMENTO_MIN = [
         0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70,
@@ -1656,7 +1666,7 @@
             } else {
               unidadesEsperadas = null;
               unidadesRestantes = null;
-              alertaEanDiv.innerHTML = `<div class="msg err">AVISO: ${res.message}</div>`;
+              alertaEanDiv.innerHTML = `<div class="msg err">AVISO: ${escapeHtml(res.message)}</div>`;
               document.getElementById("btnSubmit").disabled = true;
             }
           })
@@ -1739,7 +1749,7 @@
         document.getElementById("chips").innerHTML = operarios
           .map(
             (n) =>
-              `<span class="chip">${n}<button onclick="quitarOperario('${n}')">×</button></span>`,
+              `<span class="chip">${escapeHtml(n)}<button onclick="quitarOperario('${n.replace(/'/g, "\\'")}')">×</button></span>`,
           )
           .join("");
       }
@@ -2067,7 +2077,7 @@
 
       function mostrarMsg(texto, ok) {
         document.getElementById("resultado").innerHTML =
-          `<div class="msg ${ok ? "ok" : "err"}">${texto}</div>`;
+          `<div class="msg ${ok ? "ok" : "err"}">${escapeHtml(texto)}</div>`;
       }
 
       let justEanSeleccionado = "";
@@ -2513,7 +2523,7 @@
               opCodigoEan = "";
               opPedidoValidado = "";
               confirmado.style.display = "none";
-              alertaDiv.innerHTML = `<div class="msg err">AVISO: ${res.message}</div>`;
+              alertaDiv.innerHTML = `<div class="msg err">AVISO: ${escapeHtml(res.message)}</div>`;
             }
           })
           .catch(function (err) {
@@ -2673,7 +2683,7 @@
 
       function mostrarMsgOperario(texto, ok) {
         document.getElementById("opResultado").innerHTML =
-          `<div class="msg ${ok ? "ok" : "err"}">${texto}</div>`;
+          `<div class="msg ${ok ? "ok" : "err"}">${escapeHtml(texto)}</div>`;
       }
 
       function resetFormularioOperario() {
