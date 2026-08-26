@@ -786,4 +786,48 @@ export const accionesEscritura = {
 
     return { success: true, id, pedidoCompleto };
   },
+
+  async anularRegistro(payload, env, ctx) {
+    const id = Number(payload.id);
+    if (!Number.isInteger(id) || id <= 0)
+      throw new Error("Falta el ID del registro a anular.");
+
+    const motivo = String(payload.motivo || "").trim();
+    if (!motivo) throw new Error("Debes indicar el motivo de la anulación.");
+
+    const anuladoPor = String(payload.anuladoPor || "").trim();
+    if (!anuladoPor) throw new Error("Falta el nombre de quien anula.");
+
+    const actual = await env.DB.prepare(
+      "SELECT numero_pedido, ean FROM registros WHERE id = ? AND anulado = 0",
+    )
+      .bind(id)
+      .first();
+    if (!actual)
+      throw new Error(
+        "El registro no existe o ya estaba anulado. Actualiza la lista e intenta de nuevo.",
+      );
+
+    const pedido = actual.numero_pedido;
+    const ean = actual.ean;
+    const ahora = _ahoraISO();
+
+    const resultado = await env.DB.prepare(
+      "UPDATE registros SET anulado = 1, anulado_por = ?, anulado_en = ?, " +
+        "motivo_anulacion = ? WHERE id = ? AND anulado = 0",
+    )
+      .bind(anuladoPor, ahora, motivo, id)
+      .run();
+
+    if (resultado.meta.changes === 0) {
+      throw new Error(
+        "El registro fue anulado por otro proceso justo antes. Actualiza la lista e intenta de nuevo.",
+      );
+    }
+
+    await _recalcularContadorValidacion(env, pedido, ean);
+    const pedidoCompleto = await _sincronizarEstadoPedido(env, pedido);
+
+    return { success: true, id, pedidoCompleto };
+  },
 };
