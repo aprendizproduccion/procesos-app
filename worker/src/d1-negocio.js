@@ -238,6 +238,34 @@ export async function _revertirCierre(env, pedido, ean) {
     .run();
 }
 
+// Reconstruye el contador de validacion_eanes desde la fuente real (registros +
+// justificaciones) en una sola sentencia atómica, en vez de sumar/restar un
+// delta a mano. Excluye registros anulados. Se usa SOLO desde edición/anulación
+// de registros — submitRegistro, submitRegistroOperario y guardarJustificacion
+// NO se tocan ni usan esta función; su reserva atómica sigue exactamente igual.
+export async function _recalcularContadorValidacion(env, pedido, ean) {
+  const ahora = _ahoraISO();
+  await env.DB.prepare(
+    "WITH agregados AS (" +
+      "SELECT COALESCE(SUM(unidades_procesadas_operario),0) AS procesado, " +
+      "COALESCE(SUM(codigos_sobrantes),0) AS sobrantes " +
+      "FROM registros WHERE numero_pedido = ? AND ean = ? AND anulado = 0" +
+      "), justif AS (" +
+      "SELECT COALESCE(SUM(faltante),0) AS justificado " +
+      "FROM justificaciones WHERE pedido = ? AND ean = ?" +
+      ") " +
+      "UPDATE validacion_eanes SET " +
+      "unidades_procesadas = (SELECT procesado FROM agregados), " +
+      "codigos_sobrantes = (SELECT sobrantes FROM agregados), " +
+      "estado = CASE WHEN ((SELECT procesado FROM agregados) + (SELECT sobrantes FROM agregados) + (SELECT justificado FROM justif)) >= unidades_totales " +
+      "THEN 'Completado' ELSE 'En proceso' END, " +
+      "actualizado_en = ? " +
+      "WHERE numero_pedido = ? AND ean_producto = ?",
+  )
+    .bind(pedido, ean, pedido, ean, ahora, pedido, ean)
+    .run();
+}
+
 export function _duracionMinutos(horaInicio, horaFin) {
   const [h1, m1] = String(horaInicio).split(":").map(Number);
   const [h2, m2] = String(horaFin).split(":").map(Number);
