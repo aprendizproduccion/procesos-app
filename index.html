@@ -1524,6 +1524,9 @@
             const clickAttr = anulado
               ? ""
               : ` onclick="abrirModalEditar(${r.id})"`;
+            const botonAccion = anulado
+              ? `<div style="margin-top:8px; text-align:right;"><button type="button" onclick="abrirModalReactivar(${r.id})" style="background:#16a34a; color:#fff; border:none; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer;">Reactivar</button></div>`
+              : `<div style="margin-top:8px; text-align:right;"><button type="button" onclick="event.stopPropagation(); abrirModalAnular(${r.id})" style="background:#dc2626; color:#fff; border:none; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer;">Anular</button></div>`;
             return (
               `<div data-id="${r.id}" style="border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin-bottom:10px; ${estiloCard}"${clickAttr}>` +
               `<div style="font-size:13px; color:#6b7280; margin-bottom:4px;">${etiquetaAnulado}${escapeHtml(r.fecha)} · ${escapeHtml(r.horaInicio)}–${escapeHtml(r.horaFinal)}</div>` +
@@ -1531,6 +1534,7 @@
               `<div style="font-size:13px; color:#374151; margin-bottom:6px;">${escapeHtml(r.proceso)}</div>` +
               `<div style="font-size:13px;"><strong>${r.unidadesProcesadas}</strong> unidades${sobrantesTexto}</div>` +
               `<div style="font-size:12px; color:#6b7280; margin-top:4px;">Coord: ${escapeHtml(r.coordinador)} · Supernum: ${escapeHtml(r.supernumerario)}</div>` +
+              botonAccion +
               `</div>`
             );
           })
