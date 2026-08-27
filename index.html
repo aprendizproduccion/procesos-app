@@ -1608,6 +1608,95 @@
         idRegistroEnEdicion = null;
       }
 
+      let guardarEdicionEnCurso = false;
+
+      function guardarEdicionRegistro() {
+        if (guardarEdicionEnCurso) return;
+
+        const alertaDiv = document.getElementById("editAlerta");
+        alertaDiv.innerHTML = "";
+
+        const motivo = document.getElementById("editMotivo").value.trim();
+        if (!motivo) {
+          alertaDiv.innerHTML =
+            '<div class="msg err">Indica el motivo de la edición.</div>';
+          return;
+        }
+        const editadoPor = document
+          .getElementById("editEditadoPor")
+          .value.trim();
+        if (!editadoPor) {
+          alertaDiv.innerHTML = '<div class="msg err">Indica tu nombre.</div>';
+          return;
+        }
+        const unidadesTexto = document
+          .getElementById("editUnidadesProcesadas")
+          .value.trim();
+        const unidadesNum = Number(unidadesTexto);
+        if (
+          unidadesTexto === "" ||
+          !Number.isFinite(unidadesNum) ||
+          unidadesNum < 0
+        ) {
+          alertaDiv.innerHTML =
+            '<div class="msg err">Ingresa unidades procesadas válidas.</div>';
+          return;
+        }
+        const codSobrantesResult = obtenerCodigosSobrantesValidados(
+          "editCodigosSobrantes",
+        );
+        if (!codSobrantesResult.ok) {
+          alertaDiv.innerHTML =
+            '<div class="msg err">Los códigos sobrantes deben ser un número entero (sin letras ni decimales).</div>';
+          return;
+        }
+
+        guardarEdicionEnCurso = true;
+        const btn = document.getElementById("btnGuardarEdicion");
+        const textoOriginal = btn.textContent;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>';
+
+        const payload = {
+          id: idRegistroEnEdicion,
+          coordinador: document.getElementById("editCoordinador").value.trim(),
+          supernumerario: document
+            .getElementById("editSupernumerario")
+            .value.trim(),
+          proceso: document.getElementById("editProceso").value.trim(),
+          horaInicio: document.getElementById("editHoraInicio").value,
+          horaFin: document.getElementById("editHoraFin").value,
+          suplementoMin: Number(
+            document.getElementById("editSuplementoMin").value,
+          ),
+          unidadesProcesadas: unidadesNum,
+          codigosSobrantes: codSobrantesResult.valor,
+          observaciones: document
+            .getElementById("editObservaciones")
+            .value.trim(),
+          motivo: motivo,
+          editadoPor: editadoPor,
+        };
+
+        llamarAPI("editarRegistro", payload)
+          .then(function (res) {
+            if (res.success) {
+              cerrarModalEditarDefinitivo();
+              buscarRegistrosParaEditar();
+            } else {
+              alertaDiv.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
+            }
+          })
+          .catch(function (err) {
+            alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
+          })
+          .finally(function () {
+            btn.disabled = false;
+            btn.textContent = textoOriginal;
+            guardarEdicionEnCurso = false;
+          });
+      }
+
       const edicionPedidoInput = document.getElementById("edicionPedidoInput");
       edicionPedidoInput.addEventListener("keydown", function (e) {
         if (e.key === "Enter") {
