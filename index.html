@@ -1409,9 +1409,13 @@
         document.getElementById("edicionPedidoInput").value = "";
         document.getElementById("edicionAlerta").innerHTML = "";
         document.getElementById("listaRegistrosEditar").innerHTML = "";
+        registrosEditarActuales = [];
       }
 
       let buscarRegistrosEditarEnCurso = false;
+      let registrosEditarActuales = [];
+      let idRegistroEnEdicion = null;
+      let snapshotFormularioEdicion = "";
 
       function buscarRegistrosParaEditar() {
         const pedido = document
@@ -1438,11 +1442,13 @@
             if (res.success) {
               renderListaRegistrosEditar(res.registros);
             } else {
+              registrosEditarActuales = [];
               listaDiv.innerHTML = "";
               alertaDiv.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
             }
           })
           .catch(function (err) {
+            registrosEditarActuales = [];
             listaDiv.innerHTML = "";
             alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
           })
@@ -1454,6 +1460,7 @@
       }
 
       function renderListaRegistrosEditar(registros) {
+        registrosEditarActuales = registros || [];
         const listaDiv = document.getElementById("listaRegistrosEditar");
         if (!registros || registros.length === 0) {
           listaDiv.innerHTML =
@@ -1465,7 +1472,7 @@
             const anulado = r.anulado === 1;
             const estiloCard = anulado
               ? "opacity:0.55; background:#f3f4f6;"
-              : "background:#f9fafb;";
+              : "background:#f9fafb; cursor:pointer;";
             const etiquetaAnulado = anulado
               ? '<span style="color:#b91c1c; font-weight:700; font-size:12px;">ANULADO</span> '
               : "";
@@ -1473,8 +1480,11 @@
               r.codigosSobrantes > 0
                 ? ` · ${r.codigosSobrantes} sobrantes`
                 : "";
+            const clickAttr = anulado
+              ? ""
+              : ` onclick="abrirModalEditar(${r.id})"`;
             return (
-              `<div data-id="${r.id}" style="border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin-bottom:10px; ${estiloCard}">` +
+              `<div data-id="${r.id}" style="border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin-bottom:10px; ${estiloCard}"${clickAttr}>` +
               `<div style="font-size:13px; color:#6b7280; margin-bottom:4px;">${etiquetaAnulado}${escapeHtml(r.fecha)} · ${escapeHtml(r.horaInicio)}–${escapeHtml(r.horaFinal)}</div>` +
               `<div style="font-weight:600; margin-bottom:2px;">${escapeHtml(r.operario)}</div>` +
               `<div style="font-size:13px; color:#374151; margin-bottom:6px;">${escapeHtml(r.proceso)}</div>` +
@@ -1484,6 +1494,113 @@
             );
           })
           .join("");
+      }
+
+      function abrirModalEditar(id) {
+        const registro = registrosEditarActuales.find((r) => r.id === id);
+        if (!registro) return;
+
+        idRegistroEnEdicion = id;
+        document.getElementById("editAlerta").innerHTML = "";
+
+        document.getElementById("editCoordinador").innerHTML =
+          document.getElementById("coordinador").innerHTML;
+        document.getElementById("editSupernumerario").innerHTML =
+          document.getElementById("supernumerario").innerHTML;
+
+        const pedidoActual = document
+          .getElementById("edicionPedidoInput")
+          .value.trim();
+        const procesosFiltrados = procesos.filter(
+          (p) => p.pedido === pedidoActual,
+        );
+        let opcionesProceso =
+          '<option value="">Selecciona un proceso...</option>' +
+          procesosFiltrados
+            .map((p) => `<option value="${p.nombre}">${p.nombre}</option>`)
+            .join("");
+        if (
+          registro.proceso &&
+          !procesosFiltrados.some((p) => p.nombre === registro.proceso)
+        ) {
+          opcionesProceso += `<option value="${escapeHtml(registro.proceso)}">${escapeHtml(registro.proceso)} (fuera del catálogo actual)</option>`;
+        }
+        document.getElementById("editProceso").innerHTML = opcionesProceso;
+
+        document.getElementById("editSuplementoMin").innerHTML =
+          _generarOpcionesSuplemento();
+
+        document.getElementById("editCoordinador").value =
+          registro.coordinador || "";
+        document.getElementById("editSupernumerario").value =
+          registro.supernumerario || "";
+        document.getElementById("editProceso").value = registro.proceso || "";
+        document.getElementById("editHoraInicio").value =
+          registro.horaInicio || "";
+        document.getElementById("editHoraFin").value = registro.horaFinal || "";
+        document.getElementById("editSuplementoMin").value =
+          registro.suplemento || 0;
+        document.getElementById("editUnidadesProcesadas").value =
+          registro.unidadesProcesadas != null
+            ? registro.unidadesProcesadas
+            : "";
+        document.getElementById("editCodigosSobrantes").value =
+          registro.codigosSobrantes || "";
+        document.getElementById("editObservaciones").value =
+          registro.observacion || "";
+        document.getElementById("editMotivo").value = "";
+        document.getElementById("editEditadoPor").value = "";
+
+        snapshotFormularioEdicion = _capturarSnapshotEdicion();
+        document.getElementById("modalEditarRegistro").classList.add("visible");
+      }
+
+      function _capturarSnapshotEdicion() {
+        return JSON.stringify({
+          coordinador: document.getElementById("editCoordinador").value,
+          supernumerario: document.getElementById("editSupernumerario").value,
+          proceso: document.getElementById("editProceso").value,
+          horaInicio: document.getElementById("editHoraInicio").value,
+          horaFin: document.getElementById("editHoraFin").value,
+          suplementoMin: document.getElementById("editSuplementoMin").value,
+          unidadesProcesadas: document.getElementById("editUnidadesProcesadas")
+            .value,
+          codigosSobrantes: document.getElementById("editCodigosSobrantes")
+            .value,
+          observaciones: document.getElementById("editObservaciones").value,
+          motivo: document.getElementById("editMotivo").value,
+          editadoPor: document.getElementById("editEditadoPor").value,
+        });
+      }
+
+      function intentarCerrarModalEditar() {
+        if (_capturarSnapshotEdicion() !== snapshotFormularioEdicion) {
+          document
+            .getElementById("modalConfirmarDescartarEdicion")
+            .classList.add("visible");
+        } else {
+          cerrarModalEditarDefinitivo();
+        }
+      }
+
+      function cancelarDescartarEdicion() {
+        document
+          .getElementById("modalConfirmarDescartarEdicion")
+          .classList.remove("visible");
+      }
+
+      function confirmarDescartarEdicion() {
+        document
+          .getElementById("modalConfirmarDescartarEdicion")
+          .classList.remove("visible");
+        cerrarModalEditarDefinitivo();
+      }
+
+      function cerrarModalEditarDefinitivo() {
+        document
+          .getElementById("modalEditarRegistro")
+          .classList.remove("visible");
+        idRegistroEnEdicion = null;
       }
 
       const edicionPedidoInput = document.getElementById("edicionPedidoInput");
