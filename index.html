@@ -1084,6 +1084,105 @@
       </div>
     </div>
 
+    <div id="modalEditarRegistro" class="modal-overlay">
+      <div class="modal-box" style="max-width: 480px">
+        <h3 style="color: #2452c9">Editar registro</h3>
+        <div id="editAlerta"></div>
+        <div style="max-height: 60vh; overflow-y: auto; padding-right: 4px">
+          <div class="row2">
+            <div>
+              <label>Coordinador</label>
+              <select id="editCoordinador"></select>
+            </div>
+            <div>
+              <label>Supernumerario</label>
+              <select id="editSupernumerario"></select>
+            </div>
+          </div>
+          <label>Proceso</label>
+          <select id="editProceso"></select>
+          <div class="row2">
+            <div>
+              <label>Hora inicio</label>
+              <input id="editHoraInicio" type="time" />
+            </div>
+            <div>
+              <label>Hora fin</label>
+              <input id="editHoraFin" type="time" />
+            </div>
+          </div>
+          <label>Suplemento (descanso)</label>
+          <select id="editSuplementoMin"></select>
+          <label>Unidades procesadas</label>
+          <input id="editUnidadesProcesadas" type="number" min="0" />
+          <label>Códigos sobrantes</label>
+          <input
+            id="editCodigosSobrantes"
+            type="number"
+            min="0"
+            step="1"
+            inputmode="numeric"
+          />
+          <label>Observaciones</label>
+          <textarea id="editObservaciones" rows="2"></textarea>
+          <label>Motivo de la edición (obligatorio)</label>
+          <textarea
+            id="editMotivo"
+            rows="2"
+            placeholder="Ej: el operario ingresó unidades de más por error de digitación"
+          ></textarea>
+          <label>Tu nombre (obligatorio)</label>
+          <input
+            id="editEditadoPor"
+            placeholder="Quién hace este cambio"
+            autocomplete="off"
+          />
+        </div>
+        <div class="row2" style="margin-top: 14px">
+          <button
+            type="button"
+            style="background: #9ca3af; color: #fff"
+            onclick="intentarCerrarModalEditar()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            id="btnGuardarEdicion"
+            style="background: #2452c9; color: #fff"
+            onclick="guardarEdicionRegistro()"
+          >
+            Guardar cambios
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="modalConfirmarDescartarEdicion" class="modal-overlay">
+      <div class="modal-box">
+        <h3>¿Descartar cambios?</h3>
+        <p>
+          Hay cambios sin guardar en este registro. Si sales ahora se perderán.
+        </p>
+        <div class="row2">
+          <button
+            type="button"
+            style="background: #9ca3af; color: #fff"
+            onclick="cancelarDescartarEdicion()"
+          >
+            Seguir editando
+          </button>
+          <button
+            type="button"
+            style="background: #dc2626; color: #fff"
+            onclick="confirmarDescartarEdicion()"
+          >
+            Descartar
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div
       id="vistaCalculadora"
       class="card"
