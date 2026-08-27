@@ -1188,6 +1188,42 @@
       </div>
     </div>
 
+    <div id="modalMotivoAccion" class="modal-overlay">
+      <div class="modal-box">
+        <h3 id="modalMotivoAccionTitulo">Anular registro</h3>
+        <div id="motivoAccionAlerta"></div>
+        <label>Motivo (obligatorio)</label>
+        <textarea
+          id="motivoAccionTexto"
+          rows="2"
+          placeholder="Ej: unidades ingresadas por error"
+        ></textarea>
+        <label>Tu nombre (obligatorio)</label>
+        <input
+          id="motivoAccionNombre"
+          placeholder="Quién hace este cambio"
+          autocomplete="off"
+        />
+        <div class="row2" style="margin-top: 8px">
+          <button
+            type="button"
+            style="background: #9ca3af; color: #fff"
+            onclick="cerrarModalMotivoAccion()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            id="btnConfirmarMotivoAccion"
+            style="background: #dc2626; color: #fff"
+            onclick="confirmarMotivoAccion()"
+          >
+            Anular
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div
       id="vistaCalculadora"
       class="card"
@@ -1694,6 +1730,105 @@
             btn.disabled = false;
             btn.textContent = textoOriginal;
             guardarEdicionEnCurso = false;
+          });
+      }
+
+      let idRegistroAccion = null;
+      let tipoAccionPendiente = null;
+      let accionEnCurso = false;
+
+      function abrirModalAnular(id) {
+        idRegistroAccion = id;
+        tipoAccionPendiente = "anular";
+        document.getElementById("motivoAccionTexto").value = "";
+        document.getElementById("motivoAccionNombre").value = "";
+        document.getElementById("motivoAccionAlerta").innerHTML = "";
+        const titulo = document.getElementById("modalMotivoAccionTitulo");
+        titulo.textContent = "Anular registro";
+        titulo.style.color = "#991b1b";
+        const btn = document.getElementById("btnConfirmarMotivoAccion");
+        btn.textContent = "Anular";
+        btn.style.background = "#dc2626";
+        document.getElementById("modalMotivoAccion").classList.add("visible");
+      }
+
+      function abrirModalReactivar(id) {
+        idRegistroAccion = id;
+        tipoAccionPendiente = "reactivar";
+        document.getElementById("motivoAccionTexto").value = "";
+        document.getElementById("motivoAccionNombre").value = "";
+        document.getElementById("motivoAccionAlerta").innerHTML = "";
+        const titulo = document.getElementById("modalMotivoAccionTitulo");
+        titulo.textContent = "Reactivar registro";
+        titulo.style.color = "#166534";
+        const btn = document.getElementById("btnConfirmarMotivoAccion");
+        btn.textContent = "Reactivar";
+        btn.style.background = "#16a34a";
+        document.getElementById("modalMotivoAccion").classList.add("visible");
+      }
+
+      function cerrarModalMotivoAccion() {
+        document
+          .getElementById("modalMotivoAccion")
+          .classList.remove("visible");
+        idRegistroAccion = null;
+        tipoAccionPendiente = null;
+      }
+
+      function confirmarMotivoAccion() {
+        if (accionEnCurso) return;
+
+        const alertaDiv = document.getElementById("motivoAccionAlerta");
+        alertaDiv.innerHTML = "";
+
+        const motivo = document
+          .getElementById("motivoAccionTexto")
+          .value.trim();
+        if (!motivo) {
+          alertaDiv.innerHTML = '<div class="msg err">Indica el motivo.</div>';
+          return;
+        }
+        const nombre = document
+          .getElementById("motivoAccionNombre")
+          .value.trim();
+        if (!nombre) {
+          alertaDiv.innerHTML = '<div class="msg err">Indica tu nombre.</div>';
+          return;
+        }
+
+        accionEnCurso = true;
+        const btn = document.getElementById("btnConfirmarMotivoAccion");
+        const textoOriginal = btn.textContent;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>';
+
+        const accion =
+          tipoAccionPendiente === "anular"
+            ? "anularRegistro"
+            : "reactivarRegistro";
+        const payload = { id: idRegistroAccion, motivo: motivo };
+        if (tipoAccionPendiente === "anular") {
+          payload.anuladoPor = nombre;
+        } else {
+          payload.reactivadoPor = nombre;
+        }
+
+        llamarAPI(accion, payload)
+          .then(function (res) {
+            if (res.success) {
+              cerrarModalMotivoAccion();
+              buscarRegistrosParaEditar();
+            } else {
+              alertaDiv.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
+            }
+          })
+          .catch(function (err) {
+            alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
+          })
+          .finally(function () {
+            btn.disabled = false;
+            btn.textContent = textoOriginal;
+            accionEnCurso = false;
           });
       }
 
