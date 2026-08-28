@@ -921,9 +921,16 @@ export const accionesEscritura = {
     if (!Number.isInteger(id) || id <= 0)
       throw new Error("Falta el ID del registro a eliminar.");
 
-    // Solo borra filas ya anuladas — nunca una activa. No recalcula el
-    // contador de validacion_eanes: las filas anuladas ya estaban excluidas
-    // de esa suma, así que borrarlas no cambia ningún número.
+    const actual = await env.DB.prepare(
+      "SELECT numero_pedido, ean FROM registros WHERE id = ? AND anulado = 1",
+    )
+      .bind(id)
+      .first();
+    if (!actual)
+      throw new Error(
+        "El registro no existe o no está anulado. Solo se pueden eliminar registros ya anulados.",
+      );
+
     const resultado = await env.DB.prepare(
       "DELETE FROM registros WHERE id = ? AND anulado = 1",
     )
@@ -932,9 +939,15 @@ export const accionesEscritura = {
 
     if (resultado.meta.changes === 0) {
       throw new Error(
-        "El registro no existe o no está anulado. Solo se pueden eliminar registros ya anulados.",
+        "El registro fue modificado por otro proceso justo antes. Actualiza la lista e intenta de nuevo.",
       );
     }
+
+    // Borrar una fila anulada no cambia unidades_procesadas/codigos_sobrantes
+    // (ya estaba excluida de esa suma), pero sí hace falta recalcular para
+    // refrescar "operarios" y el estado — sobre todo en filas anuladas antes
+    // de que este recálculo existiera, que quedaron con datos obsoletos.
+    await _recalcularContadorValidacion(env, actual.numero_pedido, actual.ean);
 
     return { success: true, id };
   },
