@@ -270,16 +270,23 @@ export async function _recalcularContadorValidacion(env, pedido, ean) {
       "), justif AS (" +
       "SELECT COALESCE(SUM(faltante),0) AS justificado " +
       "FROM justificaciones WHERE pedido = ? AND ean = ?" +
+      "), operarios_activos AS (" +
+      "SELECT GROUP_CONCAT(nombre, ' - ') AS nombres FROM (" +
+      "SELECT DISTINCT operario AS nombre FROM registros " +
+      "WHERE numero_pedido = ? AND ean = ? AND anulado = 0)" +
       ") " +
       "UPDATE validacion_eanes SET " +
       "unidades_procesadas = (SELECT procesado FROM agregados), " +
       "codigos_sobrantes = (SELECT sobrantes FROM agregados), " +
-      "estado = CASE WHEN ((SELECT procesado FROM agregados) + (SELECT sobrantes FROM agregados) + (SELECT justificado FROM justif)) >= unidades_totales " +
-      "THEN 'Completado' ELSE 'En proceso' END, " +
+      "operarios = COALESCE((SELECT nombres FROM operarios_activos), ''), " +
+      "estado = CASE " +
+      "WHEN ((SELECT procesado FROM agregados) + (SELECT sobrantes FROM agregados) + (SELECT justificado FROM justif)) >= unidades_totales THEN 'Completado' " +
+      "WHEN ((SELECT procesado FROM agregados) + (SELECT sobrantes FROM agregados) + (SELECT justificado FROM justif)) <= 0 THEN 'Pendiente' " +
+      "ELSE 'En proceso' END, " +
       "actualizado_en = ? " +
       "WHERE numero_pedido = ? AND ean_producto = ?",
   )
-    .bind(pedido, ean, pedido, ean, ahora, pedido, ean)
+    .bind(pedido, ean, pedido, ean, pedido, ean, ahora, pedido, ean)
     .run();
 }
 
