@@ -336,6 +336,33 @@ export function _fechaHoyBogota() {
   }).format(new Date());
 }
 
+// formatToParts en vez de .format() para controlar el orden exacto del string
+// y no depender de cómo el runtime arme el formato "en-CA" con hora incluida.
+export function _fechaHoraBogota() {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Bogota",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+
+  const obtener = (tipo) => partes.find((p) => p.type === tipo).value;
+  return (
+    obtener("year") +
+    "-" +
+    obtener("month") +
+    "-" +
+    obtener("day") +
+    " " +
+    obtener("hour") +
+    ":" +
+    obtener("minute")
+  );
+}
+
 export function _ahoraISO() {
   return new Date().toISOString();
 }
