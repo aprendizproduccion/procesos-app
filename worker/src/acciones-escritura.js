@@ -14,6 +14,7 @@ import {
   _marcarPedidoIniciado,
   _pedidoEstaCompleto,
   _fechaHoyBogota,
+  _fechaHoraBogota,
   _ahoraISO,
   _revertirReserva,
   _revertirCierre,
@@ -24,6 +25,7 @@ import {
 import {
   _pushRegistrosYMarcar,
   _pushJustificacionYMarcar,
+  _pushEstadoAnulacionYMarcar,
 } from "./push-sheets.js";
 
 export const accionesEscritura = {
@@ -819,7 +821,7 @@ export const accionesEscritura = {
 
     const resultado = await env.DB.prepare(
       "UPDATE registros SET anulado = 1, anulado_por = ?, anulado_en = ?, " +
-        "motivo_anulacion = ? WHERE id = ? AND anulado = 0",
+        "motivo_anulacion = ?, anulado_sincronizado_sheets = 0 WHERE id = ? AND anulado = 0",
     )
       .bind(anuladoPor, ahora, motivo, id)
       .run();
@@ -832,6 +834,10 @@ export const accionesEscritura = {
 
     await _recalcularContadorValidacion(env, pedido, ean);
     const pedidoCompleto = await _sincronizarEstadoPedido(env, pedido);
+
+    const textoSheets =
+      "ANULADO — " + anuladoPor + " — " + motivo + " — " + _fechaHoraBogota();
+    ctx.waitUntil(_pushEstadoAnulacionYMarcar(env, id, textoSheets));
 
     return { success: true, id, pedidoCompleto };
   },
@@ -891,7 +897,7 @@ export const accionesEscritura = {
     const ahora = _ahoraISO();
     const resultado = await env.DB.prepare(
       "UPDATE registros SET anulado = 0, editado_por = ?, editado_en = ?, " +
-        "motivo_edicion = ? WHERE id = ? AND anulado = 1",
+        "motivo_edicion = ?, anulado_sincronizado_sheets = 0 WHERE id = ? AND anulado = 1",
     )
       .bind(reactivadoPor, ahora, motivo, id)
       .run();
@@ -904,6 +910,8 @@ export const accionesEscritura = {
 
     await _recalcularContadorValidacion(env, pedido, ean);
     const pedidoCompleto = await _sincronizarEstadoPedido(env, pedido);
+
+    ctx.waitUntil(_pushEstadoAnulacionYMarcar(env, id, ""));
 
     return { success: true, id, pedidoCompleto };
   },
