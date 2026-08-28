@@ -116,6 +116,8 @@ export const accionesEscritura = {
       const ahora = _ahoraISO();
 
       const unidadesPorOperario = Math.round((total / n) * 100) / 100;
+      const codigosSobrantesPorOperario =
+        Math.round((codigosSobrantes / n) * 100) / 100;
       const durHoras = Math.round((duracionRealMin / 60) * 100) / 100;
       const { unidadesHoraReal, eficiencia } = _calcularMetricasProduccion(
         unidadesPorOperario,
@@ -187,8 +189,8 @@ export const accionesEscritura = {
           "INSERT INTO registros (lote_id, fecha, coordinador, cedula_operario, operario, supernumerario, cliente, " +
             "proceso, unidades_hora_estandar, sublinea, evento, numero_pedido, ean, unidades_totales_procesadas, " +
             "hora_inicio, hora_final, suplemento, observacion, clasificacion_proceso, duracion_bruta_min, tiempo_total, " +
-            "unidades_procesadas_operario, unidades_hora_real, eficiencia, creado_en) " +
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "unidades_procesadas_operario, codigos_sobrantes, unidades_hora_real, eficiencia, creado_en) " +
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         ).bind(
           loteId,
           fecha,
@@ -212,6 +214,7 @@ export const accionesEscritura = {
           duracionBrutaMin,
           durHoras,
           unidadesPorOperario,
+          codigosSobrantesPorOperario,
           unidadesHoraReal,
           eficiencia,
           ahora,
@@ -438,8 +441,8 @@ export const accionesEscritura = {
           "INSERT INTO registros (lote_id, fecha, coordinador, cedula_operario, operario, supernumerario, cliente, " +
             "proceso, unidades_hora_estandar, sublinea, evento, numero_pedido, ean, unidades_totales_procesadas, " +
             "hora_inicio, hora_final, suplemento, observacion, clasificacion_proceso, duracion_bruta_min, tiempo_total, " +
-            "unidades_procesadas_operario, unidades_hora_real, eficiencia, creado_en) " +
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "unidades_procesadas_operario, codigos_sobrantes, unidades_hora_real, eficiencia, creado_en) " +
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         ).bind(
           loteId,
           fecha,
@@ -463,6 +466,7 @@ export const accionesEscritura = {
           duracionBrutaMin,
           durHoras,
           total,
+          codigosSobrantes,
           unidadesHoraReal,
           eficiencia,
           ahora,
