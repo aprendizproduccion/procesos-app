@@ -345,7 +345,9 @@ export function _fechaHoyBogota() {
 
 // formatToParts en vez de .format() para controlar el orden exacto del string
 // y no depender de cómo el runtime arme el formato "en-CA" con hora incluida.
-export function _fechaHoraBogota() {
+// Acepta una fecha/ISO opcional para reformatear un valor ya guardado en D1
+// (anulado_en/editado_en); sin argumento, formatea "ahora" igual que antes.
+export function _fechaHoraBogota(fecha) {
   const partes = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Bogota",
     year: "numeric",
@@ -354,7 +356,7 @@ export function _fechaHoraBogota() {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-  }).formatToParts(new Date());
+  }).formatToParts(fecha ? new Date(fecha) : new Date());
 
   const obtener = (tipo) => partes.find((p) => p.type === tipo).value;
   return (
