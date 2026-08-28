@@ -262,8 +262,12 @@ export const accionesEscritura = {
         const idsRegistros = resultadosBatch
           .slice(0, operarios.length)
           .map((r) => r.meta.last_row_id);
+        const filasParaSheetsConId = filasParaSheets.map((fila, i) => [
+          ...fila,
+          idsRegistros[i],
+        ]);
         ctx.waitUntil(
-          _pushRegistrosYMarcar(env, idsRegistros, filasParaSheets),
+          _pushRegistrosYMarcar(env, idsRegistros, filasParaSheetsConId),
         );
       } catch (errPostCommit) {
         // No relanzamos: el registro ya es válido en D1. Queda sin push
@@ -504,11 +508,12 @@ export const accionesEscritura = {
 
       try {
         await _confirmarIdempotencia(env, huella, respuestaFinal);
+        const idRegistro = resultadosBatch[0].meta.last_row_id;
         ctx.waitUntil(
           _pushRegistrosYMarcar(
             env,
-            [resultadosBatch[0].meta.last_row_id],
-            [filaParaSheets],
+            [idRegistro],
+            [[...filaParaSheets, idRegistro]],
           ),
         );
       } catch (errPostCommit) {
