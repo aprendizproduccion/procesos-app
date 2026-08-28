@@ -14,7 +14,6 @@ import {
   _marcarPedidoIniciado,
   _pedidoEstaCompleto,
   _fechaHoyBogota,
-  _fechaHoraBogota,
   _ahoraISO,
   _revertirReserva,
   _revertirCierre,
@@ -25,7 +24,8 @@ import {
 import {
   _pushRegistrosYMarcar,
   _pushJustificacionYMarcar,
-  _pushEstadoAnulacionYMarcar,
+  _pushFilaRegistroYMarcar,
+  _eliminarFilaRegistroSheets,
 } from "./push-sheets.js";
 
 export const accionesEscritura = {
@@ -761,7 +761,8 @@ export const accionesEscritura = {
         "unidades_hora_estandar = ?, hora_inicio = ?, hora_final = ?, suplemento = ?, " +
         "observacion = ?, duracion_bruta_min = ?, tiempo_total = ?, " +
         "unidades_procesadas_operario = ?, codigos_sobrantes = ?, unidades_hora_real = ?, " +
-        "eficiencia = ?, editado_por = ?, editado_en = ?, motivo_edicion = ? " +
+        "eficiencia = ?, editado_por = ?, editado_en = ?, motivo_edicion = ?, " +
+        "anulado_sincronizado_sheets = 0 " +
         "WHERE id = ? AND anulado = 0",
     )
       .bind(
@@ -794,6 +795,8 @@ export const accionesEscritura = {
 
     await _recalcularContadorValidacion(env, pedido, ean);
     const pedidoCompleto = await _sincronizarEstadoPedido(env, pedido);
+
+    ctx.waitUntil(_pushFilaRegistroYMarcar(env, id));
 
     return { success: true, id, pedidoCompleto };
   },
@@ -839,9 +842,7 @@ export const accionesEscritura = {
     await _recalcularContadorValidacion(env, pedido, ean);
     const pedidoCompleto = await _sincronizarEstadoPedido(env, pedido);
 
-    const textoSheets =
-      "ANULADO — " + anuladoPor + " — " + motivo + " — " + _fechaHoraBogota();
-    ctx.waitUntil(_pushEstadoAnulacionYMarcar(env, id, textoSheets));
+    ctx.waitUntil(_pushFilaRegistroYMarcar(env, id));
 
     return { success: true, id, pedidoCompleto };
   },
@@ -915,7 +916,7 @@ export const accionesEscritura = {
     await _recalcularContadorValidacion(env, pedido, ean);
     const pedidoCompleto = await _sincronizarEstadoPedido(env, pedido);
 
-    ctx.waitUntil(_pushEstadoAnulacionYMarcar(env, id, ""));
+    ctx.waitUntil(_pushFilaRegistroYMarcar(env, id));
 
     return { success: true, id, pedidoCompleto };
   },
@@ -952,6 +953,10 @@ export const accionesEscritura = {
     // refrescar "operarios" y el estado — sobre todo en filas anuladas antes
     // de que este recálculo existiera, que quedaron con datos obsoletos.
     await _recalcularContadorValidacion(env, actual.numero_pedido, actual.ean);
+
+    // Best-effort, sin tabla de pendientes: si falla, la fila huérfana se
+    // resuelve sola con la próxima purga periódica de la hoja.
+    ctx.waitUntil(_eliminarFilaRegistroSheets(env, id));
 
     return { success: true, id };
   },
