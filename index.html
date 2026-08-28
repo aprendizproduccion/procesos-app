@@ -1224,6 +1224,33 @@
       </div>
     </div>
 
+    <div id="modalConfirmarEliminar" class="modal-overlay">
+      <div class="modal-box">
+        <h3 style="color: #991b1b">Eliminar registro</h3>
+        <div id="eliminarAlerta"></div>
+        <p style="color: #374151; font-size: 14px">
+          Esta acción no se puede deshacer.
+        </p>
+        <div class="row2" style="margin-top: 8px">
+          <button
+            type="button"
+            style="background: #9ca3af; color: #fff"
+            onclick="cerrarModalConfirmarEliminar()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            id="btnConfirmarEliminar"
+            style="background: #dc2626; color: #fff"
+            onclick="confirmarEliminarRegistro()"
+          >
+            Eliminar
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div
       id="vistaCalculadora"
       class="card"
@@ -1526,7 +1553,7 @@
               : ` onclick="abrirModalEditar(${r.id})"`;
             const botonAccion = anulado
               ? `<div style="margin-top:8px; text-align:right; display:flex; gap:8px; justify-content:flex-end;">` +
-                `<button type="button" onclick="confirmarEliminarRegistro(${r.id})" style="background:#fff; color:#b91c1c; border:1px solid #b91c1c; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer;">Eliminar</button>` +
+                `<button type="button" onclick="abrirModalConfirmarEliminar(${r.id})" style="background:#fff; color:#b91c1c; border:1px solid #b91c1c; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer;">Eliminar</button>` +
                 `<button type="button" onclick="abrirModalReactivar(${r.id})" style="background:#16a34a; color:#fff; border:none; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer;">Reactivar</button>` +
                 `</div>`
               : `<div style="margin-top:8px; text-align:right;"><button type="button" onclick="event.stopPropagation(); abrirModalAnular(${r.id})" style="background:#dc2626; color:#fff; border:none; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer;">Anular</button></div>`;
@@ -1839,28 +1866,49 @@
           });
       }
 
-      function confirmarEliminarRegistro(id) {
+      let idRegistroEliminar = null;
+
+      function abrirModalConfirmarEliminar(id) {
+        idRegistroEliminar = id;
+        document.getElementById("eliminarAlerta").innerHTML = "";
+        document
+          .getElementById("modalConfirmarEliminar")
+          .classList.add("visible");
+      }
+
+      function cerrarModalConfirmarEliminar() {
+        document
+          .getElementById("modalConfirmarEliminar")
+          .classList.remove("visible");
+        idRegistroEliminar = null;
+      }
+
+      function confirmarEliminarRegistro() {
         if (accionEnCurso) return;
-        if (
-          !confirm(
-            "¿Eliminar este registro anulado? Esta acción no se puede deshacer.",
-          )
-        )
-          return;
+        const alertaDiv = document.getElementById("eliminarAlerta");
+        alertaDiv.innerHTML = "";
 
         accionEnCurso = true;
-        llamarAPI("eliminarRegistro", { id: id })
+        const btn = document.getElementById("btnConfirmarEliminar");
+        const textoOriginal = btn.textContent;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>';
+
+        llamarAPI("eliminarRegistro", { id: idRegistroEliminar })
           .then(function (res) {
             if (res.success) {
+              cerrarModalConfirmarEliminar();
               buscarRegistrosParaEditar();
             } else {
-              alert(res.message);
+              alertaDiv.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
             }
           })
           .catch(function (err) {
-            alert("Error de conexión: " + err.message);
+            alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
           })
           .finally(function () {
+            btn.disabled = false;
+            btn.textContent = textoOriginal;
             accionEnCurso = false;
           });
       }
