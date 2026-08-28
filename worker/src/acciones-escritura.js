@@ -915,4 +915,27 @@ export const accionesEscritura = {
 
     return { success: true, id, pedidoCompleto };
   },
+
+  async eliminarRegistro(payload, env, ctx) {
+    const id = Number(payload.id);
+    if (!Number.isInteger(id) || id <= 0)
+      throw new Error("Falta el ID del registro a eliminar.");
+
+    // Solo borra filas ya anuladas — nunca una activa. No recalcula el
+    // contador de validacion_eanes: las filas anuladas ya estaban excluidas
+    // de esa suma, así que borrarlas no cambia ningún número.
+    const resultado = await env.DB.prepare(
+      "DELETE FROM registros WHERE id = ? AND anulado = 1",
+    )
+      .bind(id)
+      .run();
+
+    if (resultado.meta.changes === 0) {
+      throw new Error(
+        "El registro no existe o no está anulado. Solo se pueden eliminar registros ya anulados.",
+      );
+    }
+
+    return { success: true, id };
+  },
 };
