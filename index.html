@@ -220,6 +220,56 @@
         border-bottom: 2px solid #c7d2fe;
       }
 
+      .seguimiento-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+        gap: 10px;
+        margin-bottom: 16px;
+      }
+      .seguimiento-kpi {
+        background: #f3f4f6;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 10px 6px;
+        text-align: center;
+      }
+      .seguimiento-kpi-valor {
+        display: block;
+        font-size: 20px;
+        font-weight: 700;
+        color: #111827;
+      }
+      .seguimiento-kpi-label {
+        display: block;
+        font-size: 11px;
+        color: #6b7280;
+        margin-top: 2px;
+      }
+      .seguimiento-kpi-completado {
+        background: #ecfdf5;
+        border-color: #6ee7b7;
+      }
+      .seguimiento-kpi-completado .seguimiento-kpi-valor {
+        color: #065f46;
+      }
+      .seguimiento-kpi-proceso {
+        background: #eef2ff;
+        border-color: #c7d2fe;
+      }
+      .seguimiento-kpi-proceso .seguimiento-kpi-valor {
+        color: #3730a3;
+      }
+      .seguimiento-kpi-pendiente {
+        background: #fffbeb;
+        border-color: #fde68a;
+      }
+      .seguimiento-kpi-pendiente .seguimiento-kpi-valor {
+        color: #92400e;
+      }
+      .seguimiento-grafica-wrap {
+        margin-bottom: 18px;
+      }
+
       .btn-submit {
         width: 100%;
         background: #16a34a;
@@ -689,6 +739,39 @@
       <h1>Seguimiento de paquetes</h1>
       <div class="card">
         <div id="seguimientoAlerta"></div>
+
+        <div class="seguimiento-kpi-grid">
+          <div class="seguimiento-kpi">
+            <span class="seguimiento-kpi-valor" id="kpiTotalPedidos">—</span>
+            <span class="seguimiento-kpi-label">Pedidos</span>
+          </div>
+          <div class="seguimiento-kpi seguimiento-kpi-completado">
+            <span class="seguimiento-kpi-valor" id="kpiCompletados">—</span>
+            <span class="seguimiento-kpi-label">Completados</span>
+          </div>
+          <div class="seguimiento-kpi seguimiento-kpi-proceso">
+            <span class="seguimiento-kpi-valor" id="kpiEnProceso">—</span>
+            <span class="seguimiento-kpi-label">En proceso</span>
+          </div>
+          <div class="seguimiento-kpi seguimiento-kpi-pendiente">
+            <span class="seguimiento-kpi-valor" id="kpiPendientes">—</span>
+            <span class="seguimiento-kpi-label">Pendientes</span>
+          </div>
+          <div class="seguimiento-kpi">
+            <span class="seguimiento-kpi-valor" id="kpiEficienciaPromedio"
+              >—</span
+            >
+            <span class="seguimiento-kpi-label">Eficiencia prom.</span>
+          </div>
+        </div>
+
+        <div class="seguimiento-grafica-wrap">
+          <canvas id="graficaEstadoPaquetes" height="200"></canvas>
+        </div>
+        <div class="seguimiento-grafica-wrap">
+          <canvas id="graficaEficienciaPaquetes" height="220"></canvas>
+        </div>
+
         <div style="overflow-x: auto">
           <table>
             <thead>
@@ -1451,6 +1534,7 @@
       </button>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
     <script src="api.js?v=20260819"></script>
     <script>
       let rolActual = null;
@@ -1560,9 +1644,13 @@
             if (!res.paquetes || res.paquetes.length === 0) {
               alertaDiv.innerHTML =
                 '<p class="hint">No hay paquetes registrados.</p>';
+              actualizarKpisPaquetes([]);
+              renderGraficasPaquetes([]);
               return;
             }
             alertaDiv.innerHTML = "";
+            actualizarKpisPaquetes(res.paquetes);
+            renderGraficasPaquetes(res.paquetes);
             bodyEl.innerHTML = res.paquetes
               .map(function (p) {
                 return (
@@ -1583,6 +1671,93 @@
           .catch(function (err) {
             alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
           });
+      }
+
+      let chartEstadoPaquetes = null;
+      let chartEficienciaPaquetes = null;
+
+      function actualizarKpisPaquetes(paquetes) {
+        const total = paquetes.length;
+        const completados = paquetes.filter(
+          (p) => p.estado === "Completado",
+        ).length;
+        const enProceso = paquetes.filter(
+          (p) => p.estado === "En proceso",
+        ).length;
+        const pendientes = paquetes.filter(
+          (p) => p.estado === "Pendiente",
+        ).length;
+        const conEficiencia = paquetes.filter((p) => p.eficiencia !== null);
+        const eficienciaProm = conEficiencia.length
+          ? Math.round(
+              conEficiencia.reduce((suma, p) => suma + p.eficiencia, 0) /
+                conEficiencia.length,
+            )
+          : null;
+
+        document.getElementById("kpiTotalPedidos").textContent = total;
+        document.getElementById("kpiCompletados").textContent = completados;
+        document.getElementById("kpiEnProceso").textContent = enProceso;
+        document.getElementById("kpiPendientes").textContent = pendientes;
+        document.getElementById("kpiEficienciaPromedio").textContent =
+          eficienciaProm !== null ? eficienciaProm + "%" : "—";
+      }
+
+      function renderGraficasPaquetes(paquetes) {
+        const completados = paquetes.filter(
+          (p) => p.estado === "Completado",
+        ).length;
+        const enProceso = paquetes.filter(
+          (p) => p.estado === "En proceso",
+        ).length;
+        const pendientes = paquetes.filter(
+          (p) => p.estado === "Pendiente",
+        ).length;
+
+        if (chartEstadoPaquetes) chartEstadoPaquetes.destroy();
+        chartEstadoPaquetes = new Chart(
+          document.getElementById("graficaEstadoPaquetes").getContext("2d"),
+          {
+            type: "doughnut",
+            data: {
+              labels: ["Completado", "En proceso", "Pendiente"],
+              datasets: [
+                {
+                  data: [completados, enProceso, pendientes],
+                  backgroundColor: ["#6ee7b7", "#c7d2fe", "#fde68a"],
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              plugins: { legend: { position: "bottom" } },
+            },
+          },
+        );
+
+        const conEficiencia = paquetes.filter((p) => p.eficiencia !== null);
+        if (chartEficienciaPaquetes) chartEficienciaPaquetes.destroy();
+        chartEficienciaPaquetes = new Chart(
+          document.getElementById("graficaEficienciaPaquetes").getContext("2d"),
+          {
+            type: "bar",
+            data: {
+              labels: conEficiencia.map((p) => p.pedido),
+              datasets: [
+                {
+                  label: "Eficiencia (%)",
+                  data: conEficiencia.map((p) => p.eficiencia),
+                  backgroundColor: "#3730a3",
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              scales: { y: { beginAtZero: true, max: 100 } },
+              plugins: { legend: { display: false } },
+            },
+          },
+        );
       }
 
       let buscarRegistrosEditarEnCurso = false;
