@@ -169,16 +169,23 @@ export const accionesLectura = {
 
   async obtenerSeguimientoPaquetes(datos, env) {
     const { results } = await env.DB.prepare(
-      "SELECT v.numero_pedido AS pedido, v.ean_producto AS ean, v.sublinea AS subLinea, " +
-        "v.unidades_totales AS unidadesTotales, v.unidades_procesadas AS unidadesProcesadas, " +
-        "v.codigos_sobrantes AS codigosSobrantes, " +
-        "COALESCE(SUM(r.tiempo_total),0) AS horasTotales, " +
-        "COALESCE(SUM(r.tiempo_total * r.unidades_hora_estandar),0) AS sumaUnidadesPorTiempo " +
-        "FROM validacion_eanes v " +
-        "LEFT JOIN registros r ON r.numero_pedido = v.numero_pedido " +
-        "AND r.ean = v.ean_producto AND r.anulado = 0 " +
-        "GROUP BY v.numero_pedido, v.ean_producto " +
-        "ORDER BY v.numero_pedido, v.ean_producto",
+      "SELECT ve.numero_pedido AS pedido, ve.subLinea AS subLinea, " +
+        "ve.unidadesTotales AS unidadesTotales, ve.unidadesProcesadas AS unidadesProcesadas, " +
+        "ve.codigosSobrantes AS codigosSobrantes, " +
+        "COALESCE(rg.horasTotales,0) AS horasTotales, " +
+        "COALESCE(rg.sumaUnidadesPorTiempo,0) AS sumaUnidadesPorTiempo " +
+        "FROM (" +
+        "SELECT numero_pedido, GROUP_CONCAT(DISTINCT sublinea) AS subLinea, " +
+        "SUM(unidades_totales) AS unidadesTotales, SUM(unidades_procesadas) AS unidadesProcesadas, " +
+        "SUM(codigos_sobrantes) AS codigosSobrantes " +
+        "FROM validacion_eanes GROUP BY numero_pedido" +
+        ") ve " +
+        "LEFT JOIN (" +
+        "SELECT numero_pedido, SUM(tiempo_total) AS horasTotales, " +
+        "SUM(tiempo_total * unidades_hora_estandar) AS sumaUnidadesPorTiempo " +
+        "FROM registros WHERE anulado = 0 GROUP BY numero_pedido" +
+        ") rg ON rg.numero_pedido = ve.numero_pedido " +
+        "ORDER BY ve.numero_pedido",
     ).all();
 
     const paquetes = results.map((r) => {
@@ -186,22 +193,21 @@ export const accionesLectura = {
       let estado;
       if (unidadesConSobrantes >= r.unidadesTotales) estado = "Completado";
       else if (unidadesConSobrantes > 0) estado = "En proceso";
-      else estado = "Pendiente";
+      else estado = "";
 
-      const esPendiente = estado === "Pendiente";
+      const noIniciado = estado === "";
       return {
         pedido: r.pedido,
-        ean: r.ean,
         subLinea: r.subLinea,
         unidadesTotales: r.unidadesTotales,
         unidadesProcesadas: r.unidadesProcesadas,
         unidadesPendientes: r.unidadesTotales - r.unidadesProcesadas,
         estado,
-        horasTotales: esPendiente
+        horasTotales: noIniciado
           ? null
           : Math.round(r.horasTotales * 100) / 100,
         eficiencia:
-          esPendiente || r.sumaUnidadesPorTiempo <= 0
+          noIniciado || r.sumaUnidadesPorTiempo <= 0
             ? null
             : Math.round(
                 (r.unidadesProcesadas / r.sumaUnidadesPorTiempo) * 100,
