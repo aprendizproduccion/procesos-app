@@ -193,9 +193,9 @@ export const accionesLectura = {
       let estado;
       if (unidadesConSobrantes >= r.unidadesTotales) estado = "Completado";
       else if (unidadesConSobrantes > 0) estado = "En proceso";
-      else estado = "";
+      else estado = "Pendiente";
 
-      const noIniciado = estado === "";
+      const noIniciado = estado === "Pendiente";
       return {
         pedido: r.pedido,
         subLinea: r.subLinea,
