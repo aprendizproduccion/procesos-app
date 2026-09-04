@@ -608,6 +608,16 @@
           <span class="tarjetaApp-icono">✏️</span>
           <span>Editar registros</span>
         </button>
+        <button
+          type="button"
+          class="tarjetaApp"
+          id="btnSeguimientoDashboard"
+          style="display: none"
+          onclick="abrirSeguimientoDesdeDashboard()"
+        >
+          <span class="tarjetaApp-icono">📦</span>
+          <span>Seguimiento de paquetes</span>
+        </button>
       </div>
       <button
         type="button"
@@ -648,6 +658,39 @@
         </div>
         <div id="edicionAlerta"></div>
         <div id="listaRegistrosEditar"></div>
+      </div>
+    </div>
+
+    <div id="vistaSeguimientoPaquetes" style="display: none">
+      <button
+        type="button"
+        class="btn-submit"
+        style="background: #6b7280; margin-bottom: 14px"
+        onclick="volverAlDashboard()"
+      >
+        ← Volver al dashboard
+      </button>
+      <h1>Seguimiento de paquetes</h1>
+      <div class="card">
+        <div id="seguimientoAlerta"></div>
+        <div style="overflow-x: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Pedido</th>
+                <th>EAN</th>
+                <th>Sub línea</th>
+                <th>Estado</th>
+                <th>Uni. totales</th>
+                <th>Uni. procesadas</th>
+                <th>Uni. pendientes</th>
+                <th>Horas totales</th>
+                <th>Eficiencia</th>
+              </tr>
+            </thead>
+            <tbody id="seguimientoPaquetesBody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -1480,6 +1523,54 @@
         registrosEditarActuales = [];
       }
 
+      function abrirSeguimientoDesdeDashboard() {
+        document.getElementById("vistaDashboard").style.display = "none";
+        document.getElementById("vistaSeguimientoPaquetes").style.display =
+          "block";
+        cargarSeguimientoPaquetes();
+      }
+
+      function cargarSeguimientoPaquetes() {
+        const alertaDiv = document.getElementById("seguimientoAlerta");
+        const bodyEl = document.getElementById("seguimientoPaquetesBody");
+        alertaDiv.innerHTML = '<p class="hint">Cargando...</p>';
+        bodyEl.innerHTML = "";
+
+        llamarAPI("obtenerSeguimientoPaquetes", {})
+          .then(function (res) {
+            if (!res.success) {
+              alertaDiv.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
+              return;
+            }
+            if (!res.paquetes || res.paquetes.length === 0) {
+              alertaDiv.innerHTML =
+                '<p class="hint">No hay paquetes registrados.</p>';
+              return;
+            }
+            alertaDiv.innerHTML = "";
+            bodyEl.innerHTML = res.paquetes
+              .map(function (p) {
+                return (
+                  `<tr>` +
+                  `<td>${escapeHtml(p.pedido)}</td>` +
+                  `<td>${escapeHtml(p.ean)}</td>` +
+                  `<td>${escapeHtml(p.subLinea)}</td>` +
+                  `<td>${escapeHtml(p.estado)}</td>` +
+                  `<td>${p.unidadesTotales}</td>` +
+                  `<td>${p.unidadesProcesadas}</td>` +
+                  `<td>${p.unidadesPendientes}</td>` +
+                  `<td>${p.horasTotales !== null ? p.horasTotales : "—"}</td>` +
+                  `<td>${p.eficiencia !== null ? p.eficiencia + "%" : "—"}</td>` +
+                  `</tr>`
+                );
+              })
+              .join("");
+          })
+          .catch(function (err) {
+            alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
+          });
+      }
+
       let buscarRegistrosEditarEnCurso = false;
       let registrosEditarActuales = [];
       let idRegistroEnEdicion = null;
@@ -1928,6 +2019,7 @@
           "vistaOperario",
           "vistaCalculadora",
           "vistaEdicionRegistros",
+          "vistaSeguimientoPaquetes",
         ].forEach((id) => {
           document.getElementById(id).style.display = "none";
         });
@@ -1977,6 +2069,7 @@
           "vistaDashboard",
           "vistaCalculadora",
           "vistaEdicionRegistros",
+          "vistaSeguimientoPaquetes",
         ].forEach((id) => {
           document.getElementById(id).style.display = "none";
         });
@@ -2117,6 +2210,8 @@
               document.getElementById("vistaLogin").style.display = "none";
               document.getElementById("vistaDashboard").style.display = "block";
               document.getElementById("btnEdicionDashboard").style.display =
+                rolActual === "supervisor" ? "" : "none";
+              document.getElementById("btnSeguimientoDashboard").style.display =
                 rolActual === "supervisor" ? "" : "none";
             } else {
               document.getElementById("loginError").innerHTML =
