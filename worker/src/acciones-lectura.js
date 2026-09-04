@@ -166,6 +166,51 @@ export const accionesLectura = {
 
     return { success: true, registros: results };
   },
+
+  async obtenerSeguimientoPaquetes(datos, env) {
+    const { results } = await env.DB.prepare(
+      "SELECT v.numero_pedido AS pedido, v.ean_producto AS ean, v.sublinea AS subLinea, " +
+        "v.unidades_totales AS unidadesTotales, v.unidades_procesadas AS unidadesProcesadas, " +
+        "v.codigos_sobrantes AS codigosSobrantes, " +
+        "COALESCE(SUM(r.tiempo_total),0) AS horasTotales, " +
+        "COALESCE(SUM(r.tiempo_total * r.unidades_hora_estandar),0) AS sumaUnidadesPorTiempo " +
+        "FROM validacion_eanes v " +
+        "LEFT JOIN registros r ON r.numero_pedido = v.numero_pedido " +
+        "AND r.ean = v.ean_producto AND r.anulado = 0 " +
+        "GROUP BY v.numero_pedido, v.ean_producto " +
+        "ORDER BY v.numero_pedido, v.ean_producto",
+    ).all();
+
+    const paquetes = results.map((r) => {
+      const unidadesConSobrantes = r.unidadesProcesadas + r.codigosSobrantes;
+      let estado;
+      if (unidadesConSobrantes >= r.unidadesTotales) estado = "Completado";
+      else if (unidadesConSobrantes > 0) estado = "En proceso";
+      else estado = "Pendiente";
+
+      const esPendiente = estado === "Pendiente";
+      return {
+        pedido: r.pedido,
+        ean: r.ean,
+        subLinea: r.subLinea,
+        unidadesTotales: r.unidadesTotales,
+        unidadesProcesadas: r.unidadesProcesadas,
+        unidadesPendientes: r.unidadesTotales - r.unidadesProcesadas,
+        estado,
+        horasTotales: esPendiente
+          ? null
+          : Math.round(r.horasTotales * 100) / 100,
+        eficiencia:
+          esPendiente || r.sumaUnidadesPorTiempo <= 0
+            ? null
+            : Math.round(
+                (r.unidadesProcesadas / r.sumaUnidadesPorTiempo) * 100,
+              ),
+      };
+    });
+
+    return { success: true, paquetes };
+  },
 };
 
 // Equivalente a _obtenerDetalleEanesPedido de code.js — una consulta SQL en vez de recorrer la hoja.
