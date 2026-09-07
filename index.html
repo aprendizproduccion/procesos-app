@@ -740,36 +740,59 @@
       <div class="card">
         <div id="seguimientoAlerta"></div>
 
-        <div class="seguimiento-kpi-grid">
-          <div class="seguimiento-kpi">
-            <span class="seguimiento-kpi-valor" id="kpiTotalPedidos">—</span>
-            <span class="seguimiento-kpi-label">Pedidos</span>
+        <div class="add-row" style="margin-bottom: 14px">
+          <input
+            id="seguimientoPedidoInput"
+            list="sugeridosPedidosSeguimiento"
+            placeholder="Buscar pedido..."
+            autocomplete="off"
+            enterkeyhint="search"
+          />
+          <datalist id="sugeridosPedidosSeguimiento"></datalist>
+        </div>
+
+        <div id="seguimientoVistaGeneral">
+          <div class="seguimiento-kpi-grid">
+            <div class="seguimiento-kpi">
+              <span class="seguimiento-kpi-valor" id="kpiTotalPedidos">—</span>
+              <span class="seguimiento-kpi-label">Pedidos</span>
+            </div>
+            <div class="seguimiento-kpi seguimiento-kpi-completado">
+              <span class="seguimiento-kpi-valor" id="kpiCompletados">—</span>
+              <span class="seguimiento-kpi-label">Completados</span>
+            </div>
+            <div class="seguimiento-kpi seguimiento-kpi-proceso">
+              <span class="seguimiento-kpi-valor" id="kpiEnProceso">—</span>
+              <span class="seguimiento-kpi-label">En proceso</span>
+            </div>
+            <div class="seguimiento-kpi seguimiento-kpi-pendiente">
+              <span class="seguimiento-kpi-valor" id="kpiPendientes">—</span>
+              <span class="seguimiento-kpi-label">Pendientes</span>
+            </div>
+            <div class="seguimiento-kpi">
+              <span class="seguimiento-kpi-valor" id="kpiEficienciaPromedio"
+                >—</span
+              >
+              <span class="seguimiento-kpi-label">Eficiencia prom.</span>
+            </div>
           </div>
-          <div class="seguimiento-kpi seguimiento-kpi-completado">
-            <span class="seguimiento-kpi-valor" id="kpiCompletados">—</span>
-            <span class="seguimiento-kpi-label">Completados</span>
+
+          <div class="seguimiento-grafica-wrap">
+            <canvas id="graficaEstadoPaquetes" height="200"></canvas>
           </div>
-          <div class="seguimiento-kpi seguimiento-kpi-proceso">
-            <span class="seguimiento-kpi-valor" id="kpiEnProceso">—</span>
-            <span class="seguimiento-kpi-label">En proceso</span>
-          </div>
-          <div class="seguimiento-kpi seguimiento-kpi-pendiente">
-            <span class="seguimiento-kpi-valor" id="kpiPendientes">—</span>
-            <span class="seguimiento-kpi-label">Pendientes</span>
-          </div>
-          <div class="seguimiento-kpi">
-            <span class="seguimiento-kpi-valor" id="kpiEficienciaPromedio"
-              >—</span
-            >
-            <span class="seguimiento-kpi-label">Eficiencia prom.</span>
+          <div class="seguimiento-grafica-wrap">
+            <canvas id="graficaEficienciaPaquetes" height="220"></canvas>
           </div>
         </div>
 
-        <div class="seguimiento-grafica-wrap">
-          <canvas id="graficaEstadoPaquetes" height="200"></canvas>
-        </div>
-        <div class="seguimiento-grafica-wrap">
-          <canvas id="graficaEficienciaPaquetes" height="220"></canvas>
+        <div id="seguimientoVistaDetalle" style="display: none">
+          <p
+            id="seguimientoDetallePedidoLabel"
+            style="font-weight: 700; margin-bottom: 6px"
+          ></p>
+          <div class="seguimiento-grafica-wrap">
+            <canvas id="graficaDetallePedido" height="220"></canvas>
+          </div>
         </div>
 
         <div style="overflow-x: auto">
@@ -1634,6 +1657,7 @@
         const bodyEl = document.getElementById("seguimientoPaquetesBody");
         alertaDiv.innerHTML = '<p class="hint">Cargando...</p>';
         bodyEl.innerHTML = "";
+        document.getElementById("seguimientoPedidoInput").value = "";
 
         llamarAPI("obtenerSeguimientoPaquetes", {})
           .then(function (res) {
@@ -1641,32 +1665,16 @@
               alertaDiv.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
               return;
             }
-            if (!res.paquetes || res.paquetes.length === 0) {
+            paquetesActuales = res.paquetes || [];
+            poblarDatalistPedidos(paquetesActuales);
+            if (paquetesActuales.length === 0) {
               alertaDiv.innerHTML =
                 '<p class="hint">No hay paquetes registrados.</p>';
-              actualizarKpisPaquetes([]);
-              renderGraficasPaquetes([]);
+              mostrarVistaGeneral();
               return;
             }
             alertaDiv.innerHTML = "";
-            actualizarKpisPaquetes(res.paquetes);
-            renderGraficasPaquetes(res.paquetes);
-            bodyEl.innerHTML = res.paquetes
-              .map(function (p) {
-                return (
-                  `<tr>` +
-                  `<td>${escapeHtml(p.pedido)}</td>` +
-                  `<td>${escapeHtml(p.subLinea)}</td>` +
-                  `<td>${escapeHtml(p.estado)}</td>` +
-                  `<td>${p.unidadesTotales}</td>` +
-                  `<td>${p.unidadesProcesadas}</td>` +
-                  `<td>${p.unidadesPendientes}</td>` +
-                  `<td>${p.horasTotales !== null ? p.horasTotales : "—"}</td>` +
-                  `<td>${p.eficiencia !== null ? p.eficiencia + "%" : "—"}</td>` +
-                  `</tr>`
-                );
-              })
-              .join("");
+            mostrarVistaGeneral();
           })
           .catch(function (err) {
             alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
@@ -1758,6 +1766,143 @@
             },
           },
         );
+      }
+
+      let chartDetallePedido = null;
+      let paquetesActuales = [];
+
+      function poblarDatalistPedidos(paquetes) {
+        document.getElementById("sugeridosPedidosSeguimiento").innerHTML =
+          paquetes
+            .map((p) => `<option value="${escapeHtml(p.pedido)}"></option>`)
+            .join("");
+      }
+
+      function renderFilasPaquetes(lista) {
+        document.getElementById("seguimientoPaquetesBody").innerHTML = lista
+          .map(function (p) {
+            return (
+              `<tr>` +
+              `<td>${escapeHtml(p.pedido)}</td>` +
+              `<td>${escapeHtml(p.subLinea)}</td>` +
+              `<td>${escapeHtml(p.estado)}</td>` +
+              `<td>${p.unidadesTotales}</td>` +
+              `<td>${p.unidadesProcesadas}</td>` +
+              `<td>${p.unidadesPendientes}</td>` +
+              `<td>${p.horasTotales !== null ? p.horasTotales : "—"}</td>` +
+              `<td>${p.eficiencia !== null ? p.eficiencia + "%" : "—"}</td>` +
+              `</tr>`
+            );
+          })
+          .join("");
+      }
+
+      function mostrarVistaGeneral() {
+        document.getElementById("seguimientoVistaGeneral").style.display =
+          "block";
+        document.getElementById("seguimientoVistaDetalle").style.display =
+          "none";
+        renderFilasPaquetes(paquetesActuales);
+        actualizarKpisPaquetes(paquetesActuales);
+        renderGraficasPaquetes(paquetesActuales);
+      }
+
+      function mostrarVistaDetallePedido(p) {
+        document.getElementById("seguimientoVistaGeneral").style.display =
+          "none";
+        document.getElementById("seguimientoVistaDetalle").style.display =
+          "block";
+        document.getElementById("seguimientoDetallePedidoLabel").textContent =
+          `Pedido ${p.pedido}`;
+        renderFilasPaquetes([p]);
+        renderGraficaDetallePedido(p);
+      }
+
+      function filtrarPedidoBuscado() {
+        const valor = document
+          .getElementById("seguimientoPedidoInput")
+          .value.trim();
+        const alertaDiv = document.getElementById("seguimientoAlerta");
+
+        if (!valor) {
+          alertaDiv.innerHTML = "";
+          mostrarVistaGeneral();
+          return;
+        }
+
+        const encontrado = paquetesActuales.find(
+          (p) => String(p.pedido) === valor,
+        );
+
+        if (!encontrado) {
+          alertaDiv.innerHTML =
+            '<p class="hint">No se encontró ese pedido.</p>';
+          document.getElementById("seguimientoVistaGeneral").style.display =
+            "none";
+          document.getElementById("seguimientoVistaDetalle").style.display =
+            "none";
+          document.getElementById("seguimientoPaquetesBody").innerHTML = "";
+          return;
+        }
+
+        alertaDiv.innerHTML = "";
+        mostrarVistaDetallePedido(encontrado);
+      }
+
+      function renderGraficaDetallePedido(p) {
+        const ctx = document
+          .getElementById("graficaDetallePedido")
+          .getContext("2d");
+        if (chartDetallePedido) chartDetallePedido.destroy();
+
+        const datasets = [
+          {
+            type: "bar",
+            label: "Unidades",
+            data: [
+              p.unidadesTotales,
+              p.unidadesProcesadas,
+              p.unidadesPendientes,
+            ],
+            backgroundColor: ["#c7d2fe", "#6ee7b7", "#fde68a"],
+            yAxisID: "y",
+          },
+        ];
+
+        if (p.eficiencia !== null) {
+          datasets.push({
+            type: "line",
+            label: "Eficiencia (%)",
+            data: [p.eficiencia, p.eficiencia, p.eficiencia],
+            borderColor: "#3730a3",
+            borderWidth: 2,
+            pointRadius: 0,
+            yAxisID: "y1",
+          });
+        }
+
+        chartDetallePedido = new Chart(ctx, {
+          data: {
+            labels: ["Totales", "Procesadas", "Pendientes"],
+            datasets,
+          },
+          options: {
+            responsive: true,
+            scales: {
+              y: {
+                beginAtZero: true,
+                title: { display: true, text: "Unidades" },
+              },
+              y1: {
+                beginAtZero: true,
+                max: 100,
+                position: "right",
+                grid: { drawOnChartArea: false },
+                title: { display: true, text: "Eficiencia (%)" },
+              },
+            },
+          },
+        });
       }
 
       let buscarRegistrosEditarEnCurso = false;
@@ -2201,6 +2346,10 @@
         }
       });
       edicionPedidoInput.addEventListener("search", buscarRegistrosParaEditar);
+
+      document
+        .getElementById("seguimientoPedidoInput")
+        .addEventListener("input", filtrarPedidoBuscado);
 
       function volverAlDashboard() {
         [
