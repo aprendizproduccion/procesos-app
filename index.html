@@ -797,8 +797,8 @@
             id="seguimientoDetallePedidoLabel"
             style="font-weight: 700; margin-bottom: 6px"
           ></p>
-          <div class="seguimiento-grafica-wrap">
-            <canvas id="graficaDetallePedido" height="100"></canvas>
+          <div class="seguimiento-grafica-wrap" style="height: 120px">
+            <canvas id="graficaDetallePedido"></canvas>
           </div>
           <div
             class="seguimiento-kpi"
@@ -1916,7 +1916,7 @@
           options: {
             indexAxis: "y",
             responsive: true,
-            aspectRatio: 5,
+            maintainAspectRatio: false,
             scales: {
               x: {
                 stacked: true,
