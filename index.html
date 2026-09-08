@@ -266,6 +266,13 @@
       .seguimiento-kpi-pendiente .seguimiento-kpi-valor {
         color: #92400e;
       }
+      .seguimiento-kpi-bajo {
+        background: #fef2f2;
+        border-color: #fca5a5;
+      }
+      .seguimiento-kpi-bajo .seguimiento-kpi-valor {
+        color: #991b1b;
+      }
       .seguimiento-grafica-wrap {
         margin-bottom: 18px;
       }
@@ -791,7 +798,17 @@
             style="font-weight: 700; margin-bottom: 6px"
           ></p>
           <div class="seguimiento-grafica-wrap">
-            <canvas id="graficaDetallePedido" height="220"></canvas>
+            <canvas id="graficaDetallePedido" height="100"></canvas>
+          </div>
+          <div
+            class="seguimiento-kpi"
+            id="kpiEficienciaDetalle"
+            style="margin-bottom: 18px"
+          >
+            <span class="seguimiento-kpi-valor" id="kpiEficienciaDetalleValor"
+              >—</span
+            >
+            <span class="seguimiento-kpi-label">Eficiencia</span>
           </div>
         </div>
 
@@ -1813,9 +1830,10 @@
         document.getElementById("seguimientoVistaDetalle").style.display =
           "block";
         document.getElementById("seguimientoDetallePedidoLabel").textContent =
-          `Pedido ${p.pedido}`;
+          `Pedido ${p.pedido} — Total: ${p.unidadesTotales} uds`;
         renderFilasPaquetes([p]);
         renderGraficaDetallePedido(p);
+        actualizarKpiEficienciaDetalle(p);
       }
 
       function filtrarPedidoBuscado() {
@@ -1855,54 +1873,90 @@
           .getContext("2d");
         if (chartDetallePedido) chartDetallePedido.destroy();
 
+        const procesadas = Math.min(p.unidadesProcesadas, p.unidadesTotales);
+        const pendientes = Math.max(
+          p.unidadesTotales - p.unidadesProcesadas,
+          0,
+        );
+        const exceso = Math.max(p.unidadesProcesadas - p.unidadesTotales, 0);
+
         const datasets = [
           {
-            type: "bar",
-            label: "Unidades",
-            data: [
-              p.unidadesTotales,
-              p.unidadesProcesadas,
-              p.unidadesPendientes,
-            ],
-            backgroundColor: ["#000000", "#6ee7b7", "#fde68a"],
-            yAxisID: "y",
+            label: "Procesadas",
+            data: [procesadas],
+            backgroundColor: "#6ee7b7",
+            borderColor: "#065f46",
+            borderWidth: 1,
+          },
+          {
+            label: "Pendientes",
+            data: [pendientes],
+            backgroundColor: "#fde68a",
+            borderColor: "#92400e",
+            borderWidth: 1,
           },
         ];
 
-        if (p.eficiencia !== null) {
+        if (exceso > 0) {
           datasets.push({
-            type: "line",
-            label: "Eficiencia (%)",
-            data: [p.eficiencia, p.eficiencia, p.eficiencia],
-            borderColor: "#3730a3",
-            borderWidth: 2,
-            pointRadius: 0,
-            yAxisID: "y1",
+            label: "Exceso",
+            data: [exceso],
+            backgroundColor: "#fca5a5",
+            borderColor: "#991b1b",
+            borderWidth: 1,
           });
         }
 
         chartDetallePedido = new Chart(ctx, {
+          type: "bar",
           data: {
-            labels: ["Totales", "Procesadas", "Pendientes"],
+            labels: [""],
             datasets,
           },
           options: {
+            indexAxis: "y",
             responsive: true,
+            aspectRatio: 5,
             scales: {
-              y: {
+              x: {
+                stacked: true,
                 beginAtZero: true,
                 title: { display: true, text: "Unidades" },
               },
-              y1: {
-                beginAtZero: true,
-                max: 100,
-                position: "right",
-                grid: { drawOnChartArea: false },
-                title: { display: true, text: "Eficiencia (%)" },
+              y: { stacked: true, display: false },
+            },
+            plugins: {
+              legend: { position: "bottom" },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => `${ctx.dataset.label}: ${ctx.raw} uds`,
+                },
               },
             },
           },
         });
+      }
+
+      function actualizarKpiEficienciaDetalle(p) {
+        const card = document.getElementById("kpiEficienciaDetalle");
+        const valorEl = document.getElementById("kpiEficienciaDetalleValor");
+        card.classList.remove(
+          "seguimiento-kpi-completado",
+          "seguimiento-kpi-pendiente",
+          "seguimiento-kpi-bajo",
+        );
+        if (p.eficiencia === null) {
+          valorEl.textContent = "—";
+        } else if (p.eficiencia >= 75) {
+          card.classList.add("seguimiento-kpi-completado");
+          valorEl.textContent = p.eficiencia + "%";
+        } else if (p.eficiencia >= 50) {
+          card.classList.add("seguimiento-kpi-pendiente");
+          valorEl.textContent = p.eficiencia + "%";
+        } else {
+          card.classList.add("seguimiento-kpi-bajo");
+          valorEl.textContent = p.eficiencia + "%";
+        }
       }
 
       let buscarRegistrosEditarEnCurso = false;
