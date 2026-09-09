@@ -1591,6 +1591,42 @@
     <script>
       let rolActual = null;
 
+      // ---------------- SESIÓN PERSISTENTE (localStorage) ----------------
+      const SESION_DURACION_MS = 8 * 60 * 60 * 1000; // 8 horas
+
+      function guardarSesion(rol) {
+        localStorage.setItem(
+          "rp_sesion",
+          JSON.stringify({ rol, expira: Date.now() + SESION_DURACION_MS }),
+        );
+      }
+
+      function _restaurarSesionGuardada() {
+        try {
+          const guardado = JSON.parse(localStorage.getItem("rp_sesion"));
+          if (guardado && guardado.rol && guardado.expira > Date.now()) {
+            return guardado.rol;
+          }
+        } catch (e) {}
+        localStorage.removeItem("rp_sesion");
+        return null;
+      }
+
+      function _mostrarDashboardTrasLogin() {
+        document.getElementById("vistaLogin").style.display = "none";
+        document.getElementById("vistaDashboard").style.display = "block";
+        document.getElementById("btnEdicionDashboard").style.display =
+          rolActual === "supervisor" ? "" : "none";
+        document.getElementById("btnSeguimientoDashboard").style.display =
+          rolActual === "supervisor" ? "" : "none";
+      }
+
+      const _rolRestaurado = _restaurarSesionGuardada();
+      if (_rolRestaurado) {
+        rolActual = _rolRestaurado;
+        _mostrarDashboardTrasLogin();
+      }
+
       // ---------------- ESCAPE DE HTML (seguridad) ----------------
       function escapeHtml(texto) {
         return String(texto)
@@ -2602,6 +2638,7 @@
           opPedidoValidado =
             "";
         unidadesEsperadas = unidadesRestantes = rolActual = null;
+        localStorage.removeItem("rp_sesion");
         operarios = [];
         justEanSeleccionado = "";
         restanteNetoSeleccionado = null;
@@ -2626,12 +2663,8 @@
         llamarAPI("validarLogin", { rol: rolActual, password: clave })
           .then(function (res) {
             if (res.success) {
-              document.getElementById("vistaLogin").style.display = "none";
-              document.getElementById("vistaDashboard").style.display = "block";
-              document.getElementById("btnEdicionDashboard").style.display =
-                rolActual === "supervisor" ? "" : "none";
-              document.getElementById("btnSeguimientoDashboard").style.display =
-                rolActual === "supervisor" ? "" : "none";
+              guardarSesion(rolActual);
+              _mostrarDashboardTrasLogin();
             } else {
               document.getElementById("loginError").innerHTML =
                 `<div class="msg err">${res.message}</div>`;
