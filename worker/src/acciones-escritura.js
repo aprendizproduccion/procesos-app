@@ -47,7 +47,7 @@ export const accionesEscritura = {
       const pedido = String(payload.pedido || "").trim();
       if (!pedido) throw new Error("Falta el número de pedido.");
 
-      const codigoEan = String(payload.codigoEan || "").trim();
+      let codigoEan = String(payload.codigoEan || "").trim();
       if (!codigoEan)
         throw new Error("Falta escanear el código EAN del producto.");
 
@@ -70,6 +70,10 @@ export const accionesEscritura = {
         throw new Error("Total de unidades inválido.");
 
       const validacion = await _localizarValidacionEan(env, pedido, codigoEan);
+      // De aquí en adelante se usa el EAN tal como quedó en D1 (ean_producto),
+      // no el crudo del escáner — evita que el "0" del preamble UPC-A rompa
+      // la reserva/INSERT si el catálogo tiene la otra forma.
+      codigoEan = validacion.ean_producto;
       const unidadesEsperadas = validacion.unidades_totales;
       const sublinea = validacion.sublinea;
       const datosPedido = await _obtenerDatosPedido(env, pedido, sublinea);
@@ -326,7 +330,7 @@ export const accionesEscritura = {
 
       const pedido = String(payload.pedido || "").trim();
       if (!pedido) throw new Error("Falta el número de pedido.");
-      const codigoEan = String(payload.codigoEan || "").trim();
+      let codigoEan = String(payload.codigoEan || "").trim();
       if (!codigoEan)
         throw new Error("Falta escanear el código EAN del producto.");
 
@@ -335,6 +339,7 @@ export const accionesEscritura = {
         throw new Error("Unidades procesadas inválidas.");
 
       const validacion = await _localizarValidacionEan(env, pedido, codigoEan);
+      codigoEan = validacion.ean_producto;
       const unidadesEsperadas = validacion.unidades_totales;
       const sublinea = validacion.sublinea;
       const datosPedido = await _obtenerDatosPedido(env, pedido, sublinea);
@@ -552,7 +557,7 @@ export const accionesEscritura = {
 
     try {
       const pedido = String(payload.pedido || "").trim();
-      const ean = String(payload.ean || "").trim();
+      let ean = String(payload.ean || "").trim();
       const motivo = String(payload.motivo || "").trim();
       const unidadesAJustificar = Number(payload.unidadesAJustificar);
       const supernumerario = String(payload.supernumerario || "").trim();
@@ -569,6 +574,7 @@ export const accionesEscritura = {
       // Chequeo informativo previo, para un mensaje de error claro.
       // La autoridad real es el UPDATE atómico de abajo, que vuelve a leer en frío.
       const validacion = await _localizarValidacionEan(env, pedido, ean);
+      ean = validacion.ean_producto;
       const restanteNeto =
         validacion.unidades_totales -
         validacion.unidades_procesadas -
