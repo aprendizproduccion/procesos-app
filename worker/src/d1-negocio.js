@@ -113,13 +113,27 @@ export async function _validarSupervisorYSupernumerario(
   return { coordinador: coord.nombre, supernumerario: supernum.nombre };
 }
 
+// Devuelve las dos formas posibles de un EAN escaneado: la de 12 dígitos
+// (real) y la de 13 con el "0" que antepone el preamble UPC-A por defecto
+// del escáner Zebra (mismo problema que en code.js). Se usan ambas en el
+// WHERE para que la fila coincida sin importar cuál quedó guardada en D1.
+function _formasEan(ean) {
+  const valor = String(ean || "").trim();
+  const sinPreambulo =
+    valor.length === 13 && valor.charAt(0) === "0" ? valor.substring(1) : valor;
+  const conPreambulo =
+    sinPreambulo.length === 12 ? "0" + sinPreambulo : sinPreambulo;
+  return [sinPreambulo, conPreambulo];
+}
+
 export async function _localizarValidacionEan(env, pedido, ean) {
+  const [eanA, eanB] = _formasEan(ean);
   const row = await env.DB.prepare(
-    "SELECT sublinea, unidades_totales, unidades_procesadas, codigos_sobrantes, " +
-      "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?) AS justificado " +
-      "FROM validacion_eanes WHERE numero_pedido = ? AND ean_producto = ?",
+    "SELECT sublinea, unidades_totales, unidades_procesadas, codigos_sobrantes, ean_producto, " +
+      "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean IN (?, ?)) AS justificado " +
+      "FROM validacion_eanes WHERE numero_pedido = ? AND ean_producto IN (?, ?)",
   )
-    .bind(pedido, ean, pedido, ean)
+    .bind(pedido, eanA, eanB, pedido, eanA, eanB)
     .first();
   if (!row)
     throw new Error(
