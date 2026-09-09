@@ -1458,6 +1458,18 @@
           />
         </div>
         <div>
+          <label>Cantidad de operarios</label>
+          <input
+            type="number"
+            id="calcCantidadOperarios"
+            placeholder="Ej: 1"
+            value="1"
+            min="1"
+            step="1"
+            oninput="actualizarCalculadora()"
+          />
+        </div>
+        <div>
           <label>Tiempo</label>
           <div class="calc-valor-fijo">1 hora (60 min)</div>
         </div>
@@ -1470,7 +1482,7 @@
             oninput="actualizarCalculadora()"
           />
         </div>
-        <div class="calc-resultado">
+        <div class="calc-resultado" style="grid-column: 1 / -1">
           <label>Tiempo total</label>
           <div id="calcResultado" class="calc-valor-fijo">--</div>
         </div>
@@ -2425,6 +2437,14 @@
         const caja = parseFloat(
           document.getElementById("calcUnidadesCaja").value,
         );
+        const operariosTexto = document.getElementById(
+          "calcCantidadOperarios",
+        ).value;
+        const operarios = Number(operariosTexto);
+        const operariosValidos =
+          operariosTexto !== "" &&
+          Number.isInteger(operarios) &&
+          operarios >= 1;
         const suplemento =
           Number(document.getElementById("calcSuplementoMin").value) || 0;
         const resultadoEl = document.getElementById("calcResultado");
@@ -2432,13 +2452,19 @@
           "calcResultadoConSuplemento",
         );
 
-        if (!estandar || estandar <= 0 || !caja || caja <= 0) {
+        if (
+          !estandar ||
+          estandar <= 0 ||
+          !caja ||
+          caja <= 0 ||
+          !operariosValidos
+        ) {
           resultadoEl.textContent = "--";
           resultadoSuplementoEl.textContent = "--";
           return;
         }
 
-        const minutosTotales = Math.round((caja * 60) / estandar);
+        const minutosTotales = Math.round((caja * 60) / (estandar * operarios));
         resultadoEl.textContent = _formatearMinutos(minutosTotales);
 
         const minutosConSuplemento = minutosTotales + suplemento;
@@ -2539,6 +2565,7 @@
         document.getElementById("suplementoMin").value = "0";
         document.getElementById("opSuplementoMin").value = "0";
         document.getElementById("calcSuplementoMin").value = "0";
+        document.getElementById("calcCantidadOperarios").value = "1";
 
         const defaultOption =
           '<option value="">Ingresa un pedido primero...</option>';
