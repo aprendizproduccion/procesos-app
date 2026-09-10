@@ -16,7 +16,6 @@ export async function _pushRegistrosYMarcar(env, ids, filas) {
         datos: { filas },
       }),
     });
-    
     const body = await res.json();
     if (!body.success) return;
 
@@ -145,7 +144,7 @@ export async function _pushFilaRegistroYMarcar(env, idRegistro) {
 // Best-effort a propósito, sin red de seguridad: si falla, la fila queda
 // huérfana en Sheets hasta la próxima purga periódica de la hoja (1-3 meses)
 // — aceptado, no hay tabla de pendientes para esto.
-export async function _eliminarFilaRegistroSheets(env, idRegistro) {
+export async function _eliminarFilaRegistroSheets(env, idRegistro, loteId) {
   try {
     await fetch(env.APPS_SCRIPT_URL, {
       method: "POST",
@@ -153,7 +152,7 @@ export async function _eliminarFilaRegistroSheets(env, idRegistro) {
       body: JSON.stringify({
         action: "_eliminarFilaRegistro",
         token: env.APPS_SCRIPT_TOKEN,
-        datos: { idRegistro },
+        datos: { idRegistro, loteId },
       }),
     });
   } catch (err) {
