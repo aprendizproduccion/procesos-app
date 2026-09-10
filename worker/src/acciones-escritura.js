@@ -933,7 +933,7 @@ export const accionesEscritura = {
       throw new Error("Falta el ID del registro a eliminar.");
 
     const actual = await env.DB.prepare(
-      "SELECT numero_pedido, ean FROM registros WHERE id = ? AND anulado = 1",
+      "SELECT numero_pedido, ean, lote_id FROM registros WHERE id = ? AND anulado = 1",
     )
       .bind(id)
       .first();
@@ -962,7 +962,7 @@ export const accionesEscritura = {
 
     // Best-effort, sin tabla de pendientes: si falla, la fila huérfana se
     // resuelve sola con la próxima purga periódica de la hoja.
-    ctx.waitUntil(_eliminarFilaRegistroSheets(env, id));
+    ctx.waitUntil(_eliminarFilaRegistroSheets(env, id, actual.lote_id));
 
     return { success: true, id };
   },
