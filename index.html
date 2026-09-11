@@ -4006,8 +4006,7 @@
                   "\nUnidades: " +
                   payload.unidadesProcesadas +
                   "\nEficiencia: " +
-                  res.eficiencia +
-                  "%" +
+                  (res.eficiencia === null ? "N/A" : res.eficiencia + "%") +
                   "\nOperario: " +
                   opNombreOperario +
                   "\nID de lote: " +
