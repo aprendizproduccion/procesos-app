@@ -333,7 +333,7 @@ export function _calcularMetricasProduccion(
   const unidadesHoraReal =
     durHoras > 0 ? Math.round((unidadesOperario / durHoras) * 100) / 100 : 0;
   const eficiencia =
-    esperado > 0 ? Math.round((unidadesOperario / esperado) * 100) : 0;
+    esperado > 0 ? Math.round((unidadesOperario / esperado) * 100) : null;
   return { unidadesHoraReal, eficiencia };
 }
 
