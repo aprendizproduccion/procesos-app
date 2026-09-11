@@ -515,7 +515,13 @@ export const accionesEscritura = {
       ];
 
       const resultadosBatch = await env.DB.batch(statements);
-      const respuestaFinal = { success: true, loteId, horaInicio, horaFin };
+      const respuestaFinal = {
+        success: true,
+        loteId,
+        horaInicio,
+        horaFin,
+        eficiencia,
+      };
 
       try {
         await _confirmarIdempotencia(env, huella, respuestaFinal);
