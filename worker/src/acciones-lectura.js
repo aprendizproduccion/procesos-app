@@ -140,25 +140,38 @@ export const accionesLectura = {
 
   async obtenerRegistrosParaEditar(datos, env) {
     const pedido = String(datos.pedido || "").trim();
-    if (!pedido)
-      return { success: false, message: "Falta el número de pedido." };
+    const operarioTexto = String(datos.operario || "").trim();
+    if (!pedido && !operarioTexto)
+      return {
+        success: false,
+        message: "Escribe un número de pedido o un nombre de operario.",
+      };
 
     const ean = String(datos.ean || "").trim();
 
     let sql =
-      "SELECT id, fecha, coordinador, cedula_operario AS cedulaOperario, operario, " +
+      "SELECT id, numero_pedido AS pedido, fecha, coordinador, cedula_operario AS cedulaOperario, operario, " +
       "supernumerario, proceso, ean, hora_inicio AS horaInicio, hora_final AS horaFinal, " +
       "suplemento, observacion, unidades_procesadas_operario AS unidadesProcesadas, " +
       "codigos_sobrantes AS codigosSobrantes, anulado, anulado_por AS anuladoPor, " +
       "anulado_en AS anuladoEn, motivo_anulacion AS motivoAnulacion, " +
       "editado_por AS editadoPor, editado_en AS editadoEn, motivo_edicion AS motivoEdicion " +
-      "FROM registros WHERE numero_pedido = ?";
-    const binds = [pedido];
+      "FROM registros WHERE 1 = 1";
+    const binds = [];
+    if (pedido) {
+      sql += " AND numero_pedido = ?";
+      binds.push(pedido);
+    }
     if (ean) {
       sql += " AND ean = ?";
       binds.push(ean);
     }
+    if (operarioTexto) {
+      sql += " AND " + _sqlSinTildes("operario") + " LIKE ?";
+      binds.push("%" + _normalizarTexto(operarioTexto) + "%");
+    }
     sql += " ORDER BY fecha DESC, hora_inicio DESC, id DESC";
+    if (!pedido) sql += " LIMIT 100";
 
     const { results } = await env.DB.prepare(sql)
       .bind(...binds)
@@ -240,4 +253,38 @@ async function _detalleEanesPedido(env, pedido) {
     restanteNeto: r.esperadas - r.procesadas - r.justificado - r.sobrantes,
     estado: r.estado || "Pendiente",
   }));
+}
+
+// Normaliza texto para comparar nombres sin distinguir mayúsculas ni tildes.
+function _normalizarTexto(str) {
+  return String(str || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+// Genera una expresión SQL que quita tildes (mayús/minús) antes de aplicar LOWER,
+// para que LOWER() no dependa de que SQLite maneje bien Unicode.
+function _sqlSinTildes(columna) {
+  const mapa = [
+    ["Á", "a"],
+    ["É", "e"],
+    ["Í", "i"],
+    ["Ó", "o"],
+    ["Ú", "u"],
+    ["Ñ", "n"],
+    ["Ü", "u"],
+    ["á", "a"],
+    ["é", "e"],
+    ["í", "i"],
+    ["ó", "o"],
+    ["ú", "u"],
+    ["ñ", "n"],
+    ["ü", "u"],
+  ];
+  let expr = columna;
+  for (const [conTilde, sinTilde] of mapa) {
+    expr = `REPLACE(${expr}, '${conTilde}', '${sinTilde}')`;
+  }
+  return `LOWER(${expr})`;
 }
