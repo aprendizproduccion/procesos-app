@@ -2198,6 +2198,9 @@
               r.codigosSobrantes > 0
                 ? ` · ${r.codigosSobrantes} sobrantes`
                 : "";
+            const observacionesTexto = r.observacion
+              ? `<div style="font-size:13px; color:#6b7280; margin-bottom:6px; font-style:italic;">Obs: ${escapeHtml(r.observacion)}</div>`
+              : "";
             const clickAttr = anulado
               ? ""
               : ` onclick="abrirModalEditar(${r.id})"`;
@@ -2212,6 +2215,7 @@
               `<div style="font-size:13px; color:#6b7280; margin-bottom:4px;">${etiquetaAnulado}Pedido ${escapeHtml(r.pedido)} · ${escapeHtml(r.fecha)} · ${escapeHtml(r.horaInicio)}–${escapeHtml(r.horaFinal)}</div>` +
               `<div style="font-weight:600; margin-bottom:2px; display:flex; align-items:center; gap:8px;">${escapeHtml(r.operario)} <span style="background:#e0e7ff; color:#3730a3; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; white-space:nowrap;">EAN ${escapeHtml(r.ean)}</span></div>` +
               `<div style="font-size:13px; color:#374151; margin-bottom:6px;">${escapeHtml(r.proceso)}</div>` +
+              observacionesTexto +
               `<div style="font-size:13px;"><strong>${r.unidadesProcesadas}</strong> unidades${sobrantesTexto}</div>` +
               `<div style="font-size:12px; color:#6b7280; margin-top:4px;">Coord: ${escapeHtml(r.coordinador)} · Supernum: ${escapeHtml(r.supernumerario)}</div>` +
               botonAccion +
