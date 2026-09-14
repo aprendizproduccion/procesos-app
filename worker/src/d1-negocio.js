@@ -357,6 +357,29 @@ export function _fechaHoyBogota() {
   }).format(new Date());
 }
 
+export function _validarFechaRegistro(fechaPayload) {
+  const hoy = _fechaHoyBogota();
+  const valor = String(fechaPayload || "").trim();
+  if (!valor) return hoy;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) {
+    throw new Error("La fecha del registro no tiene un formato válido.");
+  }
+  if (valor > hoy) {
+    throw new Error("La fecha del registro no puede ser posterior a hoy.");
+  }
+  const limite = new Date(hoy + "T00:00:00Z");
+  limite.setUTCDate(limite.getUTCDate() - 7);
+  const limiteStr = limite.toISOString().slice(0, 10);
+  if (valor < limiteStr) {
+    throw new Error(
+      "La fecha del registro no puede ser anterior a " +
+        limiteStr +
+        " (máximo 7 días atrás).",
+    );
+  }
+  return valor;
+}
+
 // formatToParts en vez de .format() para controlar el orden exacto del string
 // y no depender de cómo el runtime arme el formato "en-CA" con hora incluida.
 // Acepta una fecha/ISO opcional para reformatear un valor ya guardado en D1
