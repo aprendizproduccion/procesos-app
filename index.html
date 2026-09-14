@@ -691,6 +691,14 @@
           <span class="tarjetaApp-icono">📦</span>
           <span>Seguimiento de paquetes</span>
         </button>
+        <button
+          type="button"
+          class="tarjetaApp"
+          onclick="abrirControlTiemposDesdeDashboard()"
+        >
+          <span class="tarjetaApp-icono">⏰</span>
+          <span>Control tiempos</span>
+        </button>
       </div>
       <button
         type="button"
@@ -839,6 +847,59 @@
               </tr>
             </thead>
             <tbody id="seguimientoPaquetesBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="vistaControlTiempos" style="display: none">
+      <button
+        type="button"
+        class="btn-submit"
+        style="background: #6b7280; margin-bottom: 14px"
+        onclick="volverAlDashboard()"
+      >
+        ← Volver al dashboard
+      </button>
+      <h1>Control tiempos</h1>
+      <div class="card">
+        <label>Cédula</label>
+        <div class="add-row" style="margin-bottom: 14px">
+          <input
+            id="ctCedulaInput"
+            placeholder="Escanea o escribe tu cédula"
+            autocomplete="off"
+            enterkeyhint="search"
+          />
+          <button type="button" onclick="buscarControlTiempos()">Buscar</button>
+        </div>
+        <label>Mostrar</label>
+        <select
+          id="ctFiltro"
+          onchange="buscarControlTiempos()"
+          style="margin-bottom: 14px"
+        >
+          <option value="hoy">Hoy</option>
+          <option value="historico">Histórico (últimos 100)</option>
+        </select>
+        <div id="ctAlerta"></div>
+        <div style="overflow-x: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Coordinador</th>
+                <th>Operario</th>
+                <th>Supernumerario</th>
+                <th>Pedido</th>
+                <th>Proceso</th>
+                <th>Uni. procesadas</th>
+                <th>Eficiencia</th>
+                <th>Hora inicio</th>
+                <th>Hora fin</th>
+              </tr>
+            </thead>
+            <tbody id="ctBody"></tbody>
           </table>
         </div>
       </div>
@@ -1834,6 +1895,84 @@
         cargarSeguimientoPaquetes();
       }
 
+      function abrirControlTiemposDesdeDashboard() {
+        document.getElementById("vistaDashboard").style.display = "none";
+        document.getElementById("vistaControlTiempos").style.display = "block";
+        document.getElementById("ctCedulaInput").value = "";
+        document.getElementById("ctFiltro").value = "hoy";
+        document.getElementById("ctAlerta").innerHTML = "";
+        document.getElementById("ctBody").innerHTML = "";
+      }
+
+      function buscarControlTiempos() {
+        const cedula = document.getElementById("ctCedulaInput").value.trim();
+        const alertaDiv = document.getElementById("ctAlerta");
+        const bodyEl = document.getElementById("ctBody");
+        if (!cedula) {
+          alertaDiv.innerHTML =
+            '<div class="msg err">Escribe o escanea una cédula.</div>';
+          bodyEl.innerHTML = "";
+          return;
+        }
+        const filtro = document.getElementById("ctFiltro").value;
+        alertaDiv.innerHTML = '<p class="hint">Buscando...</p>';
+        bodyEl.innerHTML = "";
+
+        llamarAPI("obtenerControlTiempos", { cedula, filtro })
+          .then(function (res) {
+            if (!res.success) {
+              alertaDiv.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
+              return;
+            }
+            renderControlTiempos(res.registros || []);
+            alertaDiv.innerHTML = res.registros.length
+              ? ""
+              : '<p class="hint">No hay registros para esa cédula.</p>';
+          })
+          .catch(function (err) {
+            alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
+          });
+      }
+
+      function renderControlTiempos(registros) {
+        const bodyEl = document.getElementById("ctBody");
+        bodyEl.innerHTML = registros
+          .map(function (r) {
+            const eficienciaTxt =
+              r.eficiencia === null ? "N/A" : r.eficiencia + "%";
+            const filaEstilo = r.anulado
+              ? ' style="opacity:0.55;text-decoration:line-through"'
+              : "";
+            const etiquetaAnulado = r.anulado
+              ? ' <span style="color:#991b1b;font-weight:600">(Anulado)</span>'
+              : "";
+            return (
+              `<tr${filaEstilo}>` +
+              `<td>${escapeHtml(r.fecha)}</td>` +
+              `<td>${escapeHtml(r.coordinador)}</td>` +
+              `<td>${escapeHtml(r.operario)}${etiquetaAnulado}</td>` +
+              `<td>${escapeHtml(r.supernumerario)}</td>` +
+              `<td>${escapeHtml(r.pedido)}</td>` +
+              `<td>${escapeHtml(r.proceso)}</td>` +
+              `<td>${r.unidadesProcesadas}</td>` +
+              `<td>${eficienciaTxt}</td>` +
+              `<td>${escapeHtml(r.horaInicio)}</td>` +
+              `<td>${escapeHtml(r.horaFinal)}</td>` +
+              `</tr>`
+            );
+          })
+          .join("");
+      }
+
+      document
+        .getElementById("ctCedulaInput")
+        .addEventListener("keydown", function (e) {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            buscarControlTiempos();
+          }
+        });
+
       function cargarSeguimientoPaquetes() {
         const alertaDiv = document.getElementById("seguimientoAlerta");
         const bodyEl = document.getElementById("seguimientoPaquetesBody");
@@ -2603,6 +2742,7 @@
           "vistaCalculadora",
           "vistaEdicionRegistros",
           "vistaSeguimientoPaquetes",
+          "vistaControlTiempos",
         ].forEach((id) => {
           document.getElementById(id).style.display = "none";
         });
@@ -2667,6 +2807,7 @@
           "vistaCalculadora",
           "vistaEdicionRegistros",
           "vistaSeguimientoPaquetes",
+          "vistaControlTiempos",
         ].forEach((id) => {
           document.getElementById(id).style.display = "none";
         });
