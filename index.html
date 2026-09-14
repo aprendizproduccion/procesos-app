@@ -939,7 +939,7 @@
           </div>
           <div>
             <label>Fecha</label>
-            <input id="fecha" type="date" disabled />
+            <input id="fecha" type="date" />
           </div>
         </div>
 
@@ -2881,7 +2881,7 @@
         ].forEach((id) => (document.getElementById(id).style.display = "none"));
 
         // 5. Valores por defecto específicos
-        document.getElementById("fecha").valueAsDate = new Date();
+        _resetFechaAdmin();
         document.getElementById("suplementoMin").value = "0";
         document.getElementById("opSuplementoMin").value = "0";
         document.getElementById("calcSuplementoMin").value = "0";
@@ -3003,7 +3003,17 @@
       let unidadesEsperadas = null;
       let unidadesRestantes = null;
 
-      document.getElementById("fecha").valueAsDate = new Date();
+      function _resetFechaAdmin() {
+        const campo = document.getElementById("fecha");
+        const hoy = new Date();
+        const limiteAtras = new Date(hoy);
+        limiteAtras.setUTCDate(limiteAtras.getUTCDate() - 7);
+        campo.max = hoy.toISOString().slice(0, 10);
+        campo.min = limiteAtras.toISOString().slice(0, 10);
+        campo.valueAsDate = hoy;
+      }
+
+      _resetFechaAdmin();
       let codigoEan = "";
       let pedidoValidado = "";
       let envioRegistroEnCurso = false;
@@ -3549,7 +3559,7 @@
               document.getElementById("codigosSobrantes").value = "";
               document.getElementById("observaciones").value = "";
               document.getElementById("suplementoMin").value = "0";
-              document.getElementById("fecha").valueAsDate = new Date();
+              _resetFechaAdmin();
               document.getElementById("horaInicio").value = "";
               document.getElementById("horaFin").value = "";
               document.getElementById("alertaCantidad").innerHTML = "";
