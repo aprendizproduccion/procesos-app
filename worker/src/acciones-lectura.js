@@ -1,6 +1,6 @@
 // Acciones de solo lectura — traducción mecánica de code.js a D1.
 
-import { _localizarValidacionEan } from "./d1-negocio.js";
+import { _localizarValidacionEan, _fechaHoyBogota } from "./d1-negocio.js";
 
 export const accionesLectura = {
   async getSupervisoresData(datos, env) {
@@ -229,6 +229,45 @@ export const accionesLectura = {
     });
 
     return { success: true, paquetes };
+  },
+
+  async obtenerControlTiempos(datos, env) {
+    const cedula = String(datos.cedula || "").trim();
+    if (!cedula) return { success: false, message: "Falta la cédula." };
+    const filtro = datos.filtro === "historico" ? "historico" : "hoy";
+
+    let sql =
+      "SELECT fecha, coordinador, operario, supernumerario, numero_pedido AS pedido, " +
+      "proceso, unidades_procesadas_operario AS unidadesProcesadas, eficiencia, " +
+      "unidades_hora_estandar AS unidadesHoraEstandar, hora_inicio AS horaInicio, " +
+      "hora_final AS horaFinal, anulado " +
+      "FROM registros WHERE cedula_operario = ?";
+    const binds = [cedula];
+    if (filtro === "hoy") {
+      sql += " AND fecha = ?";
+      binds.push(_fechaHoyBogota());
+    }
+    sql += " ORDER BY fecha DESC, hora_inicio DESC, id DESC LIMIT 100";
+
+    const { results } = await env.DB.prepare(sql)
+      .bind(...binds)
+      .all();
+
+    const registros = results.map((r) => ({
+      fecha: r.fecha,
+      coordinador: r.coordinador,
+      operario: r.operario,
+      supernumerario: r.supernumerario,
+      pedido: r.pedido,
+      proceso: r.proceso,
+      unidadesProcesadas: r.unidadesProcesadas,
+      eficiencia: r.unidadesHoraEstandar > 0 ? r.eficiencia : null,
+      horaInicio: r.horaInicio,
+      horaFinal: r.horaFinal,
+      anulado: !!r.anulado,
+    }));
+
+    return { success: true, registros };
   },
 };
 
