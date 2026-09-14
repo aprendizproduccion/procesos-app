@@ -14,6 +14,7 @@ import {
   _marcarPedidoIniciado,
   _pedidoEstaCompleto,
   _fechaHoyBogota,
+  _validarFechaRegistro,
   _ahoraISO,
   _revertirReserva,
   _revertirCierre,
@@ -116,7 +117,7 @@ export const accionesEscritura = {
       );
       const tasaEstandar = procesoValidado.unidadesHora;
       const loteId = crypto.randomUUID();
-      const fecha = _fechaHoyBogota();
+      const fecha = _validarFechaRegistro(payload.fecha);
       const ahora = _ahoraISO();
 
       const unidadesPorOperario = Math.round((total / n) * 100) / 100;
