@@ -170,7 +170,7 @@ export const accionesLectura = {
       sql += " AND " + _sqlSinTildes("operario") + " LIKE ?";
       binds.push("%" + _normalizarTexto(operarioTexto) + "%");
     }
-    sql += " ORDER BY fecha DESC, hora_inicio DESC, id DESC";
+    sql += " ORDER BY fecha DESC, hora_inicio ASC, id DESC";
     if (!pedido) sql += " LIMIT 100";
 
     const { results } = await env.DB.prepare(sql)
