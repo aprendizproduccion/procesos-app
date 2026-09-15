@@ -13,7 +13,10 @@ export default {
         payload = JSON.parse(await request.text());
       } catch (e) {
         return new Response(
-          JSON.stringify({ success: false, message: "Cuerpo de solicitud inválido" }),
+          JSON.stringify({
+            success: false,
+            message: "Cuerpo de solicitud inválido",
+          }),
           { status: 400, headers: { "Content-Type": "application/json" } },
         );
       }
@@ -21,11 +24,14 @@ export default {
       payload.token = env.TOKEN_API;
 
       try {
-        const respuesta = await fetch(BACKEND_URL + "?cachebust=" + Date.now(), {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify(payload),
-        });
+        const respuesta = await env.BACKEND.fetch(
+          BACKEND_URL + "?cachebust=" + Date.now(),
+          {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(payload),
+          },
+        );
         const texto = await respuesta.text();
         return new Response(texto, {
           status: respuesta.status,
@@ -33,7 +39,10 @@ export default {
         });
       } catch (e) {
         return new Response(
-          JSON.stringify({ success: false, message: "No se pudo contactar el backend" }),
+          JSON.stringify({
+            success: false,
+            message: "No se pudo contactar el backend",
+          }),
           { status: 502, headers: { "Content-Type": "application/json" } },
         );
       }
