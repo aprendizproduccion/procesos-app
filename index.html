@@ -739,16 +739,18 @@
             enterkeyhint="search"
           />
         </div>
+        <label>Fecha (opcional)</label>
         <div class="add-row" style="margin-bottom: 14px">
-          <button
-            type="button"
-            id="btnBuscarRegistrosEditar"
-            onclick="buscarRegistrosParaEditar()"
-            style="width: 100%"
-          >
-            Buscar
-          </button>
+          <input id="edicionFechaInput" type="date" autocomplete="off" />
         </div>
+        <button
+          type="button"
+          id="btnBuscarRegistrosEditar"
+          class="btn-submit"
+          onclick="buscarRegistrosParaEditar()"
+        >
+          Buscar
+        </button>
         <div id="edicionAlerta"></div>
         <div id="listaRegistrosEditar"></div>
       </div>
@@ -1883,6 +1885,7 @@
           "block";
         document.getElementById("edicionPedidoInput").value = "";
         document.getElementById("edicionOperarioInput").value = "";
+        document.getElementById("edicionFechaInput").value = "";
         document.getElementById("edicionAlerta").innerHTML = "";
         document.getElementById("listaRegistrosEditar").innerHTML = "";
         registrosEditarActuales = [];
@@ -2275,6 +2278,7 @@
         const operario = document
           .getElementById("edicionOperarioInput")
           .value.trim();
+        const fecha = document.getElementById("edicionFechaInput").value;
         const alertaDiv = document.getElementById("edicionAlerta");
         const listaDiv = document.getElementById("listaRegistrosEditar");
         alertaDiv.innerHTML = "";
@@ -2294,6 +2298,7 @@
         llamarAPI("obtenerRegistrosParaEditar", {
           pedido: pedido,
           operario: operario,
+          fecha: fecha,
         })
           .then(function (res) {
             if (res.success) {
@@ -2730,6 +2735,9 @@
         "search",
         buscarRegistrosParaEditar,
       );
+
+      const edicionFechaInput = document.getElementById("edicionFechaInput");
+      edicionFechaInput.addEventListener("change", buscarRegistrosParaEditar);
 
       document
         .getElementById("seguimientoPedidoInput")
