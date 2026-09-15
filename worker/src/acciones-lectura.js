@@ -141,6 +141,7 @@ export const accionesLectura = {
   async obtenerRegistrosParaEditar(datos, env) {
     const pedido = String(datos.pedido || "").trim();
     const operarioTexto = String(datos.operario || "").trim();
+    const fecha = String(datos.fecha || "").trim();
     if (!pedido && !operarioTexto)
       return {
         success: false,
@@ -169,6 +170,10 @@ export const accionesLectura = {
     if (operarioTexto) {
       sql += " AND " + _sqlSinTildes("operario") + " LIKE ?";
       binds.push("%" + _normalizarTexto(operarioTexto) + "%");
+    }
+    if (fecha) {
+      sql += " AND fecha = ?";
+      binds.push(fecha);
     }
     sql += " ORDER BY fecha DESC, hora_inicio ASC, id DESC";
     if (!pedido) sql += " LIMIT 100";
