@@ -937,7 +937,13 @@
         <div class="row2">
           <div>
             <label>Número de pedido</label>
-            <input id="pedido" placeholder="Ej: 123" />
+            <input
+              id="pedido"
+              placeholder="Ej: 123"
+              list="sugeridosPedidos"
+              autocomplete="off"
+            />
+            <datalist id="sugeridosPedidos"></datalist>
           </div>
           <div>
             <label>Fecha</label>
@@ -1147,7 +1153,12 @@
       </div>
 
       <label>Número de pedido</label>
-      <input id="opPedido" placeholder="Ej: 123" />
+      <input
+        id="opPedido"
+        placeholder="Ej: 123"
+        list="sugeridosPedidos"
+        autocomplete="off"
+      />
 
       <label>Código EAN del producto</label>
       <div class="add-row" style="margin-bottom: 14px">
@@ -3011,6 +3022,46 @@
       let unidadesEsperadas = null;
       let unidadesRestantes = null;
 
+      // ---------------- NORMALIZACIÓN DE PEDIDOS ----------------
+      // Clave normalizada -> texto exacto del pedido en D1 (null si la clave es ambigua).
+      let indicePedidos = new Map();
+
+      function normalizarPedido(texto) {
+        return String(texto || "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .replace(/\s+/g, "");
+      }
+
+      function construirIndicePedidos() {
+        indicePedidos = new Map();
+        const unicos = [
+          ...new Set(
+            procesos.map((p) => String(p.pedido || "").trim()).filter(Boolean),
+          ),
+        ].sort((a, b) => a.localeCompare(b, "es", { numeric: true }));
+
+        unicos.forEach((ped) => {
+          const clave = normalizarPedido(ped);
+          if (indicePedidos.has(clave)) {
+            indicePedidos.set(clave, null);
+          } else {
+            indicePedidos.set(clave, ped);
+          }
+        });
+
+        document.getElementById("sugeridosPedidos").innerHTML = unicos
+          .map((ped) => `<option value="${escapeHtml(ped)}"></option>`)
+          .join("");
+      }
+
+      function pedidoCanonico(texto) {
+        const limpio = String(texto || "").trim();
+        if (!limpio) return "";
+        return indicePedidos.get(normalizarPedido(limpio)) || limpio;
+      }
+
       function _resetFechaAdmin() {
         const campo = document.getElementById("fecha");
         const hoy = new Date();
@@ -3055,6 +3106,7 @@
             return;
           }
           procesos = resp.data;
+          construirIndicePedidos();
           filtrarProcesosPorPedido();
           actualizarTasaHint();
           actualizarPreview();
