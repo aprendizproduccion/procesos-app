@@ -549,6 +549,38 @@
           padding: 10px 12px;
         }
       }
+      .campo-sugerencias {
+        position: relative;
+      }
+      .lista-sugerencias {
+        display: none;
+        position: absolute;
+        top: calc(100% - 14px);
+        left: 0;
+        right: 0;
+        z-index: 50;
+        max-height: 220px;
+        overflow-y: auto;
+        background: #fff;
+        border: 1px solid #d7dade;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+      }
+      .lista-sugerencias.visible {
+        display: block;
+      }
+      .sugerencia-item {
+        padding: 12px 10px;
+        font-size: 14px;
+        border-bottom: 1px solid #f0f1f3;
+        cursor: pointer;
+      }
+      .sugerencia-item:last-child {
+        border-bottom: none;
+      }
+      .sugerencia-item:active {
+        background: #eef2ff;
+      }
     </style>
   </head>
 
@@ -937,13 +969,14 @@
         <div class="row2">
           <div>
             <label>Número de pedido</label>
-            <input
-              id="pedido"
-              placeholder="Ej: 123"
-              list="sugeridosPedidos"
-              autocomplete="off"
-            />
-            <datalist id="sugeridosPedidos"></datalist>
+            <div class="campo-sugerencias">
+              <input id="pedido" placeholder="Ej: 123" autocomplete="off" />
+              <div
+                id="sugPedido"
+                class="lista-sugerencias"
+                role="listbox"
+              ></div>
+            </div>
           </div>
           <div>
             <label>Fecha</label>
@@ -1153,12 +1186,10 @@
       </div>
 
       <label>Número de pedido</label>
-      <input
-        id="opPedido"
-        placeholder="Ej: 123"
-        list="sugeridosPedidos"
-        autocomplete="off"
-      />
+      <div class="campo-sugerencias">
+        <input id="opPedido" placeholder="Ej: 123" autocomplete="off" />
+        <div id="sugOpPedido" class="lista-sugerencias" role="listbox"></div>
+      </div>
 
       <label>Código EAN del producto</label>
       <div class="add-row" style="margin-bottom: 14px">
@@ -3037,6 +3068,8 @@
       // ---------------- NORMALIZACIÓN DE PEDIDOS ----------------
       // Clave normalizada -> texto exacto del pedido en D1 (null si la clave es ambigua).
       let indicePedidos = new Map();
+      let listaPedidos = []; // [{ valor, clave }] para las sugerencias
+      const MAX_SUGERENCIAS_PEDIDO = 8;
 
       function normalizarPedido(texto) {
         return String(texto || "")
@@ -3063,9 +3096,10 @@
           }
         });
 
-        document.getElementById("sugeridosPedidos").innerHTML = unicos
-          .map((ped) => `<option value="${escapeHtml(ped)}"></option>`)
-          .join("");
+        listaPedidos = unicos.map((ped) => ({
+          valor: ped,
+          clave: normalizarPedido(ped),
+        }));
       }
 
       function pedidoCanonico(texto) {
@@ -3073,6 +3107,65 @@
         if (!limpio) return "";
         return indicePedidos.get(normalizarPedido(limpio)) || limpio;
       }
+
+      function activarSugerenciasPedido(inputId, listaId) {
+        const input = document.getElementById(inputId);
+        const lista = document.getElementById(listaId);
+        let actuales = [];
+
+        function ocultar() {
+          lista.classList.remove("visible");
+          lista.innerHTML = "";
+          actuales = [];
+        }
+
+        function mostrar() {
+          const clave = normalizarPedido(input.value);
+          if (!clave) return ocultar();
+
+          const inician = listaPedidos.filter((p) => p.clave.startsWith(clave));
+          const contienen = listaPedidos.filter(
+            (p) => !p.clave.startsWith(clave) && p.clave.includes(clave),
+          );
+          actuales = inician.concat(contienen).slice(0, MAX_SUGERENCIAS_PEDIDO);
+
+          const yaExacto =
+            actuales.length === 1 && actuales[0].valor === input.value.trim();
+          if (actuales.length === 0 || yaExacto) return ocultar();
+
+          lista.innerHTML = actuales
+            .map(
+              (p, i) =>
+                `<div class="sugerencia-item" role="option" data-i="${i}">${escapeHtml(p.valor)}</div>`,
+            )
+            .join("");
+          lista.classList.add("visible");
+        }
+
+        // Evita que el input pierda el foco antes de registrar el toque.
+        lista.addEventListener("pointerdown", (e) => e.preventDefault());
+
+        lista.addEventListener("click", (e) => {
+          const item = e.target.closest(".sugerencia-item");
+          if (!item) return;
+          const elegido = actuales[Number(item.dataset.i)];
+          if (!elegido) return;
+          input.value = elegido.valor;
+          input.dispatchEvent(new Event("input"));
+          input.dispatchEvent(new Event("change"));
+          ocultar();
+          input.blur();
+        });
+
+        input.addEventListener("input", mostrar);
+        input.addEventListener("blur", ocultar);
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === "Escape") ocultar();
+        });
+      }
+
+      activarSugerenciasPedido("pedido", "sugPedido");
+      activarSugerenciasPedido("opPedido", "sugOpPedido");
 
       function _resetFechaAdmin() {
         const campo = document.getElementById("fecha");
