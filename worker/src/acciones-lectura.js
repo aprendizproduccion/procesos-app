@@ -1,6 +1,10 @@
 // Acciones de solo lectura — traducción mecánica de code.js a D1.
 
-import { _localizarValidacionEan, _fechaHoyBogota } from "./d1-negocio.js";
+import {
+  _localizarValidacionEan,
+  _fechaHoyBogota,
+  _resolverPedido,
+} from "./d1-negocio.js";
 
 export const accionesLectura = {
   async getSupervisoresData(datos, env) {
@@ -51,7 +55,7 @@ export const accionesLectura = {
   },
 
   async obtenerDatosValidacion(datos, env) {
-    const pedido = String(datos.pedido || "").trim();
+    const pedido = await _resolverPedido(env, datos.pedido);
     const ean = String(datos.ean || "").trim();
 
     let row;
