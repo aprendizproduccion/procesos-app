@@ -733,6 +733,12 @@ export const accionesEscritura = {
 
     const observaciones = String(payload.observaciones || "").trim();
 
+    const fecha = String(payload.fecha || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha))
+      throw new Error("La fecha del registro no tiene un formato válido.");
+    if (fecha > _fechaHoyBogota())
+      throw new Error("La fecha del registro no puede ser posterior a hoy.");
+
     const disponible = await env.DB.prepare(
       "SELECT v.unidades_totales AS totales, " +
         "(SELECT COALESCE(SUM(r.unidades_procesadas_operario + r.codigos_sobrantes), 0) " +
@@ -770,7 +776,7 @@ export const accionesEscritura = {
 
     const ahora = _ahoraISO();
     const resultado = await env.DB.prepare(
-      "UPDATE registros SET coordinador = ?, supernumerario = ?, proceso = ?, " +
+      "UPDATE registros SET fecha = ?, coordinador = ?, supernumerario = ?, proceso = ?, " +
         "unidades_hora_estandar = ?, hora_inicio = ?, hora_final = ?, suplemento = ?, " +
         "observacion = ?, duracion_bruta_min = ?, tiempo_total = ?, " +
         "unidades_procesadas_operario = ?, codigos_sobrantes = ?, unidades_hora_real = ?, " +
@@ -779,6 +785,7 @@ export const accionesEscritura = {
         "WHERE id = ? AND anulado = 0",
     )
       .bind(
+        fecha,
         coordinador,
         supernumerario,
         procesoValidado.nombre,
