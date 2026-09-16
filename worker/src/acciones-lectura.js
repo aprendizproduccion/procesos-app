@@ -243,7 +243,24 @@ export const accionesLectura = {
   async obtenerControlTiempos(datos, env) {
     const cedula = String(datos.cedula || "").trim();
     if (!cedula) return { success: false, message: "Falta la cédula." };
-    const filtro = datos.filtro === "historico" ? "historico" : "hoy";
+    const filtro = datos.filtro === "historico" ? "historico" : "fecha";
+    const hoy = _fechaHoyBogota();
+    let fechaFiltro = hoy;
+    if (filtro === "fecha") {
+      const valor = String(datos.fecha || "").trim();
+      if (valor) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) {
+          return {
+            success: false,
+            message: "La fecha no tiene un formato válido.",
+          };
+        }
+        if (valor > hoy) {
+          return { success: false, message: "No se permiten fechas futuras." };
+        }
+        fechaFiltro = valor;
+      }
+    }
 
     let sql =
       "SELECT fecha, coordinador, operario, supernumerario, numero_pedido AS pedido, " +
@@ -252,9 +269,9 @@ export const accionesLectura = {
       "hora_final AS horaFinal, anulado " +
       "FROM registros WHERE cedula_operario = ?";
     const binds = [cedula];
-    if (filtro === "hoy") {
+    if (filtro === "fecha") {
       sql += " AND fecha = ?";
-      binds.push(_fechaHoyBogota());
+      binds.push(fechaFiltro);
     }
     sql += " ORDER BY fecha DESC, hora_inicio DESC, id DESC LIMIT 100";
 
