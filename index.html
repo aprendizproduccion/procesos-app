@@ -2210,6 +2210,13 @@
             .join("");
       }
 
+      function textoTotalPaquete(p) {
+        if (!p.sinLimite) return String(p.unidadesTotales);
+        return p.unidadesTotales > 0
+          ? p.unidadesTotales + " + sin límite"
+          : "Sin límite";
+      }
+
       function renderFilasPaquetes(lista) {
         document.getElementById("seguimientoPaquetesBody").innerHTML = lista
           .map(function (p) {
@@ -2218,9 +2225,9 @@
               `<td>${escapeHtml(p.pedido)}</td>` +
               `<td>${escapeHtml(p.subLinea)}</td>` +
               `<td>${escapeHtml(p.estado)}</td>` +
-              `<td>${p.unidadesTotales}</td>` +
+              `<td>${textoTotalPaquete(p)}</td>` +
               `<td>${p.unidadesProcesadas}</td>` +
-              `<td>${p.unidadesPendientes}</td>` +
+              `<td>${p.unidadesPendientes !== null ? p.unidadesPendientes : "—"}</td>` +
               `<td>${p.horasTotales !== null ? p.horasTotales : "—"}</td>` +
               `<td>${p.eficiencia !== null ? p.eficiencia + "%" : "—"}</td>` +
               `</tr>`
@@ -2245,7 +2252,7 @@
         document.getElementById("seguimientoVistaDetalle").style.display =
           "block";
         document.getElementById("seguimientoDetallePedidoLabel").textContent =
-          `Pedido ${p.pedido} — Total: ${p.unidadesTotales} uds`;
+          `Pedido ${p.pedido} — Total: ${textoTotalPaquete(p)} uds`;
         renderFilasPaquetes([p]);
         renderGraficaDetallePedido(p);
         actualizarKpiEficienciaDetalle(p);
@@ -2288,12 +2295,15 @@
           .getContext("2d");
         if (chartDetallePedido) chartDetallePedido.destroy();
 
-        const procesadas = Math.min(p.unidadesProcesadas, p.unidadesTotales);
-        const pendientes = Math.max(
-          p.unidadesTotales - p.unidadesProcesadas,
-          0,
-        );
-        const exceso = Math.max(p.unidadesProcesadas - p.unidadesTotales, 0);
+        const procesadas = p.sinLimite
+          ? p.unidadesProcesadas
+          : Math.min(p.unidadesProcesadas, p.unidadesTotales);
+        const pendientes = p.sinLimite
+          ? 0
+          : Math.max(p.unidadesTotales - p.unidadesProcesadas, 0);
+        const exceso = p.sinLimite
+          ? 0
+          : Math.max(p.unidadesProcesadas - p.unidadesTotales, 0);
 
         const datasets = [
           {
@@ -3417,7 +3427,9 @@
             if (res.success) {
               unidadesEsperadas = res.unidadesEsperadas;
               unidadesRestantes = res.restantes;
-              alertaEanDiv.innerHTML = "";
+              alertaEanDiv.innerHTML = res.sinLimite
+                ? '<div class="msg" style="background:#e0f2fe; color:#0369a1;">EAN sin límite de unidades: este registro no tiene tope.</div>'
+                : "";
               ejecutarValidacionCantidades();
               cargarResumenPedido(pedidoVal);
             } else {
@@ -3575,7 +3587,16 @@
         const inputActual =
           Number(document.getElementById("totalUnidades").value) || 0;
         const proyectado = resumenPedidoActual.procesadoPedido + inputActual;
-        cont.innerHTML = `Unidades Pedido: ${proyectado} / ${resumenPedidoActual.totalPedido} unidades`;
+        const tieneSinLimite = (resumenPedidoActual.detalleEanes || []).some(
+          (e) => e.sinLimite,
+        );
+        if (!tieneSinLimite) {
+          cont.innerHTML = `Unidades Pedido: ${proyectado} / ${resumenPedidoActual.totalPedido} unidades`;
+        } else if (resumenPedidoActual.totalPedido > 0) {
+          cont.innerHTML = `Unidades Pedido: ${proyectado} / ${resumenPedidoActual.totalPedido} unidades + EAN sin límite`;
+        } else {
+          cont.innerHTML = `Unidades Pedido: ${proyectado} unidades (sin límite)`;
+        }
       }
 
       function obtenerCodigosSobrantesValidados(inputId) {
@@ -3990,7 +4011,10 @@
               "EAN: " + res.ean + " — Estado: " + res.estado;
             confirmado.style.display = "block";
 
-            if (res.restanteNeto <= 0) {
+            if (res.sinLimite) {
+              alertaCant.innerHTML = `<div class="msg err">Este EAN no tiene límite de unidades; no aplica justificación de faltante.</div>`;
+              btnJC.disabled = true;
+            } else if (res.restanteNeto <= 0) {
               alertaCant.innerHTML = `<div class="msg err">Este EAN ya no tiene faltante pendiente por justificar. Estado actual: ${res.estado}.</div>`;
               btnJC.disabled = true;
             } else {
@@ -4294,7 +4318,9 @@
           .then(function (res) {
             const alertaDiv = document.getElementById("opAlertaEan");
             if (res.success) {
-              alertaDiv.innerHTML = "";
+              alertaDiv.innerHTML = res.sinLimite
+                ? '<div class="msg" style="background:#e0f2fe; color:#0369a1;">EAN sin límite de unidades: este registro no tiene tope.</div>'
+                : "";
             } else {
               opCodigoEan = "";
               opPedidoValidado = "";
