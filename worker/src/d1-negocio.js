@@ -164,7 +164,7 @@ export async function _resolverPedido(env, texto) {
 export async function _localizarValidacionEan(env, pedido, ean) {
   const [eanA, eanB] = _formasEan(ean);
   const row = await env.DB.prepare(
-    "SELECT sublinea, unidades_totales, unidades_procesadas, codigos_sobrantes, ean_producto, " +
+    "SELECT sublinea, unidades_totales, sin_limite, unidades_procesadas, codigos_sobrantes, ean_producto, " +
       "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean IN (?, ?)) AS justificado " +
       "FROM validacion_eanes WHERE numero_pedido = ? AND ean_producto IN (?, ?)",
   )
@@ -286,7 +286,7 @@ export async function _revertirReserva(
     "UPDATE validacion_eanes SET " +
       "unidades_procesadas = unidades_procesadas - ?, " +
       "codigos_sobrantes = codigos_sobrantes - ?, " +
-      "estado = CASE WHEN (unidades_procesadas - ? - codigos_sobrantes - ?) >= unidades_totales " +
+      "estado = CASE WHEN sin_limite = 0 AND (unidades_procesadas - ? - codigos_sobrantes - ?) >= unidades_totales " +
       "THEN 'Completado' ELSE 'En proceso' END " +
       "WHERE numero_pedido = ? AND ean_producto = ?",
   )
@@ -329,7 +329,7 @@ export async function _recalcularContadorValidacion(env, pedido, ean) {
       "codigos_sobrantes = (SELECT sobrantes FROM agregados), " +
       "operarios = COALESCE((SELECT nombres FROM operarios_activos), ''), " +
       "estado = CASE " +
-      "WHEN ((SELECT procesado FROM agregados) + (SELECT sobrantes FROM agregados) + (SELECT justificado FROM justif)) >= unidades_totales THEN 'Completado' " +
+      "WHEN sin_limite = 0 AND ((SELECT procesado FROM agregados) + (SELECT sobrantes FROM agregados) + (SELECT justificado FROM justif)) >= unidades_totales THEN 'Completado' " +
       "WHEN ((SELECT procesado FROM agregados) + (SELECT sobrantes FROM agregados) + (SELECT justificado FROM justif)) <= 0 THEN 'Pendiente' " +
       "ELSE 'En proceso' END, " +
       "actualizado_en = ? " +
