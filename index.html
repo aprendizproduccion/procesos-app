@@ -2615,6 +2615,9 @@
             '<div class="msg err">Indica la fecha del registro.</div>';
           return;
         }
+        const unidadesTexto = document
+          .getElementById("editUnidadesProcesadas")
+          .value.trim();
         const unidadesNum = Number(unidadesTexto);
         if (
           unidadesTexto === "" ||
