@@ -1363,6 +1363,8 @@
         <h3 style="color: #2452c9">Editar registro</h3>
         <div id="editAlerta"></div>
         <div style="max-height: 60vh; overflow-y: auto; padding-right: 4px">
+          <label>Fecha</label>
+          <input id="editFecha" type="date" />
           <div class="row2 row2-campos">
             <div>
               <label>Coordinador</label>
@@ -2434,6 +2436,11 @@
           registro.codigosSobrantes || "";
         document.getElementById("editObservaciones").value =
           registro.observacion || "";
+        const campoFechaEdit = document.getElementById("editFecha");
+        campoFechaEdit.max = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Bogota",
+        }).format(new Date());
+        campoFechaEdit.value = registro.fecha || "";
         document.getElementById("editMotivo").value = "";
         document.getElementById("editEditadoPor").value = "";
 
@@ -2446,6 +2453,7 @@
           coordinador: document.getElementById("editCoordinador").value,
           supernumerario: document.getElementById("editSupernumerario").value,
           proceso: document.getElementById("editProceso").value,
+          fecha: document.getElementById("editFecha").value,
           horaInicio: document.getElementById("editHoraInicio").value,
           horaFin: document.getElementById("editHoraFin").value,
           suplementoMin: document.getElementById("editSuplementoMin").value,
@@ -2510,9 +2518,12 @@
           alertaDiv.innerHTML = '<div class="msg err">Indica tu nombre.</div>';
           return;
         }
-        const unidadesTexto = document
-          .getElementById("editUnidadesProcesadas")
-          .value.trim();
+        const fechaEdit = document.getElementById("editFecha").value;
+        if (!fechaEdit) {
+          alertaDiv.innerHTML =
+            '<div class="msg err">Indica la fecha del registro.</div>';
+          return;
+        }
         const unidadesNum = Number(unidadesTexto);
         if (
           unidadesTexto === "" ||
@@ -2540,6 +2551,7 @@
 
         const payload = {
           id: idRegistroEnEdicion,
+          fecha: fechaEdit,
           coordinador: document.getElementById("editCoordinador").value.trim(),
           supernumerario: document
             .getElementById("editSupernumerario")
