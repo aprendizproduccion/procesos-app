@@ -68,12 +68,14 @@ export const accionesLectura = {
     return {
       success: true,
       subLinea: row.sublinea,
-      unidadesEsperadas: row.unidades_totales,
-      restantes:
-        row.unidades_totales -
-        row.unidades_procesadas -
-        row.justificado -
-        row.codigos_sobrantes,
+      unidadesEsperadas: row.sin_limite ? null : row.unidades_totales,
+      sinLimite: row.sin_limite === 1,
+      restantes: row.sin_limite
+        ? null
+        : row.unidades_totales -
+          row.unidades_procesadas -
+          row.justificado -
+          row.codigos_sobrantes,
     };
   },
 
@@ -87,6 +89,7 @@ export const accionesLectura = {
       procesadas: e.procesadas,
       sobrantes: e.sobrantes,
       restantes: e.restanteNeto,
+      sinLimite: e.sinLimite,
       justificado: e.justificado,
     }));
     const totalPedido = eanes.reduce((s, e) => s + e.esperadas, 0);
@@ -108,12 +111,15 @@ export const accionesLectura = {
   async obtenerEanesParaJustificar(datos, env) {
     const pedido = String(datos.pedido || "").trim();
     const detalle = await _detalleEanesPedido(env, pedido);
-    const eanes = detalle.map((e) => ({
-      ean: e.ean,
-      esperadas: e.esperadas,
-      restanteNeto: e.restanteNeto,
-      estado: e.estado,
-    }));
+    const eanes = detalle
+      .map((e) => ({
+        ean: e.ean,
+        esperadas: e.esperadas,
+        restanteNeto: e.restanteNeto,
+        estado: e.estado,
+        sinLimite: e.sinLimite,
+      }))
+      .filter((e) => !e.sinLimite);
     return { success: true, eanes };
   },
 
@@ -139,6 +145,7 @@ export const accionesLectura = {
       esperadas: match.esperadas,
       restanteNeto: match.restanteNeto,
       estado: match.estado,
+      sinLimite: match.sinLimite,
     };
   },
 
@@ -193,13 +200,13 @@ export const accionesLectura = {
     const { results } = await env.DB.prepare(
       "SELECT ve.numero_pedido AS pedido, ve.subLinea AS subLinea, " +
         "ve.unidadesTotales AS unidadesTotales, ve.unidadesProcesadas AS unidadesProcesadas, " +
-        "ve.codigosSobrantes AS codigosSobrantes, " +
+        "ve.codigosSobrantes AS codigosSobrantes, ve.sinLimite AS sinLimite, " +
         "COALESCE(rg.horasTotales,0) AS horasTotales, " +
         "COALESCE(rg.sumaUnidadesPorTiempo,0) AS sumaUnidadesPorTiempo " +
         "FROM (" +
         "SELECT numero_pedido, GROUP_CONCAT(DISTINCT sublinea) AS subLinea, " +
         "SUM(unidades_totales) AS unidadesTotales, SUM(unidades_procesadas) AS unidadesProcesadas, " +
-        "SUM(codigos_sobrantes) AS codigosSobrantes " +
+        "SUM(codigos_sobrantes) AS codigosSobrantes, MAX(sin_limite) AS sinLimite " +
         "FROM validacion_eanes GROUP BY numero_pedido" +
         ") ve " +
         "LEFT JOIN (" +
@@ -213,7 +220,9 @@ export const accionesLectura = {
     const paquetes = results.map((r) => {
       const unidadesConSobrantes = r.unidadesProcesadas + r.codigosSobrantes;
       let estado;
-      if (unidadesConSobrantes >= r.unidadesTotales) estado = "Completado";
+      if (r.sinLimite)
+        estado = unidadesConSobrantes > 0 ? "En proceso" : "Pendiente";
+      else if (unidadesConSobrantes >= r.unidadesTotales) estado = "Completado";
       else if (unidadesConSobrantes > 0) estado = "En proceso";
       else estado = "Pendiente";
 
@@ -223,7 +232,10 @@ export const accionesLectura = {
         subLinea: r.subLinea,
         unidadesTotales: r.unidadesTotales,
         unidadesProcesadas: r.unidadesProcesadas,
-        unidadesPendientes: r.unidadesTotales - r.unidadesProcesadas,
+        unidadesPendientes: r.sinLimite
+          ? null
+          : r.unidadesTotales - r.unidadesProcesadas,
+        sinLimite: r.sinLimite === 1,
         estado,
         horasTotales: noIniciado
           ? null
@@ -301,7 +313,7 @@ export const accionesLectura = {
 async function _detalleEanesPedido(env, pedido) {
   const { results } = await env.DB.prepare(
     "SELECT ean_producto AS ean, unidades_totales AS esperadas, unidades_procesadas AS procesadas, " +
-      "codigos_sobrantes AS sobrantes, estado, " +
+      "codigos_sobrantes AS sobrantes, estado, sin_limite AS sinLimite, " +
       "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones j " +
       " WHERE j.pedido = v.numero_pedido AND j.ean = v.ean_producto) AS justificado " +
       "FROM validacion_eanes v WHERE numero_pedido = ?",
@@ -315,7 +327,10 @@ async function _detalleEanesPedido(env, pedido) {
     procesadas: r.procesadas,
     sobrantes: r.sobrantes,
     justificado: r.justificado,
-    restanteNeto: r.esperadas - r.procesadas - r.justificado - r.sobrantes,
+    restanteNeto: r.sinLimite
+      ? null
+      : r.esperadas - r.procesadas - r.justificado - r.sobrantes,
+    sinLimite: r.sinLimite === 1,
     estado: r.estado || "Pendiente",
   }));
 }
