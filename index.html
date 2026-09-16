@@ -575,6 +575,13 @@
         border-bottom: 1px solid #f0f1f3;
         cursor: pointer;
       }
+      .add-row .campo-sugerencias {
+        flex: 1 1 120px;
+        min-width: 0;
+      }
+      .add-row .lista-sugerencias {
+        top: 100%;
+      }
       .sugerencia-item:last-child {
         border-bottom: none;
       }
@@ -755,12 +762,19 @@
       <div class="card">
         <label>Número de pedido</label>
         <div class="add-row" style="margin-bottom: 14px">
-          <input
-            id="edicionPedidoInput"
-            placeholder="Ej: 3200"
-            autocomplete="off"
-            enterkeyhint="search"
-          />
+          <div class="campo-sugerencias">
+            <input
+              id="edicionPedidoInput"
+              placeholder="Ej: 3200"
+              autocomplete="off"
+              enterkeyhint="search"
+            />
+            <div
+              id="sugEdicionPedido"
+              class="lista-sugerencias"
+              role="listbox"
+            ></div>
+          </div>
         </div>
         <label>Nombre de operario</label>
         <div class="add-row" style="margin-bottom: 14px">
@@ -2316,9 +2330,11 @@
       let snapshotFormularioEdicion = "";
 
       function buscarRegistrosParaEditar() {
-        const pedido = document
-          .getElementById("edicionPedidoInput")
-          .value.trim();
+        const pedidoInputEd = document.getElementById("edicionPedidoInput");
+        const pedido = pedidoCanonico(pedidoInputEd.value);
+        if (pedido && pedido !== pedidoInputEd.value) {
+          pedidoInputEd.value = pedido;
+        }
         const operario = document
           .getElementById("edicionOperarioInput")
           .value.trim();
@@ -3108,7 +3124,7 @@
         return indicePedidos.get(normalizarPedido(limpio)) || limpio;
       }
 
-      function activarSugerenciasPedido(inputId, listaId) {
+      function activarSugerenciasPedido(inputId, listaId, alElegir) {
         const input = document.getElementById(inputId);
         const lista = document.getElementById(listaId);
         let actuales = [];
@@ -3155,6 +3171,7 @@
           input.dispatchEvent(new Event("change"));
           ocultar();
           input.blur();
+          if (alElegir) alElegir();
         });
 
         input.addEventListener("input", mostrar);
@@ -3166,6 +3183,11 @@
 
       activarSugerenciasPedido("pedido", "sugPedido");
       activarSugerenciasPedido("opPedido", "sugOpPedido");
+      activarSugerenciasPedido(
+        "edicionPedidoInput",
+        "sugEdicionPedido",
+        buscarRegistrosParaEditar,
+      );
 
       function _resetFechaAdmin() {
         const campo = document.getElementById("fecha");
