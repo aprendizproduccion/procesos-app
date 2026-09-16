@@ -126,6 +126,41 @@ function _formasEan(ean) {
   return [sinPreambulo, conPreambulo];
 }
 
+// Clave de comparación de pedidos: sin tildes, minúsculas y sin espacios.
+export function _normalizarPedido(texto) {
+  return String(texto || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+
+// Resuelve lo escrito al texto exacto de numero_pedido en D1.
+// Si no hay coincidencia única, devuelve el texto recortado sin cambios.
+export async function _resolverPedido(env, texto) {
+  const limpio = String(texto || "").trim();
+  if (!limpio) return "";
+
+  const exacto = await env.DB.prepare(
+    "SELECT (EXISTS(SELECT 1 FROM validacion_eanes WHERE numero_pedido = ?) " +
+      "OR EXISTS(SELECT 1 FROM registros WHERE numero_pedido = ?)) AS existe",
+  )
+    .bind(limpio, limpio)
+    .first();
+  if (exacto && exacto.existe) return limpio;
+
+  const clave = _normalizarPedido(limpio);
+  const { results } = await env.DB.prepare(
+    "SELECT numero_pedido FROM validacion_eanes " +
+      "UNION SELECT numero_pedido FROM registros",
+  ).all();
+  const coincidencias = results
+    .map((r) => String(r.numero_pedido))
+    .filter((p) => _normalizarPedido(p) === clave);
+
+  return coincidencias.length === 1 ? coincidencias[0] : limpio;
+}
+
 export async function _localizarValidacionEan(env, pedido, ean) {
   const [eanA, eanB] = _formasEan(ean);
   const row = await env.DB.prepare(
