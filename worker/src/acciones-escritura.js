@@ -20,6 +20,7 @@ import {
   _revertirCierre,
   _recalcularContadorValidacion,
   _sincronizarEstadoPedido,
+  _resolverPedido,
 } from "./d1-negocio.js";
 
 import {
@@ -45,7 +46,7 @@ export const accionesEscritura = {
     let reservaAplicada = null;
 
     try {
-      const pedido = String(payload.pedido || "").trim();
+      const pedido = await _resolverPedido(env, payload.pedido);
       if (!pedido) throw new Error("Falta el número de pedido.");
 
       let codigoEan = String(payload.codigoEan || "").trim();
@@ -329,7 +330,7 @@ export const accionesEscritura = {
           String(payload.supernumerario || "").trim(),
         );
 
-      const pedido = String(payload.pedido || "").trim();
+      const pedido = await _resolverPedido(env, payload.pedido);
       if (!pedido) throw new Error("Falta el número de pedido.");
       let codigoEan = String(payload.codigoEan || "").trim();
       if (!codigoEan)
@@ -563,7 +564,7 @@ export const accionesEscritura = {
     let cierreAplicado = null;
 
     try {
-      const pedido = String(payload.pedido || "").trim();
+      const pedido = await _resolverPedido(env, payload.pedido);
       let ean = String(payload.ean || "").trim();
       const motivo = String(payload.motivo || "").trim();
       const unidadesAJustificar = Number(payload.unidadesAJustificar);
