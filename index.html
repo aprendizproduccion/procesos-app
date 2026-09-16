@@ -924,12 +924,21 @@
         <label>Mostrar</label>
         <select
           id="ctFiltro"
-          onchange="buscarControlTiempos()"
+          onchange="cambiarFiltroControlTiempos()"
           style="margin-bottom: 14px"
         >
-          <option value="hoy">Hoy</option>
+          <option value="fecha">Por fecha</option>
           <option value="historico">Histórico (últimos 100)</option>
         </select>
+        <div id="ctFechaWrap">
+          <label>Fecha</label>
+          <input
+            type="date"
+            id="ctFecha"
+            onchange="buscarControlTiempos()"
+            style="margin-bottom: 14px"
+          />
+        </div>
         <div id="ctAlerta"></div>
         <div style="overflow-x: auto">
           <table>
@@ -1956,11 +1965,29 @@
         cargarSeguimientoPaquetes();
       }
 
+      function _hoyBogotaCT() {
+        return new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Bogota",
+        }).format(new Date());
+      }
+
+      function cambiarFiltroControlTiempos() {
+        const esFecha = document.getElementById("ctFiltro").value === "fecha";
+        document.getElementById("ctFechaWrap").style.display = esFecha
+          ? "block"
+          : "none";
+        buscarControlTiempos();
+      }
+
       function abrirControlTiemposDesdeDashboard() {
         document.getElementById("vistaDashboard").style.display = "none";
         document.getElementById("vistaControlTiempos").style.display = "block";
         document.getElementById("ctCedulaInput").value = "";
-        document.getElementById("ctFiltro").value = "hoy";
+        document.getElementById("ctFiltro").value = "fecha";
+        const campoFechaCt = document.getElementById("ctFecha");
+        campoFechaCt.max = _hoyBogotaCT();
+        campoFechaCt.value = _hoyBogotaCT();
+        document.getElementById("ctFechaWrap").style.display = "block";
         document.getElementById("ctAlerta").innerHTML = "";
         document.getElementById("ctBody").innerHTML = "";
       }
@@ -1976,10 +2003,25 @@
           return;
         }
         const filtro = document.getElementById("ctFiltro").value;
+        const fecha = document.getElementById("ctFecha").value;
+        if (filtro === "fecha") {
+          if (!fecha) {
+            alertaDiv.innerHTML =
+              '<div class="msg err">Selecciona una fecha.</div>';
+            bodyEl.innerHTML = "";
+            return;
+          }
+          if (fecha > _hoyBogotaCT()) {
+            alertaDiv.innerHTML =
+              '<div class="msg err">No se permiten fechas futuras.</div>';
+            bodyEl.innerHTML = "";
+            return;
+          }
+        }
         alertaDiv.innerHTML = '<p class="hint">Buscando...</p>';
         bodyEl.innerHTML = "";
 
-        llamarAPI("obtenerControlTiempos", { cedula, filtro })
+        llamarAPI("obtenerControlTiempos", { cedula, filtro, fecha })
           .then(function (res) {
             if (!res.success) {
               alertaDiv.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
@@ -1988,7 +2030,9 @@
             renderControlTiempos(res.registros || []);
             alertaDiv.innerHTML = res.registros.length
               ? ""
-              : '<p class="hint">No hay registros para esa cédula.</p>';
+              : filtro === "fecha"
+                ? '<p class="hint">No hay registros para esa cédula en esa fecha.</p>'
+                : '<p class="hint">No hay registros para esa cédula.</p>';
           })
           .catch(function (err) {
             alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
