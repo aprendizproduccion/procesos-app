@@ -89,7 +89,7 @@ export const accionesEscritura = {
         validacion.justificado -
         validacion.codigos_sobrantes;
 
-      if (total + codigosSobrantes > restantes) {
+      if (!validacion.sin_limite && total + codigosSobrantes > restantes) {
         throw new Error(
           "La cantidad ingresada (" +
             total +
@@ -138,11 +138,11 @@ export const accionesEscritura = {
         "UPDATE validacion_eanes SET " +
           "unidades_procesadas = unidades_procesadas + ?, " +
           "codigos_sobrantes = codigos_sobrantes + ?, " +
-          "estado = CASE WHEN (unidades_procesadas + ? + codigos_sobrantes + ?) >= unidades_totales THEN 'Completado' ELSE 'En proceso' END, " +
+          "estado = CASE WHEN sin_limite = 0 AND (unidades_procesadas + ? + codigos_sobrantes + ?) >= unidades_totales THEN 'Completado' ELSE 'En proceso' END, " +
           "actualizado_en = ? " +
           "WHERE numero_pedido = ? AND ean_producto = ? " +
-          "AND (unidades_procesadas + ? + codigos_sobrantes + ? + " +
-          "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) <= unidades_totales",
+          "AND (sin_limite = 1 OR (unidades_procesadas + ? + codigos_sobrantes + ? + " +
+          "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) <= unidades_totales)",
       )
         .bind(
           total,
@@ -400,8 +400,8 @@ export const accionesEscritura = {
           "estado = CASE WHEN (unidades_procesadas + ? + codigos_sobrantes + ?) >= unidades_totales THEN 'Completado' ELSE 'En proceso' END, " +
           "actualizado_en = ? " +
           "WHERE numero_pedido = ? AND ean_producto = ? " +
-          "AND (unidades_procesadas + ? + codigos_sobrantes + ? + " +
-          "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) <= unidades_totales",
+          "AND (sin_limite = 1 OR (unidades_procesadas + ? + codigos_sobrantes + ? + " +
+          "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) <= unidades_totales)",
       )
         .bind(
           total,
@@ -583,6 +583,11 @@ export const accionesEscritura = {
       // La autoridad real es el UPDATE atómico de abajo, que vuelve a leer en frío.
       const validacion = await _localizarValidacionEan(env, pedido, ean);
       ean = validacion.ean_producto;
+      if (validacion.sin_limite === 1) {
+        throw new Error(
+          "Este EAN no tiene límite de unidades; no aplica justificación de faltante.",
+        );
+      }
       const restanteNeto =
         validacion.unidades_totales -
         validacion.unidades_procesadas -
@@ -611,7 +616,7 @@ export const accionesEscritura = {
       const cierre = await env.DB.prepare(
         "UPDATE validacion_eanes SET estado = 'Completado', actualizado_en = ? " +
           "WHERE numero_pedido = ? AND ean_producto = ? " +
-          "AND (unidades_totales - unidades_procesadas - codigos_sobrantes - " +
+          "AND sin_limite = 0 AND (unidades_totales - unidades_procesadas - codigos_sobrantes - " +
           "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) = ?",
       )
         .bind(ahora, pedido, ean, pedido, ean, unidadesAJustificar)
@@ -741,7 +746,7 @@ export const accionesEscritura = {
       throw new Error("La fecha del registro no puede ser posterior a hoy.");
 
     const disponible = await env.DB.prepare(
-      "SELECT v.unidades_totales AS totales, " +
+      "SELECT v.unidades_totales AS totales, v.sin_limite AS sinLimite, " +
         "(SELECT COALESCE(SUM(r.unidades_procesadas_operario + r.codigos_sobrantes), 0) " +
         "FROM registros r WHERE r.numero_pedido = v.numero_pedido AND r.ean = v.ean_producto " +
         "AND r.anulado = 0 AND r.id != ?) AS ocupadoOtras, " +
@@ -754,7 +759,10 @@ export const accionesEscritura = {
 
     const restante =
       disponible.totales - disponible.ocupadoOtras - disponible.justificado;
-    if (unidadesNuevas + codigosSobrantesNuevos > restante) {
+    if (
+      !disponible.sinLimite &&
+      unidadesNuevas + codigosSobrantesNuevos > restante
+    ) {
       throw new Error(
         "La cantidad ingresada (" +
           unidadesNuevas +
@@ -894,7 +902,7 @@ export const accionesEscritura = {
     const ean = actual.ean;
 
     const disponible = await env.DB.prepare(
-      "SELECT v.unidades_totales AS totales, " +
+      "SELECT v.unidades_totales AS totales, v.sin_limite AS sinLimite, " +
         "(SELECT COALESCE(SUM(r.unidades_procesadas_operario + r.codigos_sobrantes), 0) " +
         "FROM registros r WHERE r.numero_pedido = v.numero_pedido AND r.ean = v.ean_producto " +
         "AND r.anulado = 0) AS ocupadoActivos, " +
@@ -909,7 +917,7 @@ export const accionesEscritura = {
       disponible.totales - disponible.ocupadoActivos - disponible.justificado;
     const ocupaEstaFila =
       actual.unidades_procesadas_operario + actual.codigos_sobrantes;
-    if (ocupaEstaFila > restante) {
+    if (!disponible.sinLimite && ocupaEstaFila > restante) {
       throw new Error(
         "No se puede reactivar: este registro ocupa " +
           ocupaEstaFila +
