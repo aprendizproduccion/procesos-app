@@ -3095,7 +3095,7 @@
         filtrarProcesosPorPedido();
         resetContadorPedido();
 
-        if (codigoEan && pedidoInput.value.trim() !== pedidoValidado) {
+        if (codigoEan && pedidoCanonico(pedidoInput.value) !== pedidoValidado) {
           codigoEan = "";
           unidadesEsperadas = null;
           unidadesRestantes = null;
@@ -3105,6 +3105,13 @@
           document.getElementById("alertaEan").innerHTML =
             '<div class="msg warn">AVISO: Cambiaste el número de pedido. Vuelve a escanear el EAN para validar de nuevo.</div>';
           document.getElementById("btnSubmit").disabled = true;
+        }
+      });
+
+      pedidoInput.addEventListener("change", function () {
+        const canonico = pedidoCanonico(pedidoInput.value);
+        if (canonico && canonico !== pedidoInput.value) {
+          pedidoInput.value = canonico;
         }
       });
 
@@ -3191,7 +3198,9 @@
       // ---------------- LÓGICA DE FILTROS ----------------
 
       function filtrarProcesosPorPedido() {
-        const pedidoVal = document.getElementById("pedido").value.trim();
+        const pedidoVal = pedidoCanonico(
+          document.getElementById("pedido").value,
+        );
         const sel = document.getElementById("proceso");
 
         const filtrados = procesos.filter((p) => p.pedido === pedidoVal);
@@ -3212,7 +3221,7 @@
       // ---------------- EVENTOS DEL ESCÁNER EAN ----------------
       function confirmarEan() {
         const valor = eanInput.value.trim();
-        const pedidoVal = pedidoInput.value.trim();
+        const pedidoVal = pedidoCanonico(pedidoInput.value);
 
         if (!valor) return;
         if (!pedidoVal) {
@@ -3344,7 +3353,9 @@
         (id) =>
           document.getElementById(id).addEventListener("input", () => {
             actualizarPreview();
-            const pedidoActual = document.getElementById("pedido").value.trim();
+            const pedidoActual = pedidoCanonico(
+              document.getElementById("pedido").value,
+            );
             if (pedidoActual) cargarResumenPedido(pedidoActual);
             if (id === "totalUnidades") ejecutarValidacionCantidades();
           }),
@@ -3456,7 +3467,9 @@
 
       function procesoValido() {
         const nombre = document.getElementById("proceso").value.trim();
-        const pedidoActual = document.getElementById("pedido").value.trim();
+        const pedidoActual = pedidoCanonico(
+          document.getElementById("pedido").value,
+        );
         if (!nombre) return null;
         return (
           procesos.find(
@@ -3546,7 +3559,7 @@
           .value.trim();
 
         const payload = {
-          pedido: document.getElementById("pedido").value.trim(),
+          pedido: pedidoCanonico(document.getElementById("pedido").value),
           codigoEan: codigoEan,
           coordinador: document.getElementById("coordinador").value.trim(),
           supernumerario: document
@@ -3636,9 +3649,9 @@
               document.getElementById("horaFin").value = "";
               document.getElementById("alertaCantidad").innerHTML = "";
               document.getElementById("previewCard").style.display = "none";
-              const pedidoActual = document
-                .getElementById("pedido")
-                .value.trim();
+              const pedidoActual = pedidoCanonico(
+                document.getElementById("pedido").value,
+              );
               if (pedidoActual) cargarResumenPedido(pedidoActual);
             } else {
               mostrarMsg("Error: " + res.message, false);
@@ -3989,7 +4002,9 @@
       document
         .getElementById("btnCerrarPedido")
         .addEventListener("click", function () {
-          const pedidoActual = document.getElementById("pedido").value.trim();
+          const pedidoActual = pedidoCanonico(
+            document.getElementById("pedido").value,
+          );
           if (!pedidoActual) {
             document.getElementById("modalSinEan").classList.add("visible");
             return;
