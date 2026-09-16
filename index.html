@@ -838,10 +838,6 @@
               <span class="seguimiento-kpi-valor" id="kpiTotalPedidos">—</span>
               <span class="seguimiento-kpi-label">Pedidos</span>
             </div>
-            <div class="seguimiento-kpi seguimiento-kpi-completado">
-              <span class="seguimiento-kpi-valor" id="kpiCompletados">—</span>
-              <span class="seguimiento-kpi-label">Completados</span>
-            </div>
             <div class="seguimiento-kpi seguimiento-kpi-proceso">
               <span class="seguimiento-kpi-valor" id="kpiEnProceso">—</span>
               <span class="seguimiento-kpi-label">En proceso</span>
@@ -873,6 +869,9 @@
           ></p>
           <div class="seguimiento-grafica-wrap" style="height: 120px">
             <canvas id="graficaDetallePedido"></canvas>
+          </div>
+          <div class="seguimiento-grafica-wrap" style="height: 140px">
+            <canvas id="graficaGaugeEficiencia"></canvas>
           </div>
           <div
             class="seguimiento-kpi"
@@ -2118,9 +2117,6 @@
 
       function actualizarKpisPaquetes(paquetes) {
         const total = paquetes.length;
-        const completados = paquetes.filter(
-          (p) => p.estado === "Completado",
-        ).length;
         const enProceso = paquetes.filter(
           (p) => p.estado === "En proceso",
         ).length;
@@ -2136,7 +2132,6 @@
           : null;
 
         document.getElementById("kpiTotalPedidos").textContent = total;
-        document.getElementById("kpiCompletados").textContent = completados;
         document.getElementById("kpiEnProceso").textContent = enProceso;
         document.getElementById("kpiPendientes").textContent = pendientes;
         document.getElementById("kpiEficienciaPromedio").textContent =
@@ -2144,9 +2139,6 @@
       }
 
       function renderGraficasPaquetes(paquetes) {
-        const completados = paquetes.filter(
-          (p) => p.estado === "Completado",
-        ).length;
         const enProceso = paquetes.filter(
           (p) => p.estado === "En proceso",
         ).length;
@@ -2160,11 +2152,11 @@
           {
             type: "doughnut",
             data: {
-              labels: ["Completado", "En proceso", "Pendiente"],
+              labels: ["En proceso", "Pendiente"],
               datasets: [
                 {
-                  data: [completados, enProceso, pendientes],
-                  backgroundColor: ["#6ee7b7", "#c7d2fe", "#fde68a"],
+                  data: [enProceso, pendientes],
+                  backgroundColor: ["#c7d2fe", "#fde68a"],
                 },
               ],
             },
@@ -2241,9 +2233,16 @@
           "block";
         document.getElementById("seguimientoVistaDetalle").style.display =
           "none";
-        renderFilasPaquetes(paquetesActuales);
-        actualizarKpisPaquetes(paquetesActuales);
-        renderGraficasPaquetes(paquetesActuales);
+        const activos = paquetesActuales.filter(
+          (p) => p.estado !== "Completado",
+        );
+        if (paquetesActuales.length > 0 && activos.length === 0) {
+          document.getElementById("seguimientoAlerta").innerHTML =
+            '<p class="hint">No hay pedidos pendientes ni en proceso.</p>';
+        }
+        renderFilasPaquetes(activos);
+        actualizarKpisPaquetes(activos);
+        renderGraficasPaquetes(activos);
       }
 
       function mostrarVistaDetallePedido(p) {
@@ -2255,6 +2254,7 @@
           `Pedido ${p.pedido} — Total: ${textoTotalPaquete(p)} uds`;
         renderFilasPaquetes([p]);
         renderGraficaDetallePedido(p);
+        renderGaugeEficienciaDetalle(p);
         actualizarKpiEficienciaDetalle(p);
       }
 
@@ -2359,6 +2359,73 @@
               },
             },
           },
+        });
+      }
+
+      let chartGaugeEficiencia = null;
+
+      function renderGaugeEficienciaDetalle(p) {
+        const ctx = document
+          .getElementById("graficaGaugeEficiencia")
+          .getContext("2d");
+        if (chartGaugeEficiencia) chartGaugeEficiencia.destroy();
+
+        const ef = p.eficiencia;
+        let colorRelleno = "#e5e7eb";
+        let colorTexto = "#6b7280";
+        if (ef !== null && ef >= 75) {
+          colorRelleno = "#6ee7b7";
+          colorTexto = "#065f46";
+        } else if (ef !== null && ef >= 50) {
+          colorRelleno = "#fde68a";
+          colorTexto = "#92400e";
+        } else if (ef !== null) {
+          colorRelleno = "#fca5a5";
+          colorTexto = "#991b1b";
+        }
+
+        const relleno = ef === null ? 0 : Math.min(Math.max(ef, 0), 100);
+        const textoCentro = ef === null ? "—" : ef + "%";
+
+        const pluginTextoCentro = {
+          id: "textoCentroGauge",
+          afterDraw(chart) {
+            const arco = chart.getDatasetMeta(0).data[0];
+            if (!arco) return;
+            const c = chart.ctx;
+            c.save();
+            c.font = "700 22px sans-serif";
+            c.fillStyle = colorTexto;
+            c.textAlign = "center";
+            c.textBaseline = "bottom";
+            c.fillText(textoCentro, arco.x, arco.y - 4);
+            c.restore();
+          },
+        };
+
+        chartGaugeEficiencia = new Chart(ctx, {
+          type: "doughnut",
+          data: {
+            datasets: [
+              {
+                data: [relleno, 100 - relleno],
+                backgroundColor: [colorRelleno, "#e5e7eb"],
+                borderWidth: 0,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            rotation: -90,
+            circumference: 180,
+            cutout: "70%",
+            plugins: {
+              legend: { display: false },
+              tooltip: { enabled: false },
+            },
+          },
+          plugins: [pluginTextoCentro],
         });
       }
 
