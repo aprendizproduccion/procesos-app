@@ -1856,6 +1856,8 @@
             CAMPOS_BORRADOR_SUPERVISOR,
           );
           _guardarBorrador("rp_borrador_operario", CAMPOS_BORRADOR_OPERARIO);
+        } else if (document.visibilityState === "visible") {
+          refrescarCatalogos();
         }
       });
 
@@ -2669,6 +2671,7 @@
           .getElementById("modalEditarRegistro")
           .classList.remove("visible");
         idRegistroEnEdicion = null;
+        refrescarCatalogos();
       }
 
       let guardarEdicionEnCurso = false;
@@ -3360,85 +3363,182 @@
         }
       });
 
-      // ---------------- CARGA DE DATOS INICIALES ----------------
+      // ---------------- CARGA Y REFRESCO DE CATÁLOGOS ----------------
 
-      // 1. Cargar Procesos
-      llamarAPI("getProcesos", {})
-        .then(function (resp) {
-          if (!resp.success) {
-            console.error("Error cargando procesos:", resp.message);
-            return;
-          }
-          procesos = resp.data;
-          construirIndicePedidos();
-          filtrarProcesosPorPedido();
-          actualizarTasaHint();
-          actualizarPreview();
-        })
-        .catch(function (err) {
-          console.error("Error de conexión cargando procesos:", err.message);
-        });
+      const REFRESCO_CATALOGOS_MIN_MS = 60 * 1000; // tope entre refrescos automáticos
+      let _ultimoRefrescoCatalogos = 0;
+      let _refrescoCatalogosEnCurso = false;
 
-      // 2. Cargar Operarios
-      llamarAPI("getOperariosData", {})
-        .then(function (resp) {
-          if (!resp.success) {
-            console.error("Error cargando operarios:", resp.message);
-            return;
-          }
-          catalogoOperarios = resp.data;
-          document.getElementById("sugeridos").innerHTML = catalogoOperarios
-            .map((op) => `<option value="${op.nombre}">`)
-            .join("");
-          const equiposUnicos = [
-            ...new Set(
-              catalogoOperarios.map((op) => op.equipo).filter(Boolean),
-            ),
-          ];
-          const selEquipo = document.getElementById("equipoSelect");
-          selEquipo.innerHTML =
-            '<option value="">Selecciona un equipo...</option>' +
-            equiposUnicos
-              .map((eq) => `<option value="${eq}">${eq}</option>`)
-              .join("");
-        })
-        .catch(function (err) {
-          console.error("Error de conexión cargando operarios:", err.message);
-        });
+      // Devuelve true si el valor ya no existe en las opciones actuales.
+      function _restaurarValorSelect(id, valor) {
+        if (!valor) return false;
+        const sel = document.getElementById(id);
+        const sigueExistiendo = Array.prototype.some.call(
+          sel.options,
+          (o) => o.value === valor,
+        );
+        if (sigueExistiendo) {
+          sel.value = valor;
+          return false;
+        }
+        return true;
+      }
 
-      // 3. Cargar Supervisores y Supernumerarios
-      llamarAPI("getSupervisoresData", {})
-        .then(function (resp) {
-          if (!resp.success) {
-            console.error("Error cargando supervisores:", resp.message);
-            return;
-          }
-          const data = resp.data;
-          datosSupervisores = data;
-          const htmlCoordinadores =
-            '<option value="">Selecciona un coordinador...</option>' +
-            data.coordinadores
-              .map((c) => `<option value="${c}">${c}</option>`)
+      // Reemplaza las opciones conservando la selección actual.
+      function _reconstruirSelect(id, html) {
+        const sel = document.getElementById(id);
+        const anterior = sel.value;
+        sel.innerHTML = html;
+        return _restaurarValorSelect(id, anterior);
+      }
+
+      function _avisarSeleccionPerdida(avisoId, campos) {
+        if (!campos.length) return;
+        document.getElementById(avisoId).innerHTML =
+          '<div class="msg warn">El catálogo se actualizó y ya no existe: ' +
+          escapeHtml(campos.join(", ")) +
+          ". Vuelve a seleccionarlo antes de enviar.</div>";
+      }
+
+      // 1. Procesos
+      function cargarProcesos() {
+        return llamarAPI("getProcesos", {})
+          .then(function (resp) {
+            if (!resp.success) {
+              console.error("Error cargando procesos:", resp.message);
+              return;
+            }
+            procesos = resp.data;
+            construirIndicePedidos();
+
+            const procesoAnterior = document.getElementById("proceso").value;
+            const opProcesoAnterior =
+              document.getElementById("opProceso").value;
+
+            filtrarProcesosPorPedido();
+            filtrarProcesosOperarioPorPedido();
+
+            if (_restaurarValorSelect("proceso", procesoAnterior)) {
+              _avisarSeleccionPerdida("avisoBorradorSupervisor", [
+                "el proceso",
+              ]);
+            }
+            actualizarTasaHint();
+            actualizarPreview();
+
+            if (_restaurarValorSelect("opProceso", opProcesoAnterior)) {
+              _avisarSeleccionPerdida("avisoBorradorOperario", ["el proceso"]);
+            }
+            document
+              .getElementById("opProceso")
+              .dispatchEvent(new Event("change"));
+          })
+          .catch(function (err) {
+            console.error("Error de conexión cargando procesos:", err.message);
+          });
+      }
+
+      // 2. Operarios
+      function cargarOperarios() {
+        return llamarAPI("getOperariosData", {})
+          .then(function (resp) {
+            if (!resp.success) {
+              console.error("Error cargando operarios:", resp.message);
+              return;
+            }
+            catalogoOperarios = resp.data;
+            document.getElementById("sugeridos").innerHTML = catalogoOperarios
+              .map((op) => `<option value="${op.nombre}">`)
               .join("");
-          const htmlSupernumerarios =
-            '<option value="">Selecciona un supernumerario...</option>' +
-            data.supernumerarios
-              .map((s) => `<option value="${s.nombre}">${s.nombre}</option>`)
-              .join("");
-          document.getElementById("coordinador").innerHTML = htmlCoordinadores;
-          document.getElementById("supernumerario").innerHTML =
-            htmlSupernumerarios;
-          document.getElementById("opCoordinador").innerHTML =
-            htmlCoordinadores;
-          document.getElementById("opSupernumerario").innerHTML =
-            htmlSupernumerarios;
-        })
-        .catch(function (err) {
-          console.error(
-            "Error de conexión cargando supervisores:",
-            err.message,
-          );
-        });
+            const equiposUnicos = [
+              ...new Set(
+                catalogoOperarios.map((op) => op.equipo).filter(Boolean),
+              ),
+            ];
+            _reconstruirSelect(
+              "equipoSelect",
+              '<option value="">Selecciona un equipo...</option>' +
+                equiposUnicos
+                  .map((eq) => `<option value="${eq}">${eq}</option>`)
+                  .join(""),
+            );
+          })
+          .catch(function (err) {
+            console.error("Error de conexión cargando operarios:", err.message);
+          });
+      }
+
+      // 3. Supervisores y supernumerarios
+      function cargarSupervisores() {
+        return llamarAPI("getSupervisoresData", {})
+          .then(function (resp) {
+            if (!resp.success) {
+              console.error("Error cargando supervisores:", resp.message);
+              return;
+            }
+            const data = resp.data;
+            datosSupervisores = data;
+            const htmlCoordinadores =
+              '<option value="">Selecciona un coordinador...</option>' +
+              data.coordinadores
+                .map((c) => `<option value="${c}">${c}</option>`)
+                .join("");
+            const htmlSupernumerarios =
+              '<option value="">Selecciona un supernumerario...</option>' +
+              data.supernumerarios
+                .map((s) => `<option value="${s.nombre}">${s.nombre}</option>`)
+                .join("");
+
+            const perdidosSupervisor = [];
+            if (_reconstruirSelect("coordinador", htmlCoordinadores))
+              perdidosSupervisor.push("el coordinador");
+            if (_reconstruirSelect("supernumerario", htmlSupernumerarios))
+              perdidosSupervisor.push("el supernumerario");
+            _avisarSeleccionPerdida(
+              "avisoBorradorSupervisor",
+              perdidosSupervisor,
+            );
+
+            const perdidosOperario = [];
+            if (_reconstruirSelect("opCoordinador", htmlCoordinadores))
+              perdidosOperario.push("el coordinador");
+            if (_reconstruirSelect("opSupernumerario", htmlSupernumerarios))
+              perdidosOperario.push("el supernumerario");
+            _avisarSeleccionPerdida("avisoBorradorOperario", perdidosOperario);
+          })
+          .catch(function (err) {
+            console.error(
+              "Error de conexión cargando supervisores:",
+              err.message,
+            );
+          });
+      }
+
+      // Orquestador: guarda de modal abierto + tope de frecuencia.
+      function refrescarCatalogos(forzar) {
+        if (_refrescoCatalogosEnCurso) return Promise.resolve(false);
+        if (!forzar) {
+          if (idRegistroEnEdicion !== null) return Promise.resolve(false);
+          if (Date.now() - _ultimoRefrescoCatalogos < REFRESCO_CATALOGOS_MIN_MS)
+            return Promise.resolve(false);
+        }
+        _refrescoCatalogosEnCurso = true;
+        return Promise.all([
+          cargarProcesos(),
+          cargarOperarios(),
+          cargarSupervisores(),
+        ])
+          .then(function () {
+            _ultimoRefrescoCatalogos = Date.now();
+            return true;
+          })
+          .finally(function () {
+            _refrescoCatalogosEnCurso = false;
+          });
+      }
+
+      // Carga inicial (forzada: arranca el reloj del tope de frecuencia).
+      refrescarCatalogos(true);
 
       // ---------------- LÓGICA DE FILTROS ----------------
 
