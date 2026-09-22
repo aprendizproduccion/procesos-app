@@ -1014,9 +1014,14 @@
 
         <div>
           <label>Proceso</label>
-          <select id="proceso">
-            <option value="">Ingresa un pedido primero...</option>
-          </select>
+          <div class="campo-sugerencias">
+            <input
+              id="proceso"
+              placeholder="Ingresa un pedido primero..."
+              autocomplete="off"
+            />
+            <div id="sugProceso" class="lista-sugerencias" role="listbox"></div>
+          </div>
         </div>
         <p class="tasa-hint" id="tasaHint"></p>
         <button
@@ -1239,9 +1244,14 @@
       <div id="opAlertaEan"></div>
 
       <label>Proceso</label>
-      <select id="opProceso">
-        <option value="">Ingresa un pedido primero...</option>
-      </select>
+      <div class="campo-sugerencias">
+        <input
+          id="opProceso"
+          placeholder="Ingresa un pedido primero..."
+          autocomplete="off"
+        />
+        <div id="sugOpProceso" class="lista-sugerencias" role="listbox"></div>
+      </div>
       <p class="tasa-hint" id="opTasaHint"></p>
       <button
         type="button"
@@ -3098,10 +3108,11 @@
         document.getElementById("calcSuplementoMin").value = "0";
         document.getElementById("calcCantidadOperarios").value = "1";
 
-        const defaultOption =
-          '<option value="">Ingresa un pedido primero...</option>';
-        document.getElementById("proceso").innerHTML = defaultOption;
-        document.getElementById("opProceso").innerHTML = defaultOption;
+        ["proceso", "opProceso"].forEach((id) => {
+          const campo = document.getElementById(id);
+          campo.value = "";
+          campo.placeholder = "Ingresa un pedido primero...";
+        });
 
         ["btnSubmit", "opBtnSubmit"].forEach((id) => {
           const btn = document.getElementById(id);
@@ -3257,7 +3268,13 @@
         return indicePedidos.get(normalizarPedido(limpio)) || limpio;
       }
 
-      function activarSugerenciasPedido(inputId, listaId, alElegir) {
+      function activarSugerenciasPedido(
+        inputId,
+        listaId,
+        alElegir,
+        obtenerLista,
+      ) {
+        const fuente = obtenerLista || (() => listaPedidos);
         const input = document.getElementById(inputId);
         const lista = document.getElementById(listaId);
         let actuales = [];
@@ -3272,8 +3289,9 @@
           const clave = normalizarPedido(input.value);
           if (!clave) return ocultar();
 
-          const inician = listaPedidos.filter((p) => p.clave.startsWith(clave));
-          const contienen = listaPedidos.filter(
+          const base = fuente();
+          const inician = base.filter((p) => p.clave.startsWith(clave));
+          const contienen = base.filter(
             (p) => !p.clave.startsWith(clave) && p.clave.includes(clave),
           );
           actuales = inician.concat(contienen).slice(0, MAX_SUGERENCIAS_PEDIDO);
@@ -3320,6 +3338,54 @@
         "edicionPedidoInput",
         "sugEdicionPedido",
         buscarRegistrosParaEditar,
+      );
+
+      // ---------------- BUSCADOR DE PROCESOS (misma base que pedido) ----------------
+      function procesoDe(nombre, pedidoVal) {
+        const clave = normalizarPedido(nombre);
+        if (!clave || !pedidoVal) return null;
+        return (
+          procesos.find(
+            (p) =>
+              p.pedido === pedidoVal && normalizarPedido(p.nombre) === clave,
+          ) || null
+        );
+      }
+
+      function listaProcesosDe(pedidoInputId) {
+        const pedidoVal = pedidoCanonico(
+          document.getElementById(pedidoInputId).value,
+        );
+        if (!pedidoVal) return [];
+        return procesos
+          .filter((p) => p.pedido === pedidoVal)
+          .map((p) => ({ valor: p.nombre, clave: normalizarPedido(p.nombre) }));
+      }
+
+      // Ajusta placeholder y valida lo escrito contra el pedido actual.
+      // Devuelve true si se borró un proceso que ya no existe para ese pedido.
+      function _sincronizarInputProceso(inputId, pedidoVal) {
+        const input = document.getElementById(inputId);
+        input.placeholder = pedidoVal
+          ? "Escribe para buscar un proceso..."
+          : "Ingresa un pedido primero...";
+        const escrito = input.value.trim();
+        if (!escrito) return false;
+        const p = procesoDe(escrito, pedidoVal);
+        if (p) {
+          input.value = p.nombre;
+          return false;
+        }
+        if (document.activeElement === input) return false; // no borrar mientras escribe
+        input.value = "";
+        return true;
+      }
+
+      activarSugerenciasPedido("proceso", "sugProceso", null, () =>
+        listaProcesosDe("pedido"),
+      );
+      activarSugerenciasPedido("opProceso", "sugOpProceso", null, () =>
+        listaProcesosDe("opPedido"),
       );
 
       function _resetFechaAdmin() {
@@ -3411,14 +3477,7 @@
             procesos = resp.data;
             construirIndicePedidos();
 
-            const procesoAnterior = document.getElementById("proceso").value;
-            const opProcesoAnterior =
-              document.getElementById("opProceso").value;
-
-            filtrarProcesosPorPedido();
-            filtrarProcesosOperarioPorPedido();
-
-            if (_restaurarValorSelect("proceso", procesoAnterior)) {
+            if (filtrarProcesosPorPedido()) {
               _avisarSeleccionPerdida("avisoBorradorSupervisor", [
                 "el proceso",
               ]);
@@ -3426,7 +3485,7 @@
             actualizarTasaHint();
             actualizarPreview();
 
-            if (_restaurarValorSelect("opProceso", opProcesoAnterior)) {
+            if (filtrarProcesosOperarioPorPedido()) {
               _avisarSeleccionPerdida("avisoBorradorOperario", ["el proceso"]);
             }
             document
@@ -3546,21 +3605,10 @@
         const pedidoVal = pedidoCanonico(
           document.getElementById("pedido").value,
         );
-        const sel = document.getElementById("proceso");
-
-        const filtrados = procesos.filter((p) => p.pedido === pedidoVal);
-        sel.innerHTML =
-          '<option value="">' +
-          (pedidoVal
-            ? "Selecciona un proceso..."
-            : "Ingresa un pedido primero...") +
-          "</option>" +
-          filtrados
-            .map((p) => `<option value="${p.nombre}">${p.nombre}</option>`)
-            .join("");
-
+        const perdido = _sincronizarInputProceso("proceso", pedidoVal);
         actualizarTasaHint();
         actualizarPreview();
+        return perdido;
       }
 
       // ---------------- EVENTOS DEL ESCÁNER EAN ----------------
@@ -3692,6 +3740,8 @@
 
       // ---------------- LÓGICA DE TIEMPOS Y PREVIEW ----------------
       document.getElementById("proceso").addEventListener("change", () => {
+        const p = procesoValido();
+        if (p) document.getElementById("proceso").value = p.nombre;
         actualizarTasaHint();
         actualizarPreview();
       });
@@ -3822,17 +3872,9 @@
       }
 
       function procesoValido() {
-        const nombre = document.getElementById("proceso").value.trim();
-        const pedidoActual = pedidoCanonico(
-          document.getElementById("pedido").value,
-        );
-        if (!nombre) return null;
-        return (
-          procesos.find(
-            (p) =>
-              p.nombre.toLowerCase() === nombre.toLowerCase() &&
-              p.pedido === pedidoActual,
-          ) || null
+        return procesoDe(
+          document.getElementById("proceso").value.trim(),
+          pedidoCanonico(document.getElementById("pedido").value),
         );
       }
 
@@ -4423,17 +4465,7 @@
         const pedidoVal = pedidoCanonico(
           document.getElementById("opPedido").value,
         );
-        const sel = document.getElementById("opProceso");
-        const filtrados = procesos.filter((p) => p.pedido === pedidoVal);
-        sel.innerHTML =
-          '<option value="">' +
-          (pedidoVal
-            ? "Selecciona un proceso..."
-            : "Ingresa un pedido primero...") +
-          "</option>" +
-          filtrados
-            .map((p) => `<option value="${p.nombre}">${p.nombre}</option>`)
-            .join("");
+        return _sincronizarInputProceso("opProceso", pedidoVal);
       }
       document
         .getElementById("opPedido")
@@ -4512,36 +4544,33 @@
         .getElementById("opEanInput")
         .addEventListener("search", confirmarEanOperario);
 
+      function procesoValidoOperario() {
+        return procesoDe(
+          document.getElementById("opProceso").value.trim(),
+          pedidoCanonico(document.getElementById("opPedido").value),
+        );
+      }
+
       document
         .getElementById("opProceso")
         .addEventListener("change", function () {
           const hint = document.getElementById("opTasaHint");
           const btnLink = document.getElementById("opBtnLinkProceso");
-          const nombre = this.value.trim();
-          const pedidoActual = pedidoCanonico(
-            document.getElementById("opPedido").value,
-          );
-          const p = procesos.find(
-            (pr) =>
-              pr.nombre.toLowerCase() === nombre.toLowerCase() &&
-              pr.pedido === pedidoActual,
-          );
-          hint.textContent = p
-            ? `Tasa Estándar: ${p.unidadesHora} unidades/hora`
-            : "";
+          const p = procesoValidoOperario();
+          if (p) this.value = p.nombre;
+          if (!this.value.trim()) {
+            hint.textContent = "";
+          } else if (p) {
+            hint.textContent = `Tasa Estándar: ${p.unidadesHora} unidades/hora`;
+          } else {
+            hint.innerHTML =
+              '<span style="color:#991b1b;">⚠ Ese proceso no existe para el pedido ingresado.</span>';
+          }
           btnLink.style.display = p && p.link ? "block" : "none";
         });
 
       function abrirLinkProcesoOperario() {
-        const nombre = document.getElementById("opProceso").value.trim();
-        const pedidoActual = pedidoCanonico(
-          document.getElementById("opPedido").value,
-        );
-        const p = procesos.find(
-          (pr) =>
-            pr.nombre.toLowerCase() === nombre.toLowerCase() &&
-            pr.pedido === pedidoActual,
-        );
+        const p = procesoValidoOperario();
         if (p && p.link) window.open(p.link, "_blank");
       }
 
@@ -4572,7 +4601,9 @@
             .value.trim(),
           pedido: pedidoCanonico(document.getElementById("opPedido").value),
           codigoEan: opCodigoEan,
-          proceso: document.getElementById("opProceso").value.trim(),
+          proceso: procesoValidoOperario()
+            ? procesoValidoOperario().nombre
+            : document.getElementById("opProceso").value.trim(),
           horaInicio: document.getElementById("opHoraInicio").value,
           horaFin: document.getElementById("opHoraFin").value,
           suplementoMin: Number(
@@ -4664,8 +4695,9 @@
 
       function resetFormularioOperario() {
         document.getElementById("opPedido").value = "";
-        document.getElementById("opProceso").innerHTML =
-          '<option value="">Ingresa un pedido primero...</option>';
+        document.getElementById("opProceso").value = "";
+        document.getElementById("opProceso").placeholder =
+          "Ingresa un pedido primero...";
         document.getElementById("opTasaHint").textContent = "";
         opCodigoEan = "";
         opPedidoValidado = "";
