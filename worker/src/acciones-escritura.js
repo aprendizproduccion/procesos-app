@@ -127,7 +127,7 @@ export const accionesEscritura = {
       const durHoras = Math.round((duracionRealMin / 60) * 100) / 100;
       const { unidadesHoraReal, eficiencia } = _calcularMetricasProduccion(
         unidadesPorOperario,
-        n > 0 ? tasaEstandar / n : 0,
+        tasaEstandar, // el estándar del proceso es por persona, no por banda
         durHoras,
       );
 
