@@ -1791,6 +1791,7 @@
 
       const CAMPOS_BORRADOR_SUPERVISOR = [
         "pedido",
+        "proceso",
         "horaInicio",
         "horaFin",
         "totalUnidades",
@@ -1800,6 +1801,7 @@
       const CAMPOS_BORRADOR_OPERARIO = [
         "opCedula",
         "opPedido",
+        "opProceso",
         "opHoraInicio",
         "opHoraFin",
         "opUnidades",
@@ -1842,7 +1844,7 @@
         });
         if (huboRestauracion) {
           document.getElementById(avisoId).innerHTML =
-            '<div class="msg warn">Se recuperaron datos sin guardar. Coordinador, supernumerario, proceso y suplemento no se pudieron mantener — vuelve a seleccionarlos.</div>';
+            '<div class="msg warn">Se recuperaron datos sin guardar. Coordinador, supernumerario y suplemento no se pudieron mantener — vuelve a seleccionarlos.</div>';
         }
       }
 
