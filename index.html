@@ -1445,7 +1445,19 @@
             </div>
           </div>
           <label>Proceso</label>
-          <select id="editProceso"></select>
+          <div class="campo-sugerencias">
+            <input
+              id="editProceso"
+              placeholder="Escribe para buscar un proceso..."
+              autocomplete="off"
+            />
+            <div
+              id="sugEditProceso"
+              class="lista-sugerencias"
+              role="listbox"
+            ></div>
+          </div>
+          <p class="tasa-hint" id="editProcesoHint"></p>
           <div class="row2 row2-campos">
             <div>
               <label>Hora inicio</label>
@@ -2468,6 +2480,7 @@
       let buscarRegistrosEditarEnCurso = false;
       let registrosEditarActuales = [];
       let idRegistroEnEdicion = null;
+      let pedidoRegistroEnEdicion = "";
       let snapshotFormularioEdicion = "";
 
       function buscarRegistrosParaEditar() {
@@ -2586,22 +2599,7 @@
         document.getElementById("editSupernumerario").innerHTML =
           document.getElementById("supernumerario").innerHTML;
 
-        const pedidoActual = registro.pedido;
-        const procesosFiltrados = procesos.filter(
-          (p) => p.pedido === pedidoActual,
-        );
-        let opcionesProceso =
-          '<option value="">Selecciona un proceso...</option>' +
-          procesosFiltrados
-            .map((p) => `<option value="${p.nombre}">${p.nombre}</option>`)
-            .join("");
-        if (
-          registro.proceso &&
-          !procesosFiltrados.some((p) => p.nombre === registro.proceso)
-        ) {
-          opcionesProceso += `<option value="${escapeHtml(registro.proceso)}">${escapeHtml(registro.proceso)} (fuera del catálogo actual)</option>`;
-        }
-        document.getElementById("editProceso").innerHTML = opcionesProceso;
+        pedidoRegistroEnEdicion = registro.pedido;
 
         document.getElementById("editSuplementoMin").innerHTML =
           _generarOpcionesSuplemento();
@@ -2611,6 +2609,9 @@
         document.getElementById("editSupernumerario").value =
           registro.supernumerario || "";
         document.getElementById("editProceso").value = registro.proceso || "";
+        document
+          .getElementById("editProceso")
+          .dispatchEvent(new Event("change"));
         document.getElementById("editHoraInicio").value =
           registro.horaInicio || "";
         document.getElementById("editHoraFin").value = registro.horaFinal || "";
@@ -2735,6 +2736,16 @@
           return;
         }
 
+        const procesoEdit = procesoValidoEdicion();
+        if (!procesoEdit) {
+          alertaDiv.innerHTML = document
+            .getElementById("editProceso")
+            .value.trim()
+            ? '<div class="msg err">Ese proceso no existe o no está asignado a este pedido.</div>'
+            : '<div class="msg err">Indica el proceso.</div>';
+          return;
+        }
+
         guardarEdicionEnCurso = true;
         const btn = document.getElementById("btnGuardarEdicion");
         const textoOriginal = btn.textContent;
@@ -2748,7 +2759,7 @@
           supernumerario: document
             .getElementById("editSupernumerario")
             .value.trim(),
-          proceso: document.getElementById("editProceso").value.trim(),
+          proceso: procesoEdit.nombre,
           horaInicio: document.getElementById("editHoraInicio").value,
           horaFin: document.getElementById("editHoraFin").value,
           suplementoMin: Number(
@@ -3354,14 +3365,17 @@
         );
       }
 
-      function listaProcesosDe(pedidoInputId) {
-        const pedidoVal = pedidoCanonico(
-          document.getElementById(pedidoInputId).value,
-        );
+      function listaProcesosDePedido(pedidoVal) {
         if (!pedidoVal) return [];
         return procesos
           .filter((p) => p.pedido === pedidoVal)
           .map((p) => ({ valor: p.nombre, clave: normalizarPedido(p.nombre) }));
+      }
+
+      function listaProcesosDe(pedidoInputId) {
+        return listaProcesosDePedido(
+          pedidoCanonico(document.getElementById(pedidoInputId).value),
+        );
       }
 
       // Ajusta placeholder y valida lo escrito contra el pedido actual.
@@ -3386,9 +3400,32 @@
       activarSugerenciasPedido("proceso", "sugProceso", null, () =>
         listaProcesosDe("pedido"),
       );
-      activarSugerenciasPedido("opProceso", "sugOpProceso", null, () =>
-        listaProcesosDe("opPedido"),
+      activarSugerenciasPedido("editProceso", "sugEditProceso", null, () =>
+        listaProcesosDePedido(pedidoRegistroEnEdicion),
       );
+
+      function procesoValidoEdicion() {
+        return procesoDe(
+          document.getElementById("editProceso").value.trim(),
+          pedidoRegistroEnEdicion,
+        );
+      }
+
+      document
+        .getElementById("editProceso")
+        .addEventListener("change", function () {
+          const hint = document.getElementById("editProcesoHint");
+          const p = procesoValidoEdicion();
+          if (p) this.value = p.nombre;
+          if (!this.value.trim()) {
+            hint.textContent = "";
+          } else if (p) {
+            hint.textContent = `Tasa Estándar: ${p.unidadesHora} unidades/hora`;
+          } else {
+            hint.innerHTML =
+              '<span style="color:#991b1b;">⚠ Ese proceso no existe o no está asignado a este pedido.</span>';
+          }
+        });
 
       function _resetFechaAdmin() {
         const campo = document.getElementById("fecha");
