@@ -594,6 +594,188 @@
       .sugerencia-item:active {
         background: #eef2ff;
       }
+
+      /* ===== Filtros compactos (barra + chips + panel) ===== */
+      .filtros-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .btn-filtros {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #fff;
+        border: 1px solid #d7dade;
+        border-radius: 999px;
+        padding: 7px 13px;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        color: #2452c9;
+        cursor: pointer;
+      }
+      .btn-filtros[aria-expanded="true"] {
+        background: #eaf0ff;
+        border-color: #2452c9;
+      }
+      .btn-filtros .contador {
+        display: inline-block;
+        background: #2452c9;
+        color: #fff;
+        border-radius: 999px;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        font-size: 11px;
+        line-height: 18px;
+        text-align: center;
+      }
+      .btn-filtros .contador[hidden] {
+        display: none;
+      }
+      .btn-filtros .caret {
+        font-size: 10px;
+        color: #7a8089;
+      }
+      .btn-limpiar {
+        margin-left: auto;
+        background: none;
+        border: 0;
+        padding: 4px;
+        color: #6b7280;
+        font-family: inherit;
+        font-size: 12px;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+      }
+      .chips:empty {
+        display: none;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        max-width: 100%;
+        background: #eef1f6;
+        border: 1px solid #dfe3ea;
+        border-radius: 999px;
+        padding: 4px 6px 4px 10px;
+        font-size: 12px;
+        color: #33383f;
+      }
+      .chip > span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .chip b {
+        color: #5b6168;
+        font-weight: 600;
+      }
+      .chip button {
+        flex: 0 0 auto;
+        width: 17px;
+        height: 17px;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        background: #d9dee7;
+        color: #454a52;
+        font-size: 12px;
+        line-height: 15px;
+        cursor: pointer;
+      }
+      .panel-filtros {
+        margin-top: 10px;
+        border: 1px solid #dfe3ea;
+        border-radius: 8px;
+        background: #fafbfc;
+        padding: 12px;
+      }
+      .panel-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+        gap: 10px;
+      }
+      .panel-grid label {
+        margin-bottom: 4px;
+      }
+      .panel-grid input,
+      .panel-grid select {
+        margin-bottom: 0;
+      }
+      .panel-grid > div {
+        min-width: 0;
+      }
+      .panel-acciones {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .panel-acciones button {
+        flex: 1;
+        height: 38px;
+        border-radius: 6px;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .panel-acciones .aplicar {
+        background: #2452c9;
+        color: #fff;
+        border: none;
+      }
+      .panel-acciones .cancelar {
+        background: #fff;
+        color: #444;
+        border: 1px solid #d7dade;
+      }
+      #btnBuscarRegistrosEditar {
+        min-width: 84px;
+      }
+      @media (max-width: 480px) {
+        .add-row.filtro-principal {
+          flex-direction: row;
+          align-items: center;
+        }
+        .add-row.filtro-principal .campo-sugerencias,
+        .add-row.filtro-principal input {
+          flex: 1 1 auto;
+          width: auto;
+        }
+        .add-row.filtro-principal button {
+          flex: 0 0 auto;
+          width: auto;
+          padding: 0 14px;
+        }
+        .btn-filtros {
+          min-height: 38px;
+          font-size: 14px;
+        }
+        .btn-limpiar {
+          padding: 10px 4px;
+          font-size: 13px;
+        }
+        .chip {
+          padding: 6px 6px 6px 12px;
+          font-size: 13px;
+        }
+        .chip button {
+          width: 22px;
+          height: 22px;
+          line-height: 20px;
+          font-size: 14px;
+        }
+      }
     </style>
   </head>
 
@@ -767,7 +949,7 @@
       <h1>Editar registros</h1>
       <div class="card">
         <label>Número de pedido</label>
-        <div class="add-row" style="margin-bottom: 14px">
+        <div class="add-row filtro-principal">
           <div class="campo-sugerencias">
             <input
               id="edicionPedidoInput"
@@ -781,28 +963,70 @@
               role="listbox"
             ></div>
           </div>
+          <button
+            type="button"
+            id="btnBuscarRegistrosEditar"
+            onclick="buscarRegistrosParaEditar()"
+          >
+            Buscar
+          </button>
         </div>
-        <label>Nombre de operario</label>
-        <div class="add-row" style="margin-bottom: 14px">
-          <input
-            id="edicionOperarioInput"
-            placeholder="Ej: Juan Pérez"
-            autocomplete="off"
-            enterkeyhint="search"
-          />
+        <div class="filtros-bar">
+          <button
+            type="button"
+            class="btn-filtros"
+            id="btnFiltrosEdicion"
+            aria-expanded="false"
+            onclick="togglePanelFiltros('edicion')"
+          >
+            Filtros<span class="contador" id="contadorFiltrosEdicion" hidden
+              >0</span
+            ><span class="caret" id="caretFiltrosEdicion">▼</span>
+          </button>
+          <button
+            type="button"
+            class="btn-limpiar"
+            id="btnLimpiarFiltrosEdicion"
+            hidden
+            onclick="limpiarFiltros('edicion')"
+          >
+            Limpiar
+          </button>
         </div>
-        <label>Fecha (opcional)</label>
-        <div class="add-row" style="margin-bottom: 14px">
-          <input id="edicionFechaInput" type="date" autocomplete="off" />
+        <div class="chips" id="chipsEdicion"></div>
+        <div class="panel-filtros" id="panelFiltrosEdicion" hidden>
+          <div class="panel-grid">
+            <div>
+              <label>Nombre de operario</label>
+              <input
+                id="edicionOperarioInput"
+                placeholder="Ej: Juan Pérez"
+                autocomplete="off"
+                enterkeyhint="search"
+              />
+            </div>
+            <div>
+              <label>Fecha</label>
+              <input id="edicionFechaInput" type="date" autocomplete="off" />
+            </div>
+          </div>
+          <div class="panel-acciones">
+            <button
+              type="button"
+              class="cancelar"
+              onclick="cancelarFiltros('edicion')"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              class="aplicar"
+              onclick="aplicarFiltros('edicion')"
+            >
+              Aplicar
+            </button>
+          </div>
         </div>
-        <button
-          type="button"
-          id="btnBuscarRegistrosEditar"
-          class="btn-submit"
-          onclick="buscarRegistrosParaEditar()"
-        >
-          Buscar
-        </button>
         <div id="edicionAlerta"></div>
         <div id="listaRegistrosEditar"></div>
       </div>
@@ -917,7 +1141,7 @@
       <h1>Control tiempos</h1>
       <div class="card">
         <label>Cédula</label>
-        <div class="add-row" style="margin-bottom: 14px">
+        <div class="add-row filtro-principal">
           <input
             id="ctCedulaInput"
             placeholder="Escanea o escribe tu cédula"
@@ -926,23 +1150,59 @@
           />
           <button type="button" onclick="buscarControlTiempos()">Buscar</button>
         </div>
-        <label>Mostrar</label>
-        <select
-          id="ctFiltro"
-          onchange="cambiarFiltroControlTiempos()"
-          style="margin-bottom: 14px"
-        >
-          <option value="fecha">Por fecha</option>
-          <option value="historico">Histórico (últimos 100)</option>
-        </select>
-        <div id="ctFechaWrap">
-          <label>Fecha</label>
-          <input
-            type="date"
-            id="ctFecha"
-            onchange="buscarControlTiempos()"
-            style="margin-bottom: 14px"
-          />
+        <div class="filtros-bar">
+          <button
+            type="button"
+            class="btn-filtros"
+            id="btnFiltrosControl"
+            aria-expanded="false"
+            onclick="togglePanelFiltros('control')"
+          >
+            Filtros<span class="contador" id="contadorFiltrosControl" hidden
+              >0</span
+            ><span class="caret" id="caretFiltrosControl">▼</span>
+          </button>
+          <button
+            type="button"
+            class="btn-limpiar"
+            id="btnLimpiarFiltrosControl"
+            hidden
+            onclick="limpiarFiltros('control')"
+          >
+            Limpiar
+          </button>
+        </div>
+        <div class="chips" id="chipsControl"></div>
+        <div class="panel-filtros" id="panelFiltrosControl" hidden>
+          <div class="panel-grid">
+            <div>
+              <label>Mostrar</label>
+              <select id="ctFiltro" onchange="cambiarFiltroControlTiempos()">
+                <option value="fecha">Por fecha</option>
+                <option value="historico">Histórico (últimos 100)</option>
+              </select>
+            </div>
+            <div id="ctFechaWrap">
+              <label>Fecha</label>
+              <input type="date" id="ctFecha" />
+            </div>
+          </div>
+          <div class="panel-acciones">
+            <button
+              type="button"
+              class="cancelar"
+              onclick="cancelarFiltros('control')"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              class="aplicar"
+              onclick="aplicarFiltros('control')"
+            >
+              Aplicar
+            </button>
+          </div>
         </div>
         <div id="ctAlerta"></div>
         <div style="overflow-x: auto">
@@ -1987,6 +2247,8 @@
         document.getElementById("edicionAlerta").innerHTML = "";
         document.getElementById("listaRegistrosEditar").innerHTML = "";
         registrosEditarActuales = [];
+        document.getElementById("panelFiltrosEdicion").hidden = true;
+        renderFiltros("edicion");
       }
 
       function abrirSeguimientoDesdeDashboard() {
@@ -2007,7 +2269,6 @@
         document.getElementById("ctFechaWrap").style.display = esFecha
           ? "block"
           : "none";
-        buscarControlTiempos();
       }
 
       function abrirControlTiemposDesdeDashboard() {
@@ -2021,6 +2282,224 @@
         document.getElementById("ctFechaWrap").style.display = "block";
         document.getElementById("ctAlerta").innerHTML = "";
         document.getElementById("ctBody").innerHTML = "";
+        document.getElementById("panelFiltrosControl").hidden = true;
+        renderFiltros("control");
+      }
+
+      // ---------------- FILTROS COMPACTOS (barra + chips + panel) ----------------
+      // Para agregar un filtro nuevo: súmalo al markup del panel y agrega una
+      // entrada en "campos". El alto en reposo no cambia.
+      const FILTROS_VISTAS = {
+        edicion: {
+          panel: "panelFiltrosEdicion",
+          boton: "btnFiltrosEdicion",
+          contador: "contadorFiltrosEdicion",
+          caret: "caretFiltrosEdicion",
+          limpiar: "btnLimpiarFiltrosEdicion",
+          chips: "chipsEdicion",
+          buscar: function () {
+            buscarRegistrosParaEditar();
+          },
+          puedeBuscar: function () {
+            return !!(
+              _valorFiltro("edicionPedidoInput") ||
+              _valorFiltro("edicionOperarioInput")
+            );
+          },
+          campos: [
+            { id: "edicionOperarioInput", etiqueta: "Operario" },
+            {
+              id: "edicionFechaInput",
+              etiqueta: "Fecha",
+              texto: _textoFechaChip,
+            },
+          ],
+        },
+        control: {
+          panel: "panelFiltrosControl",
+          boton: "btnFiltrosControl",
+          contador: "contadorFiltrosControl",
+          caret: "caretFiltrosControl",
+          limpiar: "btnLimpiarFiltrosControl",
+          chips: "chipsControl",
+          buscar: function () {
+            buscarControlTiempos();
+          },
+          puedeBuscar: function () {
+            return !!_valorFiltro("ctCedulaInput");
+          },
+          alCambiar: function () {
+            cambiarFiltroControlTiempos();
+          },
+          campos: [
+            {
+              id: "ctFiltro",
+              etiqueta: "Mostrar",
+              vacio: "fecha",
+              texto: function () {
+                return "Histórico (últimos 100)";
+              },
+            },
+            {
+              id: "ctFecha",
+              etiqueta: "Fecha",
+              fijo: function () {
+                return _valorFiltro("ctFecha") === _hoyBogotaCT();
+              },
+              porDefecto: function () {
+                return _hoyBogotaCT();
+              },
+              visible: function () {
+                return document.getElementById("ctFiltro").value === "fecha";
+              },
+              texto: function (v) {
+                return v === _hoyBogotaCT() ? "Hoy" : _textoFechaChip(v);
+              },
+            },
+          ],
+        },
+      };
+
+      const _snapshotFiltros = {};
+
+      function _valorFiltro(id) {
+        const el = document.getElementById(id);
+        return el ? String(el.value || "").trim() : "";
+      }
+
+      function _textoFechaChip(v) {
+        const p = String(v).split("-");
+        return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : v;
+      }
+
+      function _valorPorDefecto(campo) {
+        if (campo.porDefecto) return campo.porDefecto();
+        return campo.vacio === undefined ? "" : campo.vacio;
+      }
+
+      function _esFijo(campo) {
+        return typeof campo.fijo === "function" ? campo.fijo() : !!campo.fijo;
+      }
+
+      function _filtrosActivos(clave) {
+        const activos = [];
+        FILTROS_VISTAS[clave].campos.forEach(function (campo) {
+          if (campo.visible && !campo.visible()) return;
+          const valor = _valorFiltro(campo.id);
+          if (
+            !valor ||
+            valor === (campo.vacio === undefined ? "" : campo.vacio)
+          )
+            return;
+          const texto = campo.texto ? campo.texto(valor) : valor;
+          if (!texto) return;
+          activos.push({ campo: campo, texto: texto });
+        });
+        return activos;
+      }
+
+      function renderFiltros(clave) {
+        const cfg = FILTROS_VISTAS[clave];
+        const activos = _filtrosActivos(clave);
+        const abierto = !document.getElementById(cfg.panel).hidden;
+
+        const cuentan = activos.filter(function (a) {
+          return !_esFijo(a.campo);
+        });
+        const contador = document.getElementById(cfg.contador);
+        contador.textContent = cuentan.length;
+        contador.hidden = cuentan.length === 0;
+        document.getElementById(cfg.caret).textContent = abierto ? "▲" : "▼";
+        document
+          .getElementById(cfg.boton)
+          .setAttribute("aria-expanded", abierto ? "true" : "false");
+        document.getElementById(cfg.limpiar).hidden =
+          abierto || cuentan.length === 0;
+
+        const chipsDiv = document.getElementById(cfg.chips);
+        if (abierto) {
+          chipsDiv.innerHTML = "";
+          return;
+        }
+        chipsDiv.innerHTML = activos
+          .map(function (a) {
+            const quitar = _esFijo(a.campo)
+              ? ""
+              : '<button type="button" aria-label="Quitar filtro" onclick="quitarFiltro(\'' +
+                clave +
+                "','" +
+                a.campo.id +
+                "')\">&times;</button>";
+            return (
+              '<span class="chip"><span><b>' +
+              escapeHtml(a.campo.etiqueta) +
+              ":</b> " +
+              escapeHtml(a.texto) +
+              "</span>" +
+              quitar +
+              "</span>"
+            );
+          })
+          .join("");
+      }
+
+      function togglePanelFiltros(clave) {
+        const cfg = FILTROS_VISTAS[clave];
+        const panel = document.getElementById(cfg.panel);
+        if (panel.hidden) {
+          _snapshotFiltros[clave] = cfg.campos.map(function (c) {
+            return _valorFiltro(c.id);
+          });
+          panel.hidden = false;
+        } else {
+          panel.hidden = true;
+        }
+        renderFiltros(clave);
+      }
+
+      function cancelarFiltros(clave) {
+        const cfg = FILTROS_VISTAS[clave];
+        const previo = _snapshotFiltros[clave];
+        if (previo) {
+          cfg.campos.forEach(function (c, i) {
+            const el = document.getElementById(c.id);
+            if (el) el.value = previo[i];
+          });
+          if (cfg.alCambiar) cfg.alCambiar();
+        }
+        document.getElementById(cfg.panel).hidden = true;
+        renderFiltros(clave);
+      }
+
+      function aplicarFiltros(clave) {
+        const cfg = FILTROS_VISTAS[clave];
+        document.getElementById(cfg.panel).hidden = true;
+        renderFiltros(clave);
+        cfg.buscar();
+      }
+
+      function quitarFiltro(clave, idCampo) {
+        const cfg = FILTROS_VISTAS[clave];
+        const campo = cfg.campos.filter(function (c) {
+          return c.id === idCampo;
+        })[0];
+        const el = document.getElementById(idCampo);
+        if (!campo || !el) return;
+        el.value = _valorPorDefecto(campo);
+        if (cfg.alCambiar) cfg.alCambiar();
+        renderFiltros(clave);
+        if (cfg.puedeBuscar()) cfg.buscar();
+      }
+
+      function limpiarFiltros(clave) {
+        const cfg = FILTROS_VISTAS[clave];
+        cfg.campos.forEach(function (c) {
+          const el = document.getElementById(c.id);
+          if (el) el.value = _valorPorDefecto(c);
+        });
+        if (cfg.alCambiar) cfg.alCambiar();
+        renderFiltros(clave);
+        if (cfg.puedeBuscar()) cfg.buscar();
       }
 
       function buscarControlTiempos() {
@@ -2954,16 +3433,12 @@
       edicionOperarioInput.addEventListener("keydown", function (e) {
         if (e.key === "Enter") {
           e.preventDefault();
-          buscarRegistrosParaEditar();
+          aplicarFiltros("edicion");
         }
       });
-      edicionOperarioInput.addEventListener(
-        "search",
-        buscarRegistrosParaEditar,
-      );
-
-      const edicionFechaInput = document.getElementById("edicionFechaInput");
-      edicionFechaInput.addEventListener("change", buscarRegistrosParaEditar);
+      edicionOperarioInput.addEventListener("search", function () {
+        aplicarFiltros("edicion");
+      });
 
       document
         .getElementById("seguimientoPedidoInput")
