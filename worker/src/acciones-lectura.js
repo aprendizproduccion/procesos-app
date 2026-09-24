@@ -201,12 +201,14 @@ export const accionesLectura = {
       "SELECT ve.numero_pedido AS pedido, ve.subLinea AS subLinea, " +
         "ve.unidadesTotales AS unidadesTotales, ve.unidadesProcesadas AS unidadesProcesadas, " +
         "ve.codigosSobrantes AS codigosSobrantes, ve.sinLimite AS sinLimite, " +
+        "ve.soloSinLimite AS soloSinLimite, " +
         "COALESCE(rg.horasTotales,0) AS horasTotales, " +
         "COALESCE(rg.sumaUnidadesPorTiempo,0) AS sumaUnidadesPorTiempo " +
         "FROM (" +
         "SELECT numero_pedido, GROUP_CONCAT(DISTINCT sublinea) AS subLinea, " +
         "SUM(unidades_totales) AS unidadesTotales, SUM(unidades_procesadas) AS unidadesProcesadas, " +
-        "SUM(codigos_sobrantes) AS codigosSobrantes, MAX(sin_limite) AS sinLimite " +
+        "SUM(codigos_sobrantes) AS codigosSobrantes, MAX(sin_limite) AS sinLimite, " +
+        "MIN(sin_limite) AS soloSinLimite " +
         "FROM validacion_eanes GROUP BY numero_pedido" +
         ") ve " +
         "LEFT JOIN (" +
@@ -236,6 +238,7 @@ export const accionesLectura = {
           ? null
           : r.unidadesTotales - r.unidadesProcesadas,
         sinLimite: r.sinLimite === 1,
+        soloSinLimite: r.soloSinLimite === 1,
         estado,
         horasTotales: noIniciado
           ? null
