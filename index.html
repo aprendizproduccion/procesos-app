@@ -1176,6 +1176,22 @@
         <div class="panel-filtros" id="panelFiltrosControl" hidden>
           <div class="panel-grid">
             <div>
+              <label>Pedido</label>
+              <div class="campo-sugerencias">
+                <input
+                  id="ctPedidoInput"
+                  placeholder="Ej: 3200"
+                  autocomplete="off"
+                  enterkeyhint="search"
+                />
+                <div
+                  id="sugCtPedido"
+                  class="lista-sugerencias"
+                  role="listbox"
+                ></div>
+              </div>
+            </div>
+            <div>
               <label>Mostrar</label>
               <select id="ctFiltro" onchange="cambiarFiltroControlTiempos()">
                 <option value="fecha">Por fecha</option>
@@ -2275,6 +2291,7 @@
         document.getElementById("vistaDashboard").style.display = "none";
         document.getElementById("vistaControlTiempos").style.display = "block";
         document.getElementById("ctCedulaInput").value = "";
+        document.getElementById("ctPedidoInput").value = "";
         document.getElementById("ctFiltro").value = "fecha";
         const campoFechaCt = document.getElementById("ctFecha");
         campoFechaCt.max = _hoyBogotaCT();
@@ -2332,6 +2349,7 @@
             cambiarFiltroControlTiempos();
           },
           campos: [
+            { id: "ctPedidoInput", etiqueta: "Pedido" },
             {
               id: "ctFiltro",
               etiqueta: "Mostrar",
@@ -2514,6 +2532,7 @@
         }
         const filtro = document.getElementById("ctFiltro").value;
         const fecha = document.getElementById("ctFecha").value;
+        const pedido = document.getElementById("ctPedidoInput").value.trim();
         if (filtro === "fecha") {
           if (!fecha) {
             alertaDiv.innerHTML =
@@ -2531,18 +2550,28 @@
         alertaDiv.innerHTML = '<p class="hint">Buscando...</p>';
         bodyEl.innerHTML = "";
 
-        llamarAPI("obtenerControlTiempos", { cedula, filtro, fecha })
+        llamarAPI("obtenerControlTiempos", { cedula, filtro, fecha, pedido })
           .then(function (res) {
             if (!res.success) {
               alertaDiv.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
               return;
             }
             renderControlTiempos(res.registros || []);
-            alertaDiv.innerHTML = res.registros.length
-              ? ""
-              : filtro === "fecha"
-                ? '<p class="hint">No hay registros para esa cédula en esa fecha.</p>'
-                : '<p class="hint">No hay registros para esa cédula.</p>';
+            if (res.registros.length) {
+              alertaDiv.innerHTML = "";
+            } else if (pedido && filtro === "fecha") {
+              alertaDiv.innerHTML =
+                '<p class="hint">No hay registros de ese pedido en esa fecha. Prueba cambiando "Mostrar" a Histórico dentro de Filtros.</p>';
+            } else if (pedido) {
+              alertaDiv.innerHTML =
+                '<p class="hint">No hay registros de ese pedido para esa cédula.</p>';
+            } else if (filtro === "fecha") {
+              alertaDiv.innerHTML =
+                '<p class="hint">No hay registros para esa cédula en esa fecha.</p>';
+            } else {
+              alertaDiv.innerHTML =
+                '<p class="hint">No hay registros para esa cédula.</p>';
+            }
           })
           .catch(function (err) {
             alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
@@ -3822,6 +3851,15 @@
 
       activarSugerenciasPedido("pedido", "sugPedido");
       activarSugerenciasPedido("opPedido", "sugOpPedido");
+      activarSugerenciasPedido("ctPedidoInput", "sugCtPedido");
+      document
+        .getElementById("ctPedidoInput")
+        .addEventListener("keydown", function (e) {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            aplicarFiltros("control");
+          }
+        });
       activarSugerenciasPedido(
         "edicionPedidoInput",
         "sugEdicionPedido",
