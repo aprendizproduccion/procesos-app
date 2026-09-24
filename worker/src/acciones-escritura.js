@@ -354,7 +354,7 @@ export const accionesEscritura = {
         validacion.unidades_procesadas -
         validacion.justificado -
         validacion.codigos_sobrantes;
-      if (total + codigosSobrantes > restantes) {
+      if (!validacion.sin_limite && total + codigosSobrantes > restantes) {
         throw new Error(
           "La cantidad ingresada (" +
             total +
@@ -397,7 +397,7 @@ export const accionesEscritura = {
         "UPDATE validacion_eanes SET " +
           "unidades_procesadas = unidades_procesadas + ?, " +
           "codigos_sobrantes = codigos_sobrantes + ?, " +
-          "estado = CASE WHEN (unidades_procesadas + ? + codigos_sobrantes + ?) >= unidades_totales THEN 'Completado' ELSE 'En proceso' END, " +
+          "estado = CASE WHEN sin_limite = 0 AND (unidades_procesadas + ? + codigos_sobrantes + ?) >= unidades_totales THEN 'Completado' ELSE 'En proceso' END, " +
           "actualizado_en = ? " +
           "WHERE numero_pedido = ? AND ean_producto = ? " +
           "AND (sin_limite = 1 OR (unidades_procesadas + ? + codigos_sobrantes + ? + " +
