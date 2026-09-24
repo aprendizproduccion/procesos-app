@@ -274,6 +274,9 @@ export const accionesLectura = {
       }
     }
 
+    const pedidoTexto = String(datos.pedido || "").trim();
+    const pedido = pedidoTexto ? await _resolverPedido(env, pedidoTexto) : "";
+
     let sql =
       "SELECT fecha, coordinador, operario, supernumerario, numero_pedido AS pedido, " +
       "proceso, unidades_procesadas_operario AS unidadesProcesadas, eficiencia, " +
@@ -284,6 +287,10 @@ export const accionesLectura = {
     if (filtro === "fecha") {
       sql += " AND fecha = ?";
       binds.push(fechaFiltro);
+    }
+    if (pedido) {
+      sql += " AND numero_pedido = ?";
+      binds.push(pedido);
     }
     sql += " ORDER BY fecha DESC, hora_inicio DESC, id DESC LIMIT 100";
 
