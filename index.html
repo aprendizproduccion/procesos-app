@@ -789,7 +789,6 @@
       <img src="glovanze1_logo.svg" alt="Logo" class="logo-login" />
       <h1 style="text-align: center">Iniciar sesión</h1>
 
-      
       <div id="loginBotones" class="row2">
         <button
           type="button"
@@ -2772,8 +2771,13 @@
           (p) => p.estado !== "Completado" && !p.soloSinLimite,
         );
         if (paquetesActuales.length > 0 && activos.length === 0) {
+          const ocultosSinLimite = paquetesActuales.some(
+            (p) => p.soloSinLimite && p.estado !== "Completado",
+          );
           document.getElementById("seguimientoAlerta").innerHTML =
-            '<p class="hint">No hay pedidos pendientes ni en proceso.</p>';
+            ocultosSinLimite
+              ? '<p class="hint">No hay pedidos activos con unidades definidas. Los pedidos sin límite no se listan aquí: búscalos por número.</p>'
+              : '<p class="hint">No hay pedidos pendientes ni en proceso.</p>';
         }
         renderFilasPaquetes(activos);
         actualizarKpisPaquetes(activos);
