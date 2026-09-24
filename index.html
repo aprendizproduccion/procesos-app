@@ -2768,7 +2768,7 @@
         document.getElementById("seguimientoVistaDetalle").style.display =
           "none";
         const activos = paquetesActuales.filter(
-          (p) => p.estado !== "Completado",
+          (p) => p.estado !== "Completado" && !p.soloSinLimite,
         );
         if (paquetesActuales.length > 0 && activos.length === 0) {
           document.getElementById("seguimientoAlerta").innerHTML =
