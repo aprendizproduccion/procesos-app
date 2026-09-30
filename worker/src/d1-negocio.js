@@ -4,6 +4,19 @@
 const TTL_EN_PROCESO_SEG = 120;
 const TTL_IDEMPOTENCIA_SEG = 21600; // 6 horas — igual al tope que ya usaba CacheService
 
+// Horas encadenadas del operario
+export const HORA_LIMITE_ENVIO = "21:00";
+export const TURNO_POR_DEFECTO = "06:00";
+
+// Sin uso desde 2026-09-28: se quitaron el piso del registro del operario y el
+// tope del flujo administrativo. El umbral de "registro corto" NO vive aquí:
+// es DURACION_CORTA_MIN en index.html, y solo decide si se muestra el modal de
+// confirmación, no si el envío se rechaza. Estas dos quedan como registro de lo
+// que hubo; si alguna vuelve a usarse, pasa por _calcularDuracionValidada
+// (opciones.duracionMinimaMin / duracionMaximaMin), que sigue soportándolas.
+export const DURACION_MINIMA_MIN = 5;
+export const DURACION_MAXIMA_ADMIN_MIN = 720;
+
 async function _sha256Hex(texto) {
   const buf = await crypto.subtle.digest(
     "SHA-256",
@@ -117,7 +130,7 @@ export async function _validarSupervisorYSupernumerario(
 // (real) y la de 13 con el "0" que antepone el preamble UPC-A por defecto
 // del escáner Zebra (mismo problema que en code.js). Se usan ambas en el
 // WHERE para que la fila coincida sin importar cuál quedó guardada en D1.
-function _formasEan(ean) {
+export function _formasEan(ean) {
   const valor = String(ean || "").trim();
   const sinPreambulo =
     valor.length === 13 && valor.charAt(0) === "0" ? valor.substring(1) : valor;
@@ -220,13 +233,19 @@ export async function _obtenerProcesoValidado(env, nombreProceso, pedido) {
   return row;
 }
 
+// Excluye las filas con cédula vacía (huérfanas que el pull no alcanza a borrar,
+// porque el DELETE por 'cedula = ""' no matchea NULL en SQLite). Sin este filtro,
+// un nombre presente en dos filas podía resolver contra la vacía y guardar el
+// registro sin cédula: invisible para _inicioCadena y para Control tiempos.
+// ORDER BY hace determinista cuál gana si el nombre está repetido.
 export async function _buscarCedulaPorNombre(env, nombre) {
   const row = await env.DB.prepare(
-    "SELECT cedula FROM operarios WHERE lower(nombre_operario) = lower(?) AND activo = 1",
+    "SELECT cedula FROM operarios WHERE lower(nombre_operario) = lower(?) AND activo = 1 " +
+      "AND cedula IS NOT NULL AND TRIM(cedula) <> '' ORDER BY cedula LIMIT 1",
   )
     .bind(nombre)
     .first();
-  return row ? row.cedula : "";
+  return row ? String(row.cedula).trim() : "";
 }
 
 // Equivalente a _marcarPedidoIniciado: la primera vez que un pedido recibe un
@@ -286,11 +305,28 @@ export async function _revertirReserva(
     "UPDATE validacion_eanes SET " +
       "unidades_procesadas = unidades_procesadas - ?, " +
       "codigos_sobrantes = codigos_sobrantes - ?, " +
-      "estado = CASE WHEN sin_limite = 0 AND (unidades_procesadas - ? - codigos_sobrantes - ?) >= unidades_totales " +
-      "THEN 'Completado' ELSE 'En proceso' END " +
+      "estado = CASE " +
+      "WHEN ((unidades_procesadas - ?) + (codigos_sobrantes - ?) + " +
+      "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) <= 0 THEN 'Pendiente' " +
+      "WHEN sin_limite = 0 AND ((unidades_procesadas - ?) + (codigos_sobrantes - ?) + " +
+      "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) >= unidades_totales THEN 'Completado' " +
+      "ELSE 'En proceso' END " +
       "WHERE numero_pedido = ? AND ean_producto = ?",
   )
-    .bind(total, codigosSobrantes, total, codigosSobrantes, pedido, ean)
+    .bind(
+      total,
+      codigosSobrantes,
+      total,
+      codigosSobrantes,
+      pedido,
+      ean,
+      total,
+      codigosSobrantes,
+      pedido,
+      ean,
+      pedido,
+      ean,
+    )
     .run();
 }
 
@@ -339,23 +375,98 @@ export async function _recalcularContadorValidacion(env, pedido, ean) {
     .run();
 }
 
-export function _duracionMinutos(horaInicio, horaFin) {
-  const [h1, m1] = String(horaInicio).split(":").map(Number);
-  const [h2, m2] = String(horaFin).split(":").map(Number);
-  let minutos = h2 * 60 + m2 - (h1 * 60 + m1);
-  if (minutos < 0) minutos += 24 * 60;
-  return minutos;
+const PATRON_HORA = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+// Antes, una hora vacía o mal formada producía NaN y ninguna guarda lo atrapaba
+// (NaN <= 0, NaN > max y NaN < min son todas false): el registro se guardaba con
+// duracion_bruta_min y tiempo_total en NaN, sin error.
+function _minutosDeHora(valor, etiqueta) {
+  const texto = String(valor == null ? "" : valor).trim();
+  const m = PATRON_HORA.exec(texto);
+  if (!m) {
+    throw new Error(
+      "La " +
+        etiqueta +
+        ' no es válida ("' +
+        texto +
+        '"). Usa el formato HH:MM de 24 horas.',
+    );
+  }
+  return Number(m[1]) * 60 + Number(m[2]);
 }
 
-export function _calcularDuracionValidada(horaInicio, horaFin, suplementoMin) {
+// Sin wrap de medianoche: la jornada va de 6:00 a 19:00, así que una hora fin
+// anterior a la de inicio es captura invertida, no un turno que cruza el día.
+// El "+= 24 * 60" anterior convertía un bloque real de 15:00–18:00 mal digitado
+// en un registro de 21 horas, silenciosamente.
+export function _duracionMinutos(horaInicio, horaFin) {
+  return (
+    _minutosDeHora(horaFin, "hora de fin") -
+    _minutosDeHora(horaInicio, "hora de inicio")
+  );
+}
+
+export function _calcularDuracionValidada(
+  horaInicio,
+  horaFin,
+  suplementoMin,
+  opciones,
+) {
+  const minima = (opciones && opciones.duracionMinimaMin) || 0;
+  const maxima = (opciones && opciones.duracionMaximaMin) || 0;
+
   const duracionBrutaMin = _duracionMinutos(horaInicio, horaFin);
-  if (duracionBrutaMin <= 0)
-    throw new Error("La hora de fin debe ser posterior a la hora de inicio.");
-  const duracionRealMin = duracionBrutaMin - suplementoMin;
-  if (duracionRealMin <= 0)
+  if (duracionBrutaMin < 0) {
     throw new Error(
-      "El suplemento no puede ser mayor o igual al tiempo trabajado.",
+      "La hora de fin (" +
+        horaFin +
+        ") es anterior a la de inicio (" +
+        horaInicio +
+        "). Revisa si los dos campos quedaron invertidos.",
     );
+  }
+  if (duracionBrutaMin === 0)
+    throw new Error("La hora de fin debe ser posterior a la hora de inicio.");
+
+  if (maxima && duracionBrutaMin > maxima) {
+    throw new Error(
+      "Este registro cubriría " +
+        Math.round((duracionBrutaMin / 60) * 10) / 10 +
+        " horas (" +
+        horaInicio +
+        " a " +
+        horaFin +
+        "), y el máximo permitido es " +
+        maxima / 60 +
+        " horas. Verifica que las horas no estén invertidas o mal digitadas.",
+    );
+  }
+
+  // M6: el error de suplemento solo sale si es MAYOR al tiempo operado.
+  if (suplementoMin > duracionBrutaMin) {
+    throw new Error(
+      "El suplemento (" +
+        suplementoMin +
+        " min) no puede ser mayor al tiempo trabajado (" +
+        duracionBrutaMin +
+        " min).",
+    );
+  }
+
+  const duracionRealMin = duracionBrutaMin - suplementoMin;
+
+  if (minima && duracionRealMin < minima) {
+    throw new Error(
+      "El registro es demasiado corto (" +
+        duracionRealMin +
+        " min de trabajo efectivo). El mínimo es " +
+        minima +
+        " minutos.",
+    );
+  }
+  if (duracionRealMin <= 0)
+    throw new Error("El suplemento no puede ser igual al tiempo trabajado.");
+
   return { duracionBrutaMin, duracionRealMin };
 }
 
@@ -381,6 +492,49 @@ export function _validarCodigosSobrantes(valor) {
     );
   }
   return num;
+}
+
+// Fecha y hora de Bogotá de UN SOLO objeto Date: calcularlas por separado
+// dejaría que un envío a las 23:59:59 quedara con la fecha de un día y la
+// hora del otro. hourCycle "h23" evita el "24:xx" que algunos motores
+// devuelven a medianoche con hour12: false.
+export function _ahoraBogota() {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Bogota",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+
+  const obtener = (tipo) => partes.find((p) => p.type === tipo).value;
+  return {
+    fecha: obtener("year") + "-" + obtener("month") + "-" + obtener("day"),
+    hora: obtener("hour") + ":" + obtener("minute"),
+  };
+}
+
+// Hora de inicio que le toca al próximo registro del operario: el fin de su
+// último registro vigente del día, o su hora de turno si es el primero.
+// Subconsultas escalares en una sola sentencia (D1 ejecuta una por vez).
+export async function _inicioCadena(env, cedula, fecha) {
+  const row = await env.DB.prepare(
+    "SELECT (SELECT MAX(hora_final) FROM registros " +
+      "WHERE cedula_operario = ? AND fecha = ? AND anulado = 0) AS ultimoFin, " +
+      "(SELECT turno FROM operarios WHERE cedula = ?) AS turno",
+  )
+    .bind(cedula, fecha, cedula)
+    .first();
+
+  const ultimoFin = String((row && row.ultimoFin) || "").trim();
+  if (ultimoFin) return { inicio: ultimoFin, turnoConfigurado: true };
+
+  const turno = String((row && row.turno) || "").trim();
+  if (turno) return { inicio: turno, turnoConfigurado: true };
+
+  return { inicio: TURNO_POR_DEFECTO, turnoConfigurado: false };
 }
 
 export function _fechaHoyBogota() {
