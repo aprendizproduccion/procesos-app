@@ -324,6 +324,12 @@ export const accionesLectura = {
       sql += " AND numero_pedido = ?";
       binds.push(pedido);
     }
+    // Pedido y proceso los usan las dos vistas; el resto es solo administrador.
+    const proceso = String(datos.proceso || "").trim();
+    if (proceso) {
+      sql += " AND " + _sqlSinTildes("proceso") + " LIKE ?";
+      binds.push("%" + _normalizarTexto(proceso) + "%");
+    }
 
     // Filtros exclusivos de la vista administrador.
     if (esAdmin) {
@@ -346,11 +352,6 @@ export const accionesLectura = {
       if (cliente) {
         sql += " AND " + _sqlSinTildes("cliente") + " LIKE ?";
         binds.push("%" + _normalizarTexto(cliente) + "%");
-      }
-      const proceso = String(datos.proceso || "").trim();
-      if (proceso) {
-        sql += " AND " + _sqlSinTildes("proceso") + " LIKE ?";
-        binds.push("%" + _normalizarTexto(proceso) + "%");
       }
       // Las dos formas del EAN: el preamble UPC-A del escáner Zebra antepone
       // un "0", y en D1 puede estar guardada cualquiera de las dos.
