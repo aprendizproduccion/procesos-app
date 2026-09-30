@@ -582,6 +582,9 @@
       .add-row .lista-sugerencias {
         top: 100%;
       }
+      .panel-grid .lista-sugerencias {
+        top: 100%;
+      }
       @media (max-width: 480px) {
         .add-row .campo-sugerencias {
           flex: 0 0 auto;
@@ -1232,12 +1235,19 @@
               </div>
               <div>
                 <label>Proceso</label>
-                <input
-                  id="ctProcesoInput"
-                  placeholder="Ej: Etiquetado"
-                  autocomplete="off"
-                  enterkeyhint="search"
-                />
+                <div class="campo-sugerencias">
+                  <input
+                    id="ctProcesoInput"
+                    placeholder="Toca para ver los procesos..."
+                    autocomplete="off"
+                    enterkeyhint="search"
+                  />
+                  <div
+                    id="sugCtProceso"
+                    class="lista-sugerencias"
+                    role="listbox"
+                  ></div>
+                </div>
               </div>
               <div>
                 <label>EAN</label>
@@ -4132,6 +4142,40 @@
         true,
       );
 
+      // Filtro de Control tiempos: a diferencia de los campos de registro, no
+      // exige pedido. Con un pedido válido escrito acota a sus procesos; si no
+      // hay pedido —o lo escrito no corresponde a ninguno— lista el catálogo
+      // completo sin repetir nombre entre pedidos.
+      function listaProcesosFiltroCT() {
+        const pedidoVal = pedidoCanonico(
+          document.getElementById("ctPedidoInput").value,
+        );
+        const delPedido = pedidoVal ? listaProcesosDePedido(pedidoVal) : [];
+        if (delPedido.length) return delPedido;
+
+        const vistos = new Set();
+        const unicos = [];
+        procesos.forEach(function (p) {
+          const nombre = String(p.nombre || "").trim();
+          if (!nombre) return;
+          const clave = normalizarPedido(nombre);
+          if (vistos.has(clave)) return;
+          vistos.add(clave);
+          unicos.push({ valor: nombre, clave: clave });
+        });
+        return unicos.sort(function (a, b) {
+          return a.valor.localeCompare(b.valor, "es");
+        });
+      }
+
+      activarSugerenciasPedido(
+        "ctProcesoInput",
+        "sugCtProceso",
+        null,
+        listaProcesosFiltroCT,
+        true,
+      );
+
       function procesoValidoEdicion() {
         return procesoDe(
           document.getElementById("editProceso").value.trim(),
@@ -5010,7 +5054,6 @@
           });
       }
 
-      
       const justEanBuscarInput = document.getElementById("justEanBuscar");
 
       justEanBuscarInput.addEventListener("keydown", function (e) {
