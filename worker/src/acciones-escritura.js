@@ -9,17 +9,28 @@ import {
   _obtenerProcesoValidado,
   _buscarCedulaPorNombre,
   _calcularDuracionValidada,
+  _ahoraBogota,
+  _inicioCadena,
+  HORA_LIMITE_ENVIO,
   _calcularMetricasProduccion,
   _validarCodigosSobrantes,
   _marcarPedidoIniciado,
   _pedidoEstaCompleto,
   _fechaHoyBogota,
+  _validarFechaRegistro,
   _ahoraISO,
+  _revertirReserva,
+  _revertirCierre,
+  _recalcularContadorValidacion,
+  _sincronizarEstadoPedido,
+  _resolverPedido,
 } from "./d1-negocio.js";
 
 import {
   _pushRegistrosYMarcar,
   _pushJustificacionYMarcar,
+  _pushFilaRegistroYMarcar,
+  _eliminarFilaRegistroSheets,
 } from "./push-sheets.js";
 
 export const accionesEscritura = {
@@ -35,11 +46,13 @@ export const accionesEscritura = {
       };
     }
 
+    let reservaAplicada = null;
+
     try {
-      const pedido = String(payload.pedido || "").trim();
+      const pedido = await _resolverPedido(env, payload.pedido);
       if (!pedido) throw new Error("Falta el número de pedido.");
 
-      const codigoEan = String(payload.codigoEan || "").trim();
+      let codigoEan = String(payload.codigoEan || "").trim();
       if (!codigoEan)
         throw new Error("Falta escanear el código EAN del producto.");
 
@@ -62,6 +75,10 @@ export const accionesEscritura = {
         throw new Error("Total de unidades inválido.");
 
       const validacion = await _localizarValidacionEan(env, pedido, codigoEan);
+      // De aquí en adelante se usa el EAN tal como quedó en D1 (ean_producto),
+      // no el crudo del escáner — evita que el "0" del preamble UPC-A rompa
+      // la reserva/INSERT si el catálogo tiene la otra forma.
+      codigoEan = validacion.ean_producto;
       const unidadesEsperadas = validacion.unidades_totales;
       const sublinea = validacion.sublinea;
       const datosPedido = await _obtenerDatosPedido(env, pedido, sublinea);
@@ -75,7 +92,7 @@ export const accionesEscritura = {
         validacion.justificado -
         validacion.codigos_sobrantes;
 
-      if (total + codigosSobrantes > restantes) {
+      if (!validacion.sin_limite && total + codigosSobrantes > restantes) {
         throw new Error(
           "La cantidad ingresada (" +
             total +
@@ -92,6 +109,7 @@ export const accionesEscritura = {
 
       const suplementoMin = Number(payload.suplementoMin) || 0;
 
+      // Sin tope de duración: coherente con la edición y con el flujo operario.
       const { duracionBrutaMin, duracionRealMin } = _calcularDuracionValidada(
         payload.horaInicio,
         payload.horaFin,
@@ -104,14 +122,16 @@ export const accionesEscritura = {
       );
       const tasaEstandar = procesoValidado.unidadesHora;
       const loteId = crypto.randomUUID();
-      const fecha = _fechaHoyBogota();
+      const fecha = _validarFechaRegistro(payload.fecha);
       const ahora = _ahoraISO();
 
       const unidadesPorOperario = Math.round((total / n) * 100) / 100;
+      const codigosSobrantesPorOperario =
+        Math.round((codigosSobrantes / n) * 100) / 100;
       const durHoras = Math.round((duracionRealMin / 60) * 100) / 100;
       const { unidadesHoraReal, eficiencia } = _calcularMetricasProduccion(
         unidadesPorOperario,
-        n > 0 ? tasaEstandar / n : 0,
+        tasaEstandar, // el estándar del proceso es por persona, no por banda
         durHoras,
       );
 
@@ -122,17 +142,20 @@ export const accionesEscritura = {
         "UPDATE validacion_eanes SET " +
           "unidades_procesadas = unidades_procesadas + ?, " +
           "codigos_sobrantes = codigos_sobrantes + ?, " +
-          "estado = CASE WHEN (unidades_procesadas + ? + codigos_sobrantes + ?) >= unidades_totales THEN 'Completado' ELSE 'En proceso' END, " +
+          "estado = CASE WHEN sin_limite = 0 AND (unidades_procesadas + ? + codigos_sobrantes + ? + " +
+          "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) >= unidades_totales THEN 'Completado' ELSE 'En proceso' END, " +
           "actualizado_en = ? " +
           "WHERE numero_pedido = ? AND ean_producto = ? " +
-          "AND (unidades_procesadas + ? + codigos_sobrantes + ? + " +
-          "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) <= unidades_totales",
+          "AND (sin_limite = 1 OR (unidades_procesadas + ? + codigos_sobrantes + ? + " +
+          "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) <= unidades_totales)",
       )
         .bind(
           total,
           codigosSobrantes,
           total,
           codigosSobrantes,
+          pedido,
+          codigoEan,
           ahora,
           pedido,
           codigoEan,
@@ -148,6 +171,8 @@ export const accionesEscritura = {
           "Otro envío concurrente ya ocupó estas unidades. Verifica el estado actual del pedido antes de reintentar.",
         );
       }
+      // A partir de aquí, si algo falla, hay que revertir esta reserva antes de fallar.
+      reservaAplicada = { pedido, ean: codigoEan, total, codigosSobrantes };
 
       // Lista de operarios — informativa, best-effort (ver nota de diseño de la sesión anterior).
       const filaOperarios = await env.DB.prepare(
@@ -172,13 +197,23 @@ export const accionesEscritura = {
         operarios.map((nom) => _buscarCedulaPorNombre(env, nom)),
       );
 
+      const sinCedula = operarios.filter((nom, i) => !cedulas[i]);
+      if (sinCedula.length > 0) {
+        throw new Error(
+          "Estos operarios no tienen cédula en el catálogo: " +
+            sinCedula.join(", ") +
+            ". Sin cédula el registro no aparece en Control tiempos ni en el " +
+            "encadenado de horas. Pide que se corrija la hoja Operarios antes de registrar.",
+        );
+      }
+
       const statements = operarios.map((nombre, i) =>
         env.DB.prepare(
           "INSERT INTO registros (lote_id, fecha, coordinador, cedula_operario, operario, supernumerario, cliente, " +
             "proceso, unidades_hora_estandar, sublinea, evento, numero_pedido, ean, unidades_totales_procesadas, " +
             "hora_inicio, hora_final, suplemento, observacion, clasificacion_proceso, duracion_bruta_min, tiempo_total, " +
-            "unidades_procesadas_operario, unidades_hora_real, eficiencia, creado_en) " +
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "unidades_procesadas_operario, codigos_sobrantes, unidades_hora_real, eficiencia, creado_en) " +
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         ).bind(
           loteId,
           fecha,
@@ -202,6 +237,7 @@ export const accionesEscritura = {
           duracionBrutaMin,
           durHoras,
           unidadesPorOperario,
+          codigosSobrantesPorOperario,
           unidadesHoraReal,
           eficiencia,
           ahora,
@@ -254,8 +290,12 @@ export const accionesEscritura = {
         const idsRegistros = resultadosBatch
           .slice(0, operarios.length)
           .map((r) => r.meta.last_row_id);
+        const filasParaSheetsConId = filasParaSheets.map((fila, i) => [
+          ...fila,
+          idsRegistros[i],
+        ]);
         ctx.waitUntil(
-          _pushRegistrosYMarcar(env, idsRegistros, filasParaSheets),
+          _pushRegistrosYMarcar(env, idsRegistros, filasParaSheetsConId),
         );
       } catch (errPostCommit) {
         // No relanzamos: el registro ya es válido en D1. Queda sin push
@@ -264,13 +304,24 @@ export const accionesEscritura = {
 
       return respuestaFinal;
     } catch (err) {
+      if (reservaAplicada) {
+        await _revertirReserva(env, reservaAplicada);
+      }
       await _liberarIdempotencia(env, huella);
       throw err;
     }
   },
 
   async submitRegistroOperario(payload, env, ctx) {
-    const huella = await _huellaPayload("submitRegistroOperario", payload);
+    const { fecha, hora } = _ahoraBogota();
+    // Las horas salían del payload y eran lo que distinguía dos envíos
+    // legítimos iguales. Al salir de ahí, la huella necesita otro
+    // diferenciador: el idEnvio del formulario, con la hora como respaldo
+    // para un navegador con caché vieja.
+    const huella = await _huellaPayload("submitRegistroOperario", {
+      ...payload,
+      _nonce: payload.idEnvio || hora,
+    });
     const chequeo = await _chequearIdempotencia(env, huella);
     if (chequeo.duplicado) return chequeo.respuesta;
     if (chequeo.enProceso) {
@@ -280,6 +331,8 @@ export const accionesEscritura = {
           "Este registro ya se está procesando (posible doble envío). Espera unos segundos y verifica en Registros antes de reintentar.",
       };
     }
+
+    let reservaAplicada = null;
 
     try {
       const cedula = String(payload.cedula || "").trim();
@@ -302,17 +355,18 @@ export const accionesEscritura = {
           String(payload.supernumerario || "").trim(),
         );
 
-      const pedido = String(payload.pedido || "").trim();
+      const pedido = await _resolverPedido(env, payload.pedido);
       if (!pedido) throw new Error("Falta el número de pedido.");
-      const codigoEan = String(payload.codigoEan || "").trim();
+      let codigoEan = String(payload.codigoEan || "").trim();
       if (!codigoEan)
         throw new Error("Falta escanear el código EAN del producto.");
 
       const total = Number(payload.unidadesProcesadas);
-      if (!Number.isFinite(total) || total <= 0)
+      if (!Number.isFinite(total) || total < 0)
         throw new Error("Unidades procesadas inválidas.");
 
       const validacion = await _localizarValidacionEan(env, pedido, codigoEan);
+      codigoEan = validacion.ean_producto;
       const unidadesEsperadas = validacion.unidades_totales;
       const sublinea = validacion.sublinea;
       const datosPedido = await _obtenerDatosPedido(env, pedido, sublinea);
@@ -325,7 +379,7 @@ export const accionesEscritura = {
         validacion.unidades_procesadas -
         validacion.justificado -
         validacion.codigos_sobrantes;
-      if (total + codigosSobrantes > restantes) {
+      if (!validacion.sin_limite && total + codigosSobrantes > restantes) {
         throw new Error(
           "La cantidad ingresada (" +
             total +
@@ -343,9 +397,43 @@ export const accionesEscritura = {
       );
       const tasaEstandar = procesoValidado.unidadesHora;
       const suplementoMin = Number(payload.suplementoMin) || 0;
-      const fecha = _fechaHoyBogota();
-      const horaInicio = String(payload.horaInicio || "").trim();
-      const horaFin = String(payload.horaFin || "").trim();
+      // El servidor fija las horas: payload.horaInicio y payload.horaFin se
+      // ignoran aunque lleguen. "fecha" y "hora" vienen del inicio de la acción.
+      const horaFin = hora;
+      const { inicio: horaInicio, turnoConfigurado } = await _inicioCadena(
+        env,
+        operarioMatch.cedula,
+        fecha,
+      );
+
+      if (hora > HORA_LIMITE_ENVIO) {
+        throw new Error(
+          "Fuera del horario de registro (6:00 a 19:00, con margen hasta las 21:00). Pide a tu supernumerario que registre por ti.",
+        );
+      }
+      // La cadena puede venir adelantada por un registro del administrador con
+      // la hora fin mal digitada: el mensaje tiene que decir qué hacer.
+      if (hora < horaInicio) {
+        throw new Error(
+          "Tu hora de inicio quedó en " +
+            horaInicio +
+            ", posterior a la hora actual (" +
+            hora +
+            "). Pide a tu supernumerario que corrija tu último registro del día en Editar registros.",
+        );
+      }
+      // Mensaje propio: con horas encadenadas esto lo dispara un operario
+      // haciendo lo correcto, no una captura invertida.
+      if (hora === horaInicio) {
+        throw new Error(
+          "Ya enviaste un registro en este minuto (" +
+            horaInicio +
+            "). Espera a que cambie el minuto y vuelve a enviar.",
+        );
+      }
+      // Sin piso de duración: con horas encadenadas el operario no elige la
+      // ventana, así que un bloque corto es dato real, no error de captura.
+      // Quedan vivas dos guardas: duración bruta 0 y suplemento > duración.
       const { duracionBrutaMin, duracionRealMin } = _calcularDuracionValidada(
         horaInicio,
         horaFin,
@@ -368,17 +456,20 @@ export const accionesEscritura = {
         "UPDATE validacion_eanes SET " +
           "unidades_procesadas = unidades_procesadas + ?, " +
           "codigos_sobrantes = codigos_sobrantes + ?, " +
-          "estado = CASE WHEN (unidades_procesadas + ? + codigos_sobrantes + ?) >= unidades_totales THEN 'Completado' ELSE 'En proceso' END, " +
+          "estado = CASE WHEN sin_limite = 0 AND (unidades_procesadas + ? + codigos_sobrantes + ? + " +
+          "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) >= unidades_totales THEN 'Completado' ELSE 'En proceso' END, " +
           "actualizado_en = ? " +
           "WHERE numero_pedido = ? AND ean_producto = ? " +
-          "AND (unidades_procesadas + ? + codigos_sobrantes + ? + " +
-          "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) <= unidades_totales",
+          "AND (sin_limite = 1 OR (unidades_procesadas + ? + codigos_sobrantes + ? + " +
+          "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) <= unidades_totales)",
       )
         .bind(
           total,
           codigosSobrantes,
           total,
           codigosSobrantes,
+          pedido,
+          codigoEan,
           ahora,
           pedido,
           codigoEan,
@@ -394,6 +485,8 @@ export const accionesEscritura = {
           "Otro envío concurrente ya ocupó estas unidades. Verifica el estado actual del pedido antes de reintentar.",
         );
       }
+      // A partir de aquí, si algo falla, hay que revertir esta reserva antes de fallar.
+      reservaAplicada = { pedido, ean: codigoEan, total, codigosSobrantes };
 
       const filaOperarios = await env.DB.prepare(
         "SELECT operarios FROM validacion_eanes WHERE numero_pedido = ? AND ean_producto = ?",
@@ -412,14 +505,20 @@ export const accionesEscritura = {
         .bind(listaActual.join(" - "), pedido, codigoEan)
         .run();
 
-      const statements = [
-        env.DB.prepare(
-          "INSERT INTO registros (lote_id, fecha, coordinador, cedula_operario, operario, supernumerario, cliente, " +
-            "proceso, unidades_hora_estandar, sublinea, evento, numero_pedido, ean, unidades_totales_procesadas, " +
-            "hora_inicio, hora_final, suplemento, observacion, clasificacion_proceso, duracion_bruta_min, tiempo_total, " +
-            "unidades_procesadas_operario, unidades_hora_real, eficiencia, creado_en) " +
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        ).bind(
+      // Guarda atómica de la cadena (P1-1): si otro envío del mismo operario
+      // ya ocupó una franja que termina después de esta hora de inicio, el
+      // INSERT no escribe nada y devuelve changes = 0. Es '>' estricto porque
+      // el predecesor legítimo tiene hora_final exactamente = horaInicio.
+      const insercion = await env.DB.prepare(
+        "INSERT INTO registros (lote_id, fecha, coordinador, cedula_operario, operario, supernumerario, cliente, " +
+          "proceso, unidades_hora_estandar, sublinea, evento, numero_pedido, ean, unidades_totales_procesadas, " +
+          "hora_inicio, hora_final, suplemento, observacion, clasificacion_proceso, duracion_bruta_min, tiempo_total, " +
+          "unidades_procesadas_operario, codigos_sobrantes, unidades_hora_real, eficiencia, creado_en, hora_inicio_auto) " +
+          "SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1 " +
+          "WHERE NOT EXISTS (SELECT 1 FROM registros WHERE cedula_operario = ? AND fecha = ? " +
+          "AND anulado = 0 AND hora_final > ?)",
+      )
+        .bind(
           loteId,
           fecha,
           coordinador,
@@ -442,19 +541,39 @@ export const accionesEscritura = {
           duracionBrutaMin,
           durHoras,
           total,
+          codigosSobrantes,
           unidadesHoraReal,
           eficiencia,
           ahora,
-        ),
-      ];
+          operarioMatch.cedula,
+          fecha,
+          horaInicio,
+        )
+        .run();
 
-      if (await _pedidoEstaCompleto(env, pedido)) {
-        statements.push(
-          env.DB.prepare(
-            "INSERT INTO control_produccion (numero_pedido, estado, actualizado_en) VALUES (?, 'Completado', ?) " +
-              "ON CONFLICT(numero_pedido) DO UPDATE SET estado = 'Completado', actualizado_en = excluded.actualizado_en",
-          ).bind(pedido, ahora),
+      if (insercion.meta.changes === 0) {
+        throw new Error(
+          "Otro envío tuyo ocupó esta franja de tiempo justo antes (desde " +
+            horaInicio +
+            "). Vuelve a confirmar tu cédula para tomar la hora nueva y envía otra vez.",
         );
+      }
+      const idRegistro = insercion.meta.last_row_id;
+      // La fila ya existe: a partir de acá la reserva es legítima y NO debe
+      // revertirse. Antes el INSERT iba en el batch y un fallo no dejaba nada
+      // escrito; ahora sí. Si algo falla más abajo, el operario reintenta y la
+      // guarda de cadena rechaza el duplicado.
+      reservaAplicada = null;
+
+      // Fuera del lote a propósito: si el INSERT se rechaza por la guarda de
+      // arriba, este estado no debe quedar escrito de más.
+      if (await _pedidoEstaCompleto(env, pedido)) {
+        await env.DB.prepare(
+          "INSERT INTO control_produccion (numero_pedido, estado, actualizado_en) VALUES (?, 'Completado', ?) " +
+            "ON CONFLICT(numero_pedido) DO UPDATE SET estado = 'Completado', actualizado_en = excluded.actualizado_en",
+        )
+          .bind(pedido, ahora)
+          .run();
       }
 
       const filaParaSheets = [
@@ -484,16 +603,22 @@ export const accionesEscritura = {
         eficiencia,
       ];
 
-      const resultadosBatch = await env.DB.batch(statements);
-      const respuestaFinal = { success: true, loteId, horaInicio, horaFin };
+      const respuestaFinal = {
+        success: true,
+        loteId,
+        horaInicio,
+        horaFin,
+        eficiencia,
+        turnoConfigurado,
+      };
 
       try {
         await _confirmarIdempotencia(env, huella, respuestaFinal);
         ctx.waitUntil(
           _pushRegistrosYMarcar(
             env,
-            [resultadosBatch[0].meta.last_row_id],
-            [filaParaSheets],
+            [idRegistro],
+            [[...filaParaSheets, idRegistro]],
           ),
         );
       } catch (errPostCommit) {
@@ -502,111 +627,459 @@ export const accionesEscritura = {
 
       return respuestaFinal;
     } catch (err) {
+      if (reservaAplicada) {
+        await _revertirReserva(env, reservaAplicada);
+      }
       await _liberarIdempotencia(env, huella);
       throw err;
     }
   },
 
   async guardarJustificacion(payload, env, ctx) {
-    const pedido = String(payload.pedido || "").trim();
-    const ean = String(payload.ean || "").trim();
-    const motivo = String(payload.motivo || "").trim();
-    const unidadesAJustificar = Number(payload.unidadesAJustificar);
-    const supernumerario = String(payload.supernumerario || "").trim();
-
-    if (!pedido) throw new Error("Falta el número de pedido.");
-    if (!ean) throw new Error("Falta el código EAN.");
-    if (!motivo) throw new Error("Debes escribir el motivo de la novedad.");
-    if (!Number.isFinite(unidadesAJustificar) || unidadesAJustificar <= 0) {
-      throw new Error("Las unidades a justificar deben ser mayores a cero.");
-    }
-    if (!supernumerario) throw new Error("Falta el nombre del supernumerario.");
-
-    // Chequeo informativo previo, para un mensaje de error claro.
-    // La autoridad real es el UPDATE atómico de abajo, que vuelve a leer en frío.
-    const validacion = await _localizarValidacionEan(env, pedido, ean);
-    const restanteNeto =
-      validacion.unidades_totales -
-      validacion.unidades_procesadas -
-      validacion.justificado -
-      validacion.codigos_sobrantes;
-
-    if (restanteNeto <= 0) {
-      throw new Error(
-        "Este EAN ya no tiene faltante pendiente por justificar.",
-      );
-    }
-    if (unidadesAJustificar !== restanteNeto) {
-      throw new Error(
-        "Debes justificar exactamente " +
-          restanteNeto +
-          " unidades (el faltante total de este EAN) para poder cerrarlo. Ni más ni menos.",
-      );
+    const huella = await _huellaPayload("guardarJustificacion", payload);
+    const chequeo = await _chequearIdempotencia(env, huella);
+    if (chequeo.duplicado) return chequeo.respuesta;
+    if (chequeo.enProceso) {
+      return {
+        success: false,
+        message:
+          "Esta justificación ya se está procesando (posible doble envío). Espera unos segundos y verifica antes de reintentar.",
+      };
     }
 
-    const ahora = _ahoraISO();
-    const hoy = _fechaHoyBogota();
-
-    // UPDATE atómico: cierra el EAN solo si el faltante fresco sigue coincidiendo
-    // exactamente en este instante. Esto es lo que cierra el hueco de concurrencia
-    // que había quedado pendiente en el Apps Script original.
-    const cierre = await env.DB.prepare(
-      "UPDATE validacion_eanes SET estado = 'Completado', actualizado_en = ? " +
-        "WHERE numero_pedido = ? AND ean_producto = ? " +
-        "AND (unidades_totales - unidades_procesadas - codigos_sobrantes - " +
-        "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) = ?",
-    )
-      .bind(ahora, pedido, ean, pedido, ean, unidadesAJustificar)
-      .run();
-
-    if (cierre.meta.changes === 0) {
-      throw new Error(
-        "El estado de este EAN cambió justo antes de confirmar. Verifica el faltante actual antes de reintentar.",
-      );
-    }
-
-    const statements = [
-      env.DB.prepare(
-        "INSERT INTO justificaciones (fecha, supernumerario, pedido, ean, faltante, motivo, creado_en) VALUES (?,?,?,?,?,?,?)",
-      ).bind(
-        hoy,
-        supernumerario,
-        pedido,
-        ean,
-        unidadesAJustificar,
-        motivo,
-        ahora,
-      ),
-    ];
-
-    const pedidoCompleto = await _pedidoEstaCompleto(env, pedido);
-    if (pedidoCompleto) {
-      statements.push(
-        env.DB.prepare(
-          "INSERT INTO control_produccion (numero_pedido, estado, actualizado_en) VALUES (?, 'Completado', ?) " +
-            "ON CONFLICT(numero_pedido) DO UPDATE SET estado = 'Completado', actualizado_en = excluded.actualizado_en",
-        ).bind(pedido, ahora),
-      );
-    }
-
-    const resultadosBatch = await env.DB.batch(statements);
-    const respuestaFinal = { success: true, pedidoCompleto };
+    let cierreAplicado = null;
 
     try {
-      ctx.waitUntil(
-        _pushJustificacionYMarcar(env, resultadosBatch[0].meta.last_row_id, [
+      const pedido = await _resolverPedido(env, payload.pedido);
+      let ean = String(payload.ean || "").trim();
+      const motivo = String(payload.motivo || "").trim();
+      const unidadesAJustificar = Number(payload.unidadesAJustificar);
+      const supernumerario = String(payload.supernumerario || "").trim();
+
+      if (!pedido) throw new Error("Falta el número de pedido.");
+      if (!ean) throw new Error("Falta el código EAN.");
+      if (!motivo) throw new Error("Debes escribir el motivo de la novedad.");
+      if (!Number.isFinite(unidadesAJustificar) || unidadesAJustificar <= 0) {
+        throw new Error("Las unidades a justificar deben ser mayores a cero.");
+      }
+      if (!supernumerario)
+        throw new Error("Falta el nombre del supernumerario.");
+
+      // Chequeo informativo previo, para un mensaje de error claro.
+      // La autoridad real es el UPDATE atómico de abajo, que vuelve a leer en frío.
+      const validacion = await _localizarValidacionEan(env, pedido, ean);
+      ean = validacion.ean_producto;
+      if (validacion.sin_limite === 1) {
+        throw new Error(
+          "Este EAN no tiene límite de unidades; no aplica justificación de faltante.",
+        );
+      }
+      const restanteNeto =
+        validacion.unidades_totales -
+        validacion.unidades_procesadas -
+        validacion.justificado -
+        validacion.codigos_sobrantes;
+
+      if (restanteNeto <= 0) {
+        throw new Error(
+          "Este EAN ya no tiene faltante pendiente por justificar.",
+        );
+      }
+      if (unidadesAJustificar !== restanteNeto) {
+        throw new Error(
+          "Debes justificar exactamente " +
+            restanteNeto +
+            " unidades (el faltante total de este EAN) para poder cerrarlo. Ni más ni menos.",
+        );
+      }
+
+      const ahora = _ahoraISO();
+      const hoy = _fechaHoyBogota();
+
+      // UPDATE atómico: cierra el EAN solo si el faltante fresco sigue coincidiendo
+      // exactamente en este instante. Esto es lo que cierra el hueco de concurrencia
+      // que había quedado pendiente en el Apps Script original.
+      const cierre = await env.DB.prepare(
+        "UPDATE validacion_eanes SET estado = 'Completado', actualizado_en = ? " +
+          "WHERE numero_pedido = ? AND ean_producto = ? " +
+          "AND sin_limite = 0 AND (unidades_totales - unidades_procesadas - codigos_sobrantes - " +
+          "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) = ?",
+      )
+        .bind(ahora, pedido, ean, pedido, ean, unidadesAJustificar)
+        .run();
+
+      if (cierre.meta.changes === 0) {
+        throw new Error(
+          "El estado de este EAN cambió justo antes de confirmar. Verifica el faltante actual antes de reintentar.",
+        );
+      }
+      cierreAplicado = { pedido, ean };
+
+      const statements = [
+        env.DB.prepare(
+          "INSERT INTO justificaciones (fecha, supernumerario, pedido, ean, faltante, motivo, creado_en) VALUES (?,?,?,?,?,?,?)",
+        ).bind(
           hoy,
           supernumerario,
           pedido,
           ean,
           unidadesAJustificar,
           motivo,
-        ]),
+          ahora,
+        ),
+      ];
+
+      const pedidoCompleto = await _pedidoEstaCompleto(env, pedido);
+      if (pedidoCompleto) {
+        statements.push(
+          env.DB.prepare(
+            "INSERT INTO control_produccion (numero_pedido, estado, actualizado_en) VALUES (?, 'Completado', ?) " +
+              "ON CONFLICT(numero_pedido) DO UPDATE SET estado = 'Completado', actualizado_en = excluded.actualizado_en",
+          ).bind(pedido, ahora),
+        );
+      }
+
+      const resultadosBatch = await env.DB.batch(statements);
+      const respuestaFinal = { success: true, pedidoCompleto };
+
+      try {
+        await _confirmarIdempotencia(env, huella, respuestaFinal);
+        ctx.waitUntil(
+          _pushJustificacionYMarcar(env, resultadosBatch[0].meta.last_row_id, [
+            hoy,
+            supernumerario,
+            pedido,
+            ean,
+            unidadesAJustificar,
+            motivo,
+          ]),
+        );
+      } catch (errPostCommit) {
+        // No relanzamos: la justificación ya quedó registrada en D1.
+      }
+
+      return respuestaFinal;
+    } catch (err) {
+      if (cierreAplicado) {
+        await _revertirCierre(env, cierreAplicado.pedido, cierreAplicado.ean);
+      }
+      await _liberarIdempotencia(env, huella);
+      throw err;
+    }
+  },
+
+  async editarRegistro(payload, env, ctx) {
+    const id = Number(payload.id);
+    if (!Number.isInteger(id) || id <= 0)
+      throw new Error("Falta el ID del registro a editar.");
+
+    const motivo = String(payload.motivo || "").trim();
+    if (!motivo) throw new Error("Debes indicar el motivo de la edición.");
+
+    const editadoPor = String(payload.editadoPor || "").trim();
+    if (!editadoPor) throw new Error("Falta el nombre de quien edita.");
+
+    const actual = await env.DB.prepare(
+      "SELECT numero_pedido, ean FROM registros WHERE id = ? AND anulado = 0",
+    )
+      .bind(id)
+      .first();
+    if (!actual)
+      throw new Error(
+        "El registro no existe o ya fue anulado. Actualiza la lista e intenta de nuevo.",
       );
-    } catch (errPostCommit) {
-      // No relanzamos: la justificación ya quedó registrada en D1.
+
+    const pedido = actual.numero_pedido;
+    const ean = actual.ean;
+
+    const { coordinador, supernumerario } =
+      await _validarSupervisorYSupernumerario(
+        env,
+        String(payload.coordinador || "").trim(),
+        String(payload.supernumerario || "").trim(),
+      );
+
+    const procesoValidado = await _obtenerProcesoValidado(
+      env,
+      payload.proceso,
+      pedido,
+    );
+    const tasaEstandar = procesoValidado.unidadesHora;
+
+    const horaInicio = String(payload.horaInicio || "").trim();
+    const horaFin = String(payload.horaFin || "").trim();
+    const suplementoMin = Number(payload.suplementoMin) || 0;
+    // Sin tope de duración: la edición es la vía correctiva y debe poder tocar
+    // cualquier registro, incluidos los bloques largos que genera la cadena.
+    const { duracionBrutaMin, duracionRealMin } = _calcularDuracionValidada(
+      horaInicio,
+      horaFin,
+      suplementoMin,
+    );
+    const durHoras = Math.round((duracionRealMin / 60) * 100) / 100;
+
+    const unidadesNuevas = Number(payload.unidadesProcesadas);
+    if (!Number.isFinite(unidadesNuevas) || unidadesNuevas < 0)
+      throw new Error("Unidades procesadas inválidas.");
+    const codigosSobrantesNuevos = _validarCodigosSobrantes(
+      payload.codigosSobrantes,
+    );
+
+    const observaciones = String(payload.observaciones || "").trim();
+
+    const fecha = String(payload.fecha || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha))
+      throw new Error("La fecha del registro no tiene un formato válido.");
+    if (fecha > _fechaHoyBogota())
+      throw new Error("La fecha del registro no puede ser posterior a hoy.");
+
+    const disponible = await env.DB.prepare(
+      "SELECT v.unidades_totales AS totales, v.sin_limite AS sinLimite, " +
+        "(SELECT COALESCE(SUM(r.unidades_procesadas_operario + r.codigos_sobrantes), 0) " +
+        "FROM registros r WHERE r.numero_pedido = v.numero_pedido AND r.ean = v.ean_producto " +
+        "AND r.anulado = 0 AND r.id != ?) AS ocupadoOtras, " +
+        "(SELECT COALESCE(SUM(faltante), 0) FROM justificaciones " +
+        "WHERE pedido = v.numero_pedido AND ean = v.ean_producto) AS justificado " +
+        "FROM validacion_eanes v WHERE v.numero_pedido = ? AND v.ean_producto = ?",
+    )
+      .bind(id, pedido, ean)
+      .first();
+
+    const restante =
+      disponible.totales - disponible.ocupadoOtras - disponible.justificado;
+    if (
+      !disponible.sinLimite &&
+      unidadesNuevas + codigosSobrantesNuevos > restante
+    ) {
+      throw new Error(
+        "La cantidad ingresada (" +
+          unidadesNuevas +
+          (codigosSobrantesNuevos > 0
+            ? " unidades + " + codigosSobrantesNuevos + " códigos sobrantes"
+            : " unidades") +
+          ") supera lo que el pedido tiene disponible (" +
+          restante +
+          " de " +
+          disponible.totales +
+          " totales, contando las demás filas y lo justificado). Verifica antes de continuar.",
+      );
     }
 
-    return respuestaFinal;
+    const { unidadesHoraReal, eficiencia } = _calcularMetricasProduccion(
+      unidadesNuevas,
+      tasaEstandar,
+      durHoras,
+    );
+
+    const ahora = _ahoraISO();
+    const resultado = await env.DB.prepare(
+      "UPDATE registros SET fecha = ?, coordinador = ?, supernumerario = ?, proceso = ?, " +
+        "unidades_hora_estandar = ?, hora_inicio = ?, hora_final = ?, suplemento = ?, " +
+        "observacion = ?, duracion_bruta_min = ?, tiempo_total = ?, " +
+        "unidades_procesadas_operario = ?, codigos_sobrantes = ?, unidades_hora_real = ?, " +
+        "eficiencia = ?, editado_por = ?, editado_en = ?, motivo_edicion = ?, " +
+        "anulado_sincronizado_sheets = 0, " +
+        // El CASE compara contra la hora_inicio ANTERIOR: en SQLite el lado
+        // derecho de un SET se evalúa sobre la fila original. Si el editor
+        // cambió la hora de inicio, la fila deja de ser automática.
+        "hora_inicio_auto = CASE WHEN hora_inicio = ? THEN hora_inicio_auto ELSE 0 END " +
+        "WHERE id = ? AND anulado = 0",
+    )
+      .bind(
+        fecha,
+        coordinador,
+        supernumerario,
+        procesoValidado.nombre,
+        tasaEstandar,
+        horaInicio,
+        horaFin,
+        suplementoMin,
+        observaciones,
+        duracionBrutaMin,
+        durHoras,
+        unidadesNuevas,
+        codigosSobrantesNuevos,
+        unidadesHoraReal,
+        eficiencia,
+        editadoPor,
+        ahora,
+        motivo,
+        horaInicio,
+        id,
+      )
+      .run();
+
+    if (resultado.meta.changes === 0) {
+      throw new Error(
+        "El registro fue anulado justo antes de guardar los cambios. Actualiza la lista e intenta de nuevo.",
+      );
+    }
+
+    await _recalcularContadorValidacion(env, pedido, ean);
+    const pedidoCompleto = await _sincronizarEstadoPedido(env, pedido);
+
+    ctx.waitUntil(_pushFilaRegistroYMarcar(env, id));
+
+    return { success: true, id, pedidoCompleto };
+  },
+
+  async anularRegistro(payload, env, ctx) {
+    const id = Number(payload.id);
+    if (!Number.isInteger(id) || id <= 0)
+      throw new Error("Falta el ID del registro a anular.");
+
+    const motivo = String(payload.motivo || "").trim();
+    if (!motivo) throw new Error("Debes indicar el motivo de la anulación.");
+
+    const anuladoPor = String(payload.anuladoPor || "").trim();
+    if (!anuladoPor) throw new Error("Falta el nombre de quien anula.");
+
+    const actual = await env.DB.prepare(
+      "SELECT numero_pedido, ean FROM registros WHERE id = ? AND anulado = 0",
+    )
+      .bind(id)
+      .first();
+    if (!actual)
+      throw new Error(
+        "El registro no existe o ya estaba anulado. Actualiza la lista e intenta de nuevo.",
+      );
+
+    const pedido = actual.numero_pedido;
+    const ean = actual.ean;
+    const ahora = _ahoraISO();
+
+    const resultado = await env.DB.prepare(
+      "UPDATE registros SET anulado = 1, anulado_por = ?, anulado_en = ?, " +
+        "motivo_anulacion = ?, anulado_sincronizado_sheets = 0 WHERE id = ? AND anulado = 0",
+    )
+      .bind(anuladoPor, ahora, motivo, id)
+      .run();
+
+    if (resultado.meta.changes === 0) {
+      throw new Error(
+        "El registro fue anulado por otro proceso justo antes. Actualiza la lista e intenta de nuevo.",
+      );
+    }
+
+    await _recalcularContadorValidacion(env, pedido, ean);
+    const pedidoCompleto = await _sincronizarEstadoPedido(env, pedido);
+
+    ctx.waitUntil(_pushFilaRegistroYMarcar(env, id));
+
+    return { success: true, id, pedidoCompleto };
+  },
+
+  async reactivarRegistro(payload, env, ctx) {
+    const id = Number(payload.id);
+    if (!Number.isInteger(id) || id <= 0)
+      throw new Error("Falta el ID del registro a reactivar.");
+
+    const motivo = String(payload.motivo || "").trim();
+    if (!motivo) throw new Error("Debes indicar el motivo de la reactivación.");
+
+    const reactivadoPor = String(payload.reactivadoPor || "").trim();
+    if (!reactivadoPor) throw new Error("Falta el nombre de quien reactiva.");
+
+    const actual = await env.DB.prepare(
+      "SELECT numero_pedido, ean, unidades_procesadas_operario, codigos_sobrantes " +
+        "FROM registros WHERE id = ? AND anulado = 1",
+    )
+      .bind(id)
+      .first();
+    if (!actual)
+      throw new Error(
+        "El registro no existe o no está anulado. Actualiza la lista e intenta de nuevo.",
+      );
+
+    const pedido = actual.numero_pedido;
+    const ean = actual.ean;
+
+    const disponible = await env.DB.prepare(
+      "SELECT v.unidades_totales AS totales, v.sin_limite AS sinLimite, " +
+        "(SELECT COALESCE(SUM(r.unidades_procesadas_operario + r.codigos_sobrantes), 0) " +
+        "FROM registros r WHERE r.numero_pedido = v.numero_pedido AND r.ean = v.ean_producto " +
+        "AND r.anulado = 0) AS ocupadoActivos, " +
+        "(SELECT COALESCE(SUM(faltante), 0) FROM justificaciones " +
+        "WHERE pedido = v.numero_pedido AND ean = v.ean_producto) AS justificado " +
+        "FROM validacion_eanes v WHERE v.numero_pedido = ? AND v.ean_producto = ?",
+    )
+      .bind(pedido, ean)
+      .first();
+
+    const restante =
+      disponible.totales - disponible.ocupadoActivos - disponible.justificado;
+    const ocupaEstaFila =
+      actual.unidades_procesadas_operario + actual.codigos_sobrantes;
+    if (!disponible.sinLimite && ocupaEstaFila > restante) {
+      throw new Error(
+        "No se puede reactivar: este registro ocupa " +
+          ocupaEstaFila +
+          " unidades y el pedido solo tiene " +
+          restante +
+          " disponibles ahora mismo (contando lo ya activo y lo justificado). " +
+          "Edita las unidades antes de reactivarlo, o revisa el pedido.",
+      );
+    }
+
+    const ahora = _ahoraISO();
+    const resultado = await env.DB.prepare(
+      "UPDATE registros SET anulado = 0, editado_por = ?, editado_en = ?, " +
+        "motivo_edicion = ?, anulado_sincronizado_sheets = 0 WHERE id = ? AND anulado = 1",
+    )
+      .bind(reactivadoPor, ahora, motivo, id)
+      .run();
+
+    if (resultado.meta.changes === 0) {
+      throw new Error(
+        "El registro fue modificado por otro proceso justo antes. Actualiza la lista e intenta de nuevo.",
+      );
+    }
+
+    await _recalcularContadorValidacion(env, pedido, ean);
+    const pedidoCompleto = await _sincronizarEstadoPedido(env, pedido);
+
+    ctx.waitUntil(_pushFilaRegistroYMarcar(env, id));
+
+    return { success: true, id, pedidoCompleto };
+  },
+
+  async eliminarRegistro(payload, env, ctx) {
+    const id = Number(payload.id);
+    if (!Number.isInteger(id) || id <= 0)
+      throw new Error("Falta el ID del registro a eliminar.");
+
+    const actual = await env.DB.prepare(
+      "SELECT numero_pedido, ean, lote_id FROM registros WHERE id = ? AND anulado = 1",
+    )
+      .bind(id)
+      .first();
+    if (!actual)
+      throw new Error(
+        "El registro no existe o no está anulado. Solo se pueden eliminar registros ya anulados.",
+      );
+
+    const resultado = await env.DB.prepare(
+      "DELETE FROM registros WHERE id = ? AND anulado = 1",
+    )
+      .bind(id)
+      .run();
+
+    if (resultado.meta.changes === 0) {
+      throw new Error(
+        "El registro fue modificado por otro proceso justo antes. Actualiza la lista e intenta de nuevo.",
+      );
+    }
+
+    // Borrar una fila anulada no cambia unidades_procesadas/codigos_sobrantes
+    // (ya estaba excluida de esa suma), pero sí hace falta recalcular para
+    // refrescar "operarios" y el estado — sobre todo en filas anuladas antes
+    // de que este recálculo existiera, que quedaron con datos obsoletos.
+    await _recalcularContadorValidacion(env, actual.numero_pedido, actual.ean);
+
+    // Best-effort, sin tabla de pendientes: si falla, la fila huérfana se
+    // resuelve sola con la próxima purga periódica de la hoja.
+    ctx.waitUntil(_eliminarFilaRegistroSheets(env, id, actual.lote_id));
+
+    return { success: true, id };
   },
 };
