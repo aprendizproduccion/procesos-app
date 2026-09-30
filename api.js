@@ -3,11 +3,11 @@
 var USAR_WORKER_NUEVO = true; // true = Worker + D1 | false = Apps Script (histórico). Único punto de corte.
 
 var API_URL = USAR_WORKER_NUEVO
-  ? "https://registro-produccion-api.glovanze.workers.dev/"
+  ? "/api"
   : "https://script.google.com/macros/s/AKfycbwWu28Gji-rjknzhVNsdqqNHUtZiSPqFfe3TLFZo7BGVQqWDNBIt9TX0YOhfMYb_N4/exec";
 
 var API_TOKEN = USAR_WORKER_NUEVO
-  ? "9a97fcabd5b994c2cb07263ced448e2931c95f393bad9d6f" 
+  ? null
   : "937dc94c-cdb2-428e-8b04-b1dfb3b52280";
 
 function llamarAPI(action, datos, intento) {
