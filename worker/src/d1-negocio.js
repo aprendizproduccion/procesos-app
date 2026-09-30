@@ -4,6 +4,19 @@
 const TTL_EN_PROCESO_SEG = 120;
 const TTL_IDEMPOTENCIA_SEG = 21600; // 6 horas — igual al tope que ya usaba CacheService
 
+// Horas encadenadas del operario
+export const HORA_LIMITE_ENVIO = "21:00";
+export const TURNO_POR_DEFECTO = "06:00";
+
+// Sin uso desde 2026-09-28: se quitaron el piso del registro del operario y el
+// tope del flujo administrativo. El umbral de "registro corto" NO vive aquí:
+// es DURACION_CORTA_MIN en index.html, y solo decide si se muestra el modal de
+// confirmación, no si el envío se rechaza. Estas dos quedan como registro de lo
+// que hubo; si alguna vuelve a usarse, pasa por _calcularDuracionValidada
+// (opciones.duracionMinimaMin / duracionMaximaMin), que sigue soportándolas.
+export const DURACION_MINIMA_MIN = 5;
+export const DURACION_MAXIMA_ADMIN_MIN = 720;
+
 async function _sha256Hex(texto) {
   const buf = await crypto.subtle.digest(
     "SHA-256",
@@ -113,13 +126,62 @@ export async function _validarSupervisorYSupernumerario(
   return { coordinador: coord.nombre, supernumerario: supernum.nombre };
 }
 
-export async function _localizarValidacionEan(env, pedido, ean) {
-  const row = await env.DB.prepare(
-    "SELECT sublinea, unidades_totales, unidades_procesadas, codigos_sobrantes, " +
-      "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?) AS justificado " +
-      "FROM validacion_eanes WHERE numero_pedido = ? AND ean_producto = ?",
+// Devuelve las dos formas posibles de un EAN escaneado: la de 12 dígitos
+// (real) y la de 13 con el "0" que antepone el preamble UPC-A por defecto
+// del escáner Zebra (mismo problema que en code.js). Se usan ambas en el
+// WHERE para que la fila coincida sin importar cuál quedó guardada en D1.
+export function _formasEan(ean) {
+  const valor = String(ean || "").trim();
+  const sinPreambulo =
+    valor.length === 13 && valor.charAt(0) === "0" ? valor.substring(1) : valor;
+  const conPreambulo =
+    sinPreambulo.length === 12 ? "0" + sinPreambulo : sinPreambulo;
+  return [sinPreambulo, conPreambulo];
+}
+
+// Clave de comparación de pedidos: sin tildes, minúsculas y sin espacios.
+export function _normalizarPedido(texto) {
+  return String(texto || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+
+// Resuelve lo escrito al texto exacto de numero_pedido en D1.
+// Si no hay coincidencia única, devuelve el texto recortado sin cambios.
+export async function _resolverPedido(env, texto) {
+  const limpio = String(texto || "").trim();
+  if (!limpio) return "";
+
+  const exacto = await env.DB.prepare(
+    "SELECT (EXISTS(SELECT 1 FROM validacion_eanes WHERE numero_pedido = ?) " +
+      "OR EXISTS(SELECT 1 FROM registros WHERE numero_pedido = ?)) AS existe",
   )
-    .bind(pedido, ean, pedido, ean)
+    .bind(limpio, limpio)
+    .first();
+  if (exacto && exacto.existe) return limpio;
+
+  const clave = _normalizarPedido(limpio);
+  const { results } = await env.DB.prepare(
+    "SELECT numero_pedido FROM validacion_eanes " +
+      "UNION SELECT numero_pedido FROM registros",
+  ).all();
+  const coincidencias = results
+    .map((r) => String(r.numero_pedido))
+    .filter((p) => _normalizarPedido(p) === clave);
+
+  return coincidencias.length === 1 ? coincidencias[0] : limpio;
+}
+
+export async function _localizarValidacionEan(env, pedido, ean) {
+  const [eanA, eanB] = _formasEan(ean);
+  const row = await env.DB.prepare(
+    "SELECT sublinea, unidades_totales, sin_limite, unidades_procesadas, codigos_sobrantes, ean_producto, " +
+      "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean IN (?, ?)) AS justificado " +
+      "FROM validacion_eanes WHERE numero_pedido = ? AND ean_producto IN (?, ?)",
+  )
+    .bind(pedido, eanA, eanB, pedido, eanA, eanB)
     .first();
   if (!row)
     throw new Error(
@@ -171,13 +233,19 @@ export async function _obtenerProcesoValidado(env, nombreProceso, pedido) {
   return row;
 }
 
+// Excluye las filas con cédula vacía (huérfanas que el pull no alcanza a borrar,
+// porque el DELETE por 'cedula = ""' no matchea NULL en SQLite). Sin este filtro,
+// un nombre presente en dos filas podía resolver contra la vacía y guardar el
+// registro sin cédula: invisible para _inicioCadena y para Control tiempos.
+// ORDER BY hace determinista cuál gana si el nombre está repetido.
 export async function _buscarCedulaPorNombre(env, nombre) {
   const row = await env.DB.prepare(
-    "SELECT cedula FROM operarios WHERE lower(nombre_operario) = lower(?)",
+    "SELECT cedula FROM operarios WHERE lower(nombre_operario) = lower(?) AND activo = 1 " +
+      "AND cedula IS NOT NULL AND TRIM(cedula) <> '' ORDER BY cedula LIMIT 1",
   )
     .bind(nombre)
     .first();
-  return row ? row.cedula : "";
+  return row ? String(row.cedula).trim() : "";
 }
 
 // Equivalente a _marcarPedidoIniciado: la primera vez que un pedido recibe un
@@ -210,23 +278,195 @@ export async function _pedidoEstaCompleto(env, pedido) {
   return row.total > 0 && row.pendientes === 0;
 }
 
-export function _duracionMinutos(horaInicio, horaFin) {
-  const [h1, m1] = String(horaInicio).split(":").map(Number);
-  const [h2, m2] = String(horaFin).split(":").map(Number);
-  let minutos = h2 * 60 + m2 - (h1 * 60 + m1);
-  if (minutos < 0) minutos += 24 * 60;
-  return minutos;
+// Complementa _pedidoEstaCompleto: además de poder CERRAR un pedido (lo que ya
+// hacían submitRegistro/submitRegistroOperario/guardarJustificacion de forma
+// inline), esta función también puede REABRIRLO si una edición o anulación hizo
+// que ya no esté completo. Se usa solo desde edición/anulación de registros —
+// los tres flujos de envío normales siguen con su bloque inline, sin cambios.
+export async function _sincronizarEstadoPedido(env, pedido) {
+  const completo = await _pedidoEstaCompleto(env, pedido);
+  const ahora = _ahoraISO();
+  await env.DB.prepare(
+    "INSERT INTO control_produccion (numero_pedido, estado, actualizado_en) VALUES (?, ?, ?) " +
+      "ON CONFLICT(numero_pedido) DO UPDATE SET estado = excluded.estado, actualizado_en = excluded.actualizado_en",
+  )
+    .bind(pedido, completo ? "Completado" : "En proceso", ahora)
+    .run();
+  return completo;
 }
 
-export function _calcularDuracionValidada(horaInicio, horaFin, suplementoMin) {
-  const duracionBrutaMin = _duracionMinutos(horaInicio, horaFin);
-  if (duracionBrutaMin <= 0)
-    throw new Error("La hora de fin debe ser posterior a la hora de inicio.");
-  const duracionRealMin = duracionBrutaMin - suplementoMin;
-  if (duracionRealMin <= 0)
+// Revierte una reserva de unidades ya aplicada, para cuando el INSERT de
+// registros falla DESPUÉS de que la reserva ya comprometió cambios en D1.
+export async function _revertirReserva(
+  env,
+  { pedido, ean, total, codigosSobrantes },
+) {
+  await env.DB.prepare(
+    "UPDATE validacion_eanes SET " +
+      "unidades_procesadas = unidades_procesadas - ?, " +
+      "codigos_sobrantes = codigos_sobrantes - ?, " +
+      "estado = CASE " +
+      "WHEN ((unidades_procesadas - ?) + (codigos_sobrantes - ?) + " +
+      "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) <= 0 THEN 'Pendiente' " +
+      "WHEN sin_limite = 0 AND ((unidades_procesadas - ?) + (codigos_sobrantes - ?) + " +
+      "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) >= unidades_totales THEN 'Completado' " +
+      "ELSE 'En proceso' END " +
+      "WHERE numero_pedido = ? AND ean_producto = ?",
+  )
+    .bind(
+      total,
+      codigosSobrantes,
+      total,
+      codigosSobrantes,
+      pedido,
+      ean,
+      total,
+      codigosSobrantes,
+      pedido,
+      ean,
+      pedido,
+      ean,
+    )
+    .run();
+}
+
+// Revierte un cierre de EAN ya aplicado, para cuando el INSERT de la
+// justificación falla DESPUÉS de que el cierre ya comprometió cambios en D1.
+export async function _revertirCierre(env, pedido, ean) {
+  await env.DB.prepare(
+    "UPDATE validacion_eanes SET estado = 'En proceso' WHERE numero_pedido = ? AND ean_producto = ?",
+  )
+    .bind(pedido, ean)
+    .run();
+}
+
+// Reconstruye el contador de validacion_eanes desde la fuente real (registros +
+// justificaciones) en una sola sentencia atómica, en vez de sumar/restar un
+// delta a mano. Excluye registros anulados. Se usa SOLO desde edición/anulación
+// de registros — submitRegistro, submitRegistroOperario y guardarJustificacion
+// NO se tocan ni usan esta función; su reserva atómica sigue exactamente igual.
+export async function _recalcularContadorValidacion(env, pedido, ean) {
+  const ahora = _ahoraISO();
+  await env.DB.prepare(
+    "WITH agregados AS (" +
+      "SELECT COALESCE(SUM(unidades_procesadas_operario),0) AS procesado, " +
+      "COALESCE(SUM(codigos_sobrantes),0) AS sobrantes " +
+      "FROM registros WHERE numero_pedido = ? AND ean = ? AND anulado = 0" +
+      "), justif AS (" +
+      "SELECT COALESCE(SUM(faltante),0) AS justificado " +
+      "FROM justificaciones WHERE pedido = ? AND ean = ?" +
+      "), operarios_activos AS (" +
+      "SELECT GROUP_CONCAT(nombre, ' - ') AS nombres FROM (" +
+      "SELECT DISTINCT operario AS nombre FROM registros " +
+      "WHERE numero_pedido = ? AND ean = ? AND anulado = 0)" +
+      ") " +
+      "UPDATE validacion_eanes SET " +
+      "unidades_procesadas = (SELECT procesado FROM agregados), " +
+      "codigos_sobrantes = (SELECT sobrantes FROM agregados), " +
+      "operarios = COALESCE((SELECT nombres FROM operarios_activos), ''), " +
+      "estado = CASE " +
+      "WHEN sin_limite = 0 AND ((SELECT procesado FROM agregados) + (SELECT sobrantes FROM agregados) + (SELECT justificado FROM justif)) >= unidades_totales THEN 'Completado' " +
+      "WHEN ((SELECT procesado FROM agregados) + (SELECT sobrantes FROM agregados) + (SELECT justificado FROM justif)) <= 0 THEN 'Pendiente' " +
+      "ELSE 'En proceso' END, " +
+      "actualizado_en = ? " +
+      "WHERE numero_pedido = ? AND ean_producto = ?",
+  )
+    .bind(pedido, ean, pedido, ean, pedido, ean, ahora, pedido, ean)
+    .run();
+}
+
+const PATRON_HORA = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+// Antes, una hora vacía o mal formada producía NaN y ninguna guarda lo atrapaba
+// (NaN <= 0, NaN > max y NaN < min son todas false): el registro se guardaba con
+// duracion_bruta_min y tiempo_total en NaN, sin error.
+function _minutosDeHora(valor, etiqueta) {
+  const texto = String(valor == null ? "" : valor).trim();
+  const m = PATRON_HORA.exec(texto);
+  if (!m) {
     throw new Error(
-      "El suplemento no puede ser mayor o igual al tiempo trabajado.",
+      "La " +
+        etiqueta +
+        ' no es válida ("' +
+        texto +
+        '"). Usa el formato HH:MM de 24 horas.',
     );
+  }
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+// Sin wrap de medianoche: la jornada va de 6:00 a 19:00, así que una hora fin
+// anterior a la de inicio es captura invertida, no un turno que cruza el día.
+// El "+= 24 * 60" anterior convertía un bloque real de 15:00–18:00 mal digitado
+// en un registro de 21 horas, silenciosamente.
+export function _duracionMinutos(horaInicio, horaFin) {
+  return (
+    _minutosDeHora(horaFin, "hora de fin") -
+    _minutosDeHora(horaInicio, "hora de inicio")
+  );
+}
+
+export function _calcularDuracionValidada(
+  horaInicio,
+  horaFin,
+  suplementoMin,
+  opciones,
+) {
+  const minima = (opciones && opciones.duracionMinimaMin) || 0;
+  const maxima = (opciones && opciones.duracionMaximaMin) || 0;
+
+  const duracionBrutaMin = _duracionMinutos(horaInicio, horaFin);
+  if (duracionBrutaMin < 0) {
+    throw new Error(
+      "La hora de fin (" +
+        horaFin +
+        ") es anterior a la de inicio (" +
+        horaInicio +
+        "). Revisa si los dos campos quedaron invertidos.",
+    );
+  }
+  if (duracionBrutaMin === 0)
+    throw new Error("La hora de fin debe ser posterior a la hora de inicio.");
+
+  if (maxima && duracionBrutaMin > maxima) {
+    throw new Error(
+      "Este registro cubriría " +
+        Math.round((duracionBrutaMin / 60) * 10) / 10 +
+        " horas (" +
+        horaInicio +
+        " a " +
+        horaFin +
+        "), y el máximo permitido es " +
+        maxima / 60 +
+        " horas. Verifica que las horas no estén invertidas o mal digitadas.",
+    );
+  }
+
+  // M6: el error de suplemento solo sale si es MAYOR al tiempo operado.
+  if (suplementoMin > duracionBrutaMin) {
+    throw new Error(
+      "El suplemento (" +
+        suplementoMin +
+        " min) no puede ser mayor al tiempo trabajado (" +
+        duracionBrutaMin +
+        " min).",
+    );
+  }
+
+  const duracionRealMin = duracionBrutaMin - suplementoMin;
+
+  if (minima && duracionRealMin < minima) {
+    throw new Error(
+      "El registro es demasiado corto (" +
+        duracionRealMin +
+        " min de trabajo efectivo). El mínimo es " +
+        minima +
+        " minutos.",
+    );
+  }
+  if (duracionRealMin <= 0)
+    throw new Error("El suplemento no puede ser igual al tiempo trabajado.");
+
   return { duracionBrutaMin, duracionRealMin };
 }
 
@@ -239,7 +479,7 @@ export function _calcularMetricasProduccion(
   const unidadesHoraReal =
     durHoras > 0 ? Math.round((unidadesOperario / durHoras) * 100) / 100 : 0;
   const eficiencia =
-    esperado > 0 ? Math.round((unidadesOperario / esperado) * 100) : 0;
+    esperado > 0 ? Math.round((unidadesOperario / esperado) * 100) : null;
   return { unidadesHoraReal, eficiencia };
 }
 
@@ -254,6 +494,49 @@ export function _validarCodigosSobrantes(valor) {
   return num;
 }
 
+// Fecha y hora de Bogotá de UN SOLO objeto Date: calcularlas por separado
+// dejaría que un envío a las 23:59:59 quedara con la fecha de un día y la
+// hora del otro. hourCycle "h23" evita el "24:xx" que algunos motores
+// devuelven a medianoche con hour12: false.
+export function _ahoraBogota() {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Bogota",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+
+  const obtener = (tipo) => partes.find((p) => p.type === tipo).value;
+  return {
+    fecha: obtener("year") + "-" + obtener("month") + "-" + obtener("day"),
+    hora: obtener("hour") + ":" + obtener("minute"),
+  };
+}
+
+// Hora de inicio que le toca al próximo registro del operario: el fin de su
+// último registro vigente del día, o su hora de turno si es el primero.
+// Subconsultas escalares en una sola sentencia (D1 ejecuta una por vez).
+export async function _inicioCadena(env, cedula, fecha) {
+  const row = await env.DB.prepare(
+    "SELECT (SELECT MAX(hora_final) FROM registros " +
+      "WHERE cedula_operario = ? AND fecha = ? AND anulado = 0) AS ultimoFin, " +
+      "(SELECT turno FROM operarios WHERE cedula = ?) AS turno",
+  )
+    .bind(cedula, fecha, cedula)
+    .first();
+
+  const ultimoFin = String((row && row.ultimoFin) || "").trim();
+  if (ultimoFin) return { inicio: ultimoFin, turnoConfigurado: true };
+
+  const turno = String((row && row.turno) || "").trim();
+  if (turno) return { inicio: turno, turnoConfigurado: true };
+
+  return { inicio: TURNO_POR_DEFECTO, turnoConfigurado: false };
+}
+
 export function _fechaHoyBogota() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Bogota",
@@ -261,6 +544,58 @@ export function _fechaHoyBogota() {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
+}
+
+export function _validarFechaRegistro(fechaPayload) {
+  const hoy = _fechaHoyBogota();
+  const valor = String(fechaPayload || "").trim();
+  if (!valor) return hoy;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) {
+    throw new Error("La fecha del registro no tiene un formato válido.");
+  }
+  if (valor > hoy) {
+    throw new Error("La fecha del registro no puede ser posterior a hoy.");
+  }
+  const limite = new Date(hoy + "T00:00:00Z");
+  limite.setUTCDate(limite.getUTCDate() - 7);
+  const limiteStr = limite.toISOString().slice(0, 10);
+  if (valor < limiteStr) {
+    throw new Error(
+      "La fecha del registro no puede ser anterior a " +
+        limiteStr +
+        " (máximo 7 días atrás).",
+    );
+  }
+  return valor;
+}
+
+// formatToParts en vez de .format() para controlar el orden exacto del string
+// y no depender de cómo el runtime arme el formato "en-CA" con hora incluida.
+// Acepta una fecha/ISO opcional para reformatear un valor ya guardado en D1
+// (anulado_en/editado_en); sin argumento, formatea "ahora" igual que antes.
+export function _fechaHoraBogota(fecha) {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Bogota",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(fecha ? new Date(fecha) : new Date());
+
+  const obtener = (tipo) => partes.find((p) => p.type === tipo).value;
+  return (
+    obtener("year") +
+    "-" +
+    obtener("month") +
+    "-" +
+    obtener("day") +
+    " " +
+    obtener("hour") +
+    ":" +
+    obtener("minute")
+  );
 }
 
 export function _ahoraISO() {
