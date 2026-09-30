@@ -1202,6 +1202,53 @@
               <label>Fecha</label>
               <input type="date" id="ctFecha" />
             </div>
+            <!-- display:contents para que los hijos sigan en la misma grilla -->
+            <div id="ctFiltrosAdmin" style="display: none">
+              <div>
+                <label>Coordinador</label>
+                <select id="ctCoordinador"></select>
+              </div>
+              <div>
+                <label>Supernumerario</label>
+                <select id="ctSupernumerario"></select>
+              </div>
+              <div>
+                <label>Operario</label>
+                <input
+                  id="ctOperarioInput"
+                  placeholder="Ej: Juan Pérez"
+                  autocomplete="off"
+                  enterkeyhint="search"
+                />
+              </div>
+              <div>
+                <label>Cliente</label>
+                <input
+                  id="ctClienteInput"
+                  placeholder="Ej: Falabella"
+                  autocomplete="off"
+                  enterkeyhint="search"
+                />
+              </div>
+              <div>
+                <label>Proceso</label>
+                <input
+                  id="ctProcesoInput"
+                  placeholder="Ej: Etiquetado"
+                  autocomplete="off"
+                  enterkeyhint="search"
+                />
+              </div>
+              <div>
+                <label>EAN</label>
+                <input
+                  id="ctEanInput"
+                  placeholder="Escanea o escribe el EAN"
+                  autocomplete="off"
+                  enterkeyhint="search"
+                />
+              </div>
+            </div>
           </div>
           <div class="panel-acciones">
             <button
@@ -1230,7 +1277,9 @@
                 <th>Operario</th>
                 <th>Supernumerario</th>
                 <th>Pedido</th>
+                <th>Cliente</th>
                 <th>Proceso</th>
+                <th>EAN</th>
                 <th>Uni. procesadas</th>
                 <th>Eficiencia</th>
                 <th>Hora inicio</th>
@@ -1560,19 +1609,35 @@
       <div class="row2">
         <div>
           <label>Suplemento (descanso)</label>
-          <select id="opSuplementoMin"></select>
+          <select
+            id="opSuplementoMin"
+            onchange="_validarHorasOperario()"
+          ></select>
         </div>
       </div>
       <div class="row2">
         <div>
           <label>Hora inicio</label>
-          <input id="opHoraInicio" type="time" />
+          <div
+            id="opHoraInicio"
+            class="calc-valor-fijo"
+            style="margin-bottom: 14px"
+          >
+            —
+          </div>
         </div>
         <div>
           <label>Hora fin</label>
-          <input id="opHoraFin" type="time" />
+          <div
+            id="opHoraFin"
+            class="calc-valor-fijo"
+            style="margin-bottom: 14px"
+          >
+            —
+          </div>
         </div>
       </div>
+      <div id="opAlertaHoras"></div>
 
       <label>Unidades procesadas</label>
       <input id="opUnidades" type="number" min="0" placeholder="Ej: 50" />
@@ -1614,6 +1679,29 @@
             onclick="cerrarModalAviso()"
           >
             Entendido
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="modalTiempoCorto" class="modal-overlay">
+      <div class="modal-box">
+        <h3 style="color: #92400e">Registro corto</h3>
+        <p id="modalTiempoCortoTexto"></p>
+        <div class="row2">
+          <button
+            type="button"
+            style="background: #16a34a; color: #fff"
+            onclick="confirmarTiempoCortoOperario()"
+          >
+            Enviar registro
+          </button>
+          <button
+            type="button"
+            style="background: #e5e7eb; color: #333"
+            onclick="cerrarModalTiempoCorto()"
+          >
+            Cancelar
           </button>
         </div>
       </div>
@@ -2090,8 +2178,6 @@
         "opCedula",
         "opPedido",
         "opProceso",
-        "opHoraInicio",
-        "opHoraFin",
         "opUnidades",
         "opCodigosSobrantes",
         "opObservaciones",
@@ -2158,6 +2244,7 @@
           _guardarBorrador("rp_borrador_operario", CAMPOS_BORRADOR_OPERARIO);
         } else if (document.visibilityState === "visible") {
           refrescarCatalogos();
+          if (opCedulaConfirmada) _refrescarHoraInicioCadena();
         }
       });
 
@@ -2243,6 +2330,7 @@
         document.getElementById("vistaDashboard").style.display = "none";
         if (rolActual === "operario") {
           document.getElementById("vistaOperario").style.display = "block";
+          if (opCedulaConfirmada) _iniciarRelojHoraFin();
         } else {
           document.getElementById("vistaPrincipal").style.display = "block";
         }
@@ -2287,11 +2375,47 @@
           : "none";
       }
 
+      function _esAdminCT() {
+        return rolActual === "supervisor";
+      }
+
+      // Copia las opciones del catálogo ya cargado en el formulario principal.
+      function _poblarSelectFiltroCT(idDestino, idOrigen, etiquetaVacia) {
+        const destino = document.getElementById(idDestino);
+        destino.innerHTML = document.getElementById(idOrigen).innerHTML;
+        if (destino.options.length) destino.options[0].text = etiquetaVacia;
+        destino.value = "";
+      }
+
       function abrirControlTiemposDesdeDashboard() {
+        const esAdmin = _esAdminCT();
         document.getElementById("vistaDashboard").style.display = "none";
         document.getElementById("vistaControlTiempos").style.display = "block";
-        document.getElementById("ctCedulaInput").value = "";
-        document.getElementById("ctPedidoInput").value = "";
+        document.getElementById("ctFiltrosAdmin").style.display = esAdmin
+          ? "contents"
+          : "none";
+
+        const campoCedula = document.getElementById("ctCedulaInput");
+        campoCedula.value = "";
+        campoCedula.placeholder = esAdmin
+          ? "Cédula (opcional)"
+          : "Escanea o escribe tu cédula";
+
+        [
+          "ctPedidoInput",
+          "ctOperarioInput",
+          "ctClienteInput",
+          "ctProcesoInput",
+          "ctEanInput",
+        ].forEach(function (id) {
+          document.getElementById(id).value = "";
+        });
+
+        if (esAdmin) {
+          _poblarSelectFiltroCT("ctCoordinador", "coordinador", "Todos");
+          _poblarSelectFiltroCT("ctSupernumerario", "supernumerario", "Todos");
+        }
+
         document.getElementById("ctFiltro").value = "fecha";
         const campoFechaCt = document.getElementById("ctFecha");
         campoFechaCt.max = _hoyBogotaCT();
@@ -2301,6 +2425,8 @@
         document.getElementById("ctBody").innerHTML = "";
         document.getElementById("panelFiltrosControl").hidden = true;
         renderFiltros("control");
+        // El administrador entra viendo el día completo, sin pulsar Buscar.
+        if (esAdmin) buscarControlTiempos();
       }
 
       // ---------------- FILTROS COMPACTOS (barra + chips + panel) ----------------
@@ -2343,7 +2469,7 @@
             buscarControlTiempos();
           },
           puedeBuscar: function () {
-            return !!_valorFiltro("ctCedulaInput");
+            return _esAdminCT() || !!_valorFiltro("ctCedulaInput");
           },
           alCambiar: function () {
             cambiarFiltroControlTiempos();
@@ -2351,11 +2477,29 @@
           campos: [
             { id: "ctPedidoInput", etiqueta: "Pedido" },
             {
+              id: "ctCoordinador",
+              etiqueta: "Coordinador",
+              visible: _esAdminCT,
+            },
+            {
+              id: "ctSupernumerario",
+              etiqueta: "Supernumerario",
+              visible: _esAdminCT,
+            },
+            {
+              id: "ctOperarioInput",
+              etiqueta: "Operario",
+              visible: _esAdminCT,
+            },
+            { id: "ctClienteInput", etiqueta: "Cliente", visible: _esAdminCT },
+            { id: "ctProcesoInput", etiqueta: "Proceso", visible: _esAdminCT },
+            { id: "ctEanInput", etiqueta: "EAN", visible: _esAdminCT },
+            {
               id: "ctFiltro",
               etiqueta: "Mostrar",
               vacio: "fecha",
               texto: function () {
-                return "Histórico (últimos 100)";
+                return "Histórico";
               },
             },
             {
@@ -2520,11 +2664,17 @@
         if (cfg.puedeBuscar()) cfg.buscar();
       }
 
+      function _valorCT(id) {
+        const el = document.getElementById(id);
+        return el ? String(el.value || "").trim() : "";
+      }
+
       function buscarControlTiempos() {
-        const cedula = document.getElementById("ctCedulaInput").value.trim();
+        const esAdmin = _esAdminCT();
+        const cedula = _valorCT("ctCedulaInput");
         const alertaDiv = document.getElementById("ctAlerta");
         const bodyEl = document.getElementById("ctBody");
-        if (!cedula) {
+        if (!cedula && !esAdmin) {
           alertaDiv.innerHTML =
             '<div class="msg err">Escribe o escanea una cédula.</div>';
           bodyEl.innerHTML = "";
@@ -2532,7 +2682,6 @@
         }
         const filtro = document.getElementById("ctFiltro").value;
         const fecha = document.getElementById("ctFecha").value;
-        const pedido = document.getElementById("ctPedidoInput").value.trim();
         if (filtro === "fecha") {
           if (!fecha) {
             alertaDiv.innerHTML =
@@ -2547,30 +2696,42 @@
             return;
           }
         }
+
+        const payload = {
+          admin: esAdmin,
+          cedula: cedula,
+          filtro: filtro,
+          fecha: fecha,
+          pedido: _valorCT("ctPedidoInput"),
+          coordinador: esAdmin ? _valorCT("ctCoordinador") : "",
+          supernumerario: esAdmin ? _valorCT("ctSupernumerario") : "",
+          operario: esAdmin ? _valorCT("ctOperarioInput") : "",
+          cliente: esAdmin ? _valorCT("ctClienteInput") : "",
+          proceso: esAdmin ? _valorCT("ctProcesoInput") : "",
+          ean: esAdmin ? _valorCT("ctEanInput") : "",
+        };
+
         alertaDiv.innerHTML = '<p class="hint">Buscando...</p>';
         bodyEl.innerHTML = "";
 
-        llamarAPI("obtenerControlTiempos", { cedula, filtro, fecha, pedido })
+        llamarAPI("obtenerControlTiempos", payload)
           .then(function (res) {
             if (!res.success) {
               alertaDiv.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
               return;
             }
-            renderControlTiempos(res.registros || []);
-            if (res.registros.length) {
-              alertaDiv.innerHTML = "";
-            } else if (pedido && filtro === "fecha") {
-              alertaDiv.innerHTML =
-                '<p class="hint">No hay registros de ese pedido en esa fecha. Prueba cambiando "Mostrar" a Histórico dentro de Filtros.</p>';
-            } else if (pedido) {
-              alertaDiv.innerHTML =
-                '<p class="hint">No hay registros de ese pedido para esa cédula.</p>';
+            const registros = res.registros || [];
+            renderControlTiempos(registros);
+            if (registros.length) {
+              alertaDiv.innerHTML = esAdmin
+                ? `<p class="hint">${registros.length} registros.</p>`
+                : "";
             } else if (filtro === "fecha") {
               alertaDiv.innerHTML =
-                '<p class="hint">No hay registros para esa cédula en esa fecha.</p>';
+                '<p class="hint">No hay registros con esos filtros en esa fecha. Prueba cambiando "Mostrar" a Histórico dentro de Filtros.</p>';
             } else {
               alertaDiv.innerHTML =
-                '<p class="hint">No hay registros para esa cédula.</p>';
+                '<p class="hint">No hay registros con esos filtros.</p>';
             }
           })
           .catch(function (err) {
@@ -2597,7 +2758,9 @@
               `<td>${escapeHtml(r.operario)}${etiquetaAnulado}</td>` +
               `<td>${escapeHtml(r.supernumerario)}</td>` +
               `<td>${escapeHtml(r.pedido)}</td>` +
+              `<td>${escapeHtml(r.cliente || "")}</td>` +
               `<td>${escapeHtml(r.proceso)}</td>` +
+              `<td>${escapeHtml(r.ean || "")}</td>` +
               `<td>${r.unidadesProcesadas}</td>` +
               `<td>${eficienciaTxt}</td>` +
               `<td>${escapeHtml(r.horaInicio)}</td>` +
@@ -3489,6 +3652,9 @@
         ].forEach((id) => {
           document.getElementById(id).style.display = "none";
         });
+        // Sin esto el intervalo sigue repintando elementos ocultos hasta
+        // cerrar sesión.
+        _detenerRelojHoraFin();
         document.getElementById("vistaDashboard").style.display = "block";
       }
 
@@ -3574,8 +3740,6 @@
           "opPedido",
           "opEanInput",
           "opFecha",
-          "opHoraInicio",
-          "opHoraFin",
           "opUnidades",
           "opCodigosSobrantes",
           "opObservaciones",
@@ -3666,6 +3830,12 @@
           opPedidoValidado =
             "";
         unidadesEsperadas = unidadesRestantes = rolActual = null;
+        opHoraInicioCadena = "";
+        opIdEnvioActual = null;
+        _limpiarIdEnvio();
+        opPayloadPendiente = null;
+        _detenerRelojHoraFin();
+        _pintarHorasOperario();
         localStorage.removeItem("rp_sesion");
         operarios = [];
         justEanSeleccionado = "";
@@ -3693,6 +3863,8 @@
             if (res.success) {
               guardarSesion(rolActual);
               _mostrarDashboardTrasLogin();
+              // La carga inicial se lo saltó porque rolActual aún era null.
+              if (rolActual === "supervisor") cargarOperarios();
             } else {
               document.getElementById("loginError").innerHTML =
                 `<div class="msg err">${res.message}</div>`;
@@ -3857,14 +4029,20 @@
       activarSugerenciasPedido("pedido", "sugPedido");
       activarSugerenciasPedido("opPedido", "sugOpPedido");
       activarSugerenciasPedido("ctPedidoInput", "sugCtPedido");
-      document
-        .getElementById("ctPedidoInput")
-        .addEventListener("keydown", function (e) {
+      [
+        "ctPedidoInput",
+        "ctOperarioInput",
+        "ctClienteInput",
+        "ctProcesoInput",
+        "ctEanInput",
+      ].forEach(function (id) {
+        document.getElementById(id).addEventListener("keydown", function (e) {
           if (e.key === "Enter") {
             e.preventDefault();
             aplicarFiltros("control");
           }
         });
+      });
       activarSugerenciasPedido(
         "edicionPedidoInput",
         "sugEdicionPedido",
@@ -4142,11 +4320,15 @@
             return Promise.resolve(false);
         }
         _refrescoCatalogosEnCurso = true;
-        return Promise.all([
-          cargarProcesos(),
-          cargarOperarios(),
-          cargarSupervisores(),
-        ])
+        // getOperariosData son 241 filas y solo alimenta #sugeridos y
+        // #equipoSelect, ambos exclusivos de la vista del administrador. Con
+        // 200 operarios con la app abierta toda la jornada, esta consulta es
+        // la que más pesa en filas leídas de D1. En la carga inicial sin
+        // sesión restaurada rolActual es null, así que tampoco corre: el
+        // supervisor la pide al entrar (ver enviarLogin).
+        const tareas = [cargarProcesos(), cargarSupervisores()];
+        if (rolActual === "supervisor") tareas.push(cargarOperarios());
+        return Promise.all(tareas)
           .then(function () {
             _ultimoRefrescoCatalogos = Date.now();
             return true;
@@ -4980,6 +5162,204 @@
       let cedulaEnvioEnCurso = false;
       let opEnvioRegistroEnCurso = false;
 
+      // ---------------- HORAS ENCADENADAS (vista operario) ----------------
+      // Los dos campos son de solo lectura: la hora de inicio la calcula el
+      // servidor (fin del último registro del día, o el turno) y la hora fin es
+      // el momento del envío. Lo que se pinta antes de enviar es previsualización.
+      // Único umbral de "registro corto" del sistema: el backend ya no tiene
+      // piso de duración (DURACION_MINIMA_MIN quedó sin consumidor). Aquí solo
+      // decide si se muestra el modal de confirmación, no si se rechaza.
+      const DURACION_CORTA_MIN = 5;
+      let opHoraInicioCadena = "";
+      let opRelojHoraFin = null;
+      let opIdEnvioActual = null;
+      let opPayloadPendiente = null;
+
+      function _nuevoIdEnvio() {
+        if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+        return (
+          Date.now().toString(36) +
+          "-" +
+          Math.random().toString(36).slice(2, 10)
+        );
+      }
+
+      // El idEnvio vive fuera de CAMPOS_BORRADOR_OPERARIO a propósito: ese
+      // mecanismo solo maneja valores de inputs. Vigencia igual a la del
+      // borrador, para que uno viejo no bloquee un envío legítimo idéntico
+      // al día siguiente.
+      const CLAVE_ID_ENVIO = "rp_idenvio_operario";
+
+      function _guardarIdEnvio(id) {
+        try {
+          localStorage.setItem(
+            CLAVE_ID_ENVIO,
+            JSON.stringify({ id: id, guardado: Date.now() }),
+          );
+        } catch (e) {}
+      }
+
+      function _restaurarIdEnvio() {
+        let guardado = null;
+        try {
+          guardado = JSON.parse(localStorage.getItem(CLAVE_ID_ENVIO));
+        } catch (e) {}
+        if (
+          !guardado ||
+          !guardado.id ||
+          Date.now() - guardado.guardado > BORRADOR_VIGENCIA_MS
+        ) {
+          _limpiarIdEnvio();
+          return null;
+        }
+        return guardado.id;
+      }
+
+      function _limpiarIdEnvio() {
+        try {
+          localStorage.removeItem(CLAVE_ID_ENVIO);
+        } catch (e) {}
+      }
+
+      // Dos causas distintas con el mismo síntoma. Un desfase de pocos minutos
+      // es el reloj de la terminal; uno grande es la cadena adelantada por un
+      // registro del administrador con la hora fin mal digitada, y ahí el
+      // operario no tiene salida desde su vista.
+      const DESFASE_RELOJ_MAX_MIN = 3;
+
+      function _mensajeHorasInvalidas(bruta) {
+        if (bruta === null)
+          return "No se pudo calcular tu hora de inicio. Vuelve a confirmar tu cédula.";
+        if (bruta >= -DESFASE_RELOJ_MAX_MIN)
+          return (
+            "La hora de este dispositivo va atrasada respecto a tu hora de inicio (" +
+            opHoraInicioCadena +
+            "). Espera un momento y vuelve a intentar; si sigue igual, avisa a tu supernumerario."
+          );
+        return (
+          "Tu hora de inicio quedó en " +
+          opHoraInicioCadena +
+          ", más tarde que la hora actual. Pide a tu supernumerario que corrija tu último registro del día en Editar registros."
+        );
+      }
+
+      function _horaBogotaAhora() {
+        const partes = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Bogota",
+          hour: "2-digit",
+          minute: "2-digit",
+          hourCycle: "h23",
+        }).formatToParts(new Date());
+        const obtener = (tipo) => partes.find((p) => p.type === tipo).value;
+        return obtener("hour") + ":" + obtener("minute");
+      }
+
+      function _minutosDeHHMM(valor) {
+        const p = String(valor || "").split(":");
+        if (p.length !== 2) return NaN;
+        const min = Number(p[0]) * 60 + Number(p[1]);
+        return Number.isFinite(min) ? min : NaN;
+      }
+
+      function _duracionPrevistaOperario() {
+        const ini = _minutosDeHHMM(opHoraInicioCadena);
+        const fin = _minutosDeHHMM(_horaBogotaAhora());
+        if (!Number.isFinite(ini) || !Number.isFinite(fin)) return null;
+        return fin - ini;
+      }
+
+      function _pintarHorasOperario() {
+        document.getElementById("opHoraInicio").textContent =
+          opHoraInicioCadena || "—";
+        document.getElementById("opHoraFin").textContent = opHoraInicioCadena
+          ? _horaBogotaAhora()
+          : "—";
+        _validarHorasOperario();
+      }
+
+      // Con 15 s el aviso de "espera al minuto" seguía en pantalla hasta 15 s
+      // después de que ya se podía enviar. Ahora se mira seguido, pero solo se
+      // repinta cuando el minuto realmente cambió.
+      let opUltimoMinutoPintado = "";
+
+      function _tickRelojHoraFin() {
+        const ahora = _horaBogotaAhora();
+        if (ahora === opUltimoMinutoPintado) return;
+        opUltimoMinutoPintado = ahora;
+        _pintarHorasOperario();
+      }
+
+      function _iniciarRelojHoraFin() {
+        _detenerRelojHoraFin();
+        opUltimoMinutoPintado = _horaBogotaAhora();
+        _pintarHorasOperario();
+        opRelojHoraFin = setInterval(_tickRelojHoraFin, 3000);
+      }
+
+      function _detenerRelojHoraFin() {
+        if (opRelojHoraFin) clearInterval(opRelojHoraFin);
+        opRelojHoraFin = null;
+      }
+
+      // La cadena avanza en D1 si el administrador registra por el operario.
+      function _refrescarHoraInicioCadena() {
+        if (opEnvioRegistroEnCurso) return;
+        llamarAPI("buscarOperarioPorCedula", { cedula: opCedulaConfirmada })
+          .then(function (res) {
+            if (res.success && res.horaInicioPrevista) {
+              opHoraInicioCadena = res.horaInicioPrevista;
+              _pintarHorasOperario();
+            }
+          })
+          .catch(function () {});
+      }
+
+      function _validarHorasOperario() {
+        if (opEnvioRegistroEnCurso) return;
+        const alerta = document.getElementById("opAlertaHoras");
+        const btn = document.getElementById("opBtnSubmit");
+        if (!opHoraInicioCadena) {
+          alerta.innerHTML = "";
+          // Sin esto, un botón que quedó deshabilitado por una validación
+          // anterior se queda muerto y sin explicación si la cédula falla.
+          btn.disabled = false;
+          return;
+        }
+        const bruta = _duracionPrevistaOperario();
+        const suplemento =
+          Number(document.getElementById("opSuplementoMin").value) || 0;
+        if (bruta === null || bruta < 0) {
+          // Un desfase de pocos minutos se resuelve solo con el paso del
+          // tiempo (pasa tras cada envío correcto si el reloj del servidor va
+          // adelantado): es una espera, no un error. El rojo queda para la
+          // cadena adelantada, que sí necesita que alguien intervenga.
+          const esEspera = bruta !== null && bruta >= -DESFASE_RELOJ_MAX_MIN;
+          alerta.innerHTML =
+            '<div class="msg ' +
+            (esEspera ? "warn" : "err") +
+            '">' +
+            escapeHtml(_mensajeHorasInvalidas(bruta)) +
+            "</div>";
+          btn.disabled = true;
+        } else if (bruta === 0) {
+          // Sale también justo después de un envío correcto: es una espera
+          // normal de menos de un minuto, no un error.
+          alerta.innerHTML =
+            '<div class="msg warn">Espera a que cambie el minuto para enviar el siguiente registro.</div>';
+          btn.disabled = true;
+        } else if (suplemento > bruta) {
+          alerta.innerHTML = `<div class="msg err">El suplemento (${suplemento} min) no puede ser mayor al tiempo trabajado (${bruta} min).</div>`;
+          btn.disabled = true;
+        } else {
+          const detalle =
+            suplemento > 0
+              ? ` − ${suplemento} min de suplemento = ${bruta - suplemento} min`
+              : "";
+          alerta.innerHTML = `<div class="hint" style="margin-top:0;">Tiempo de este registro: ${bruta} min${detalle}.</div>`;
+          btn.disabled = false;
+        }
+      }
+
       function confirmarCedula() {
         const valor = document.getElementById("opCedula").value.trim();
         if (!valor) return;
@@ -4994,11 +5374,22 @@
               const confirmado = document.getElementById("opNombreConfirmado");
               confirmado.textContent = res.nombre;
               confirmado.style.display = "block";
-              alertaDiv.innerHTML = "";
+              alertaDiv.innerHTML = res.turnoConfigurado
+                ? ""
+                : '<div class="msg warn">No tienes turno configurado: tu hora de inicio arranca en 06:00. Avisa a tu supernumerario.</div>';
               document.getElementById("opFecha").valueAsDate = new Date();
+              opHoraInicioCadena = res.horaInicioPrevista || "";
+              // Tras una recarga, el reintento debe llevar la MISMA huella; si
+              // se genera un idEnvio nuevo, D1 lo toma como registro distinto
+              // y lo duplica en vez de devolver la respuesta guardada.
+              opIdEnvioActual = _restaurarIdEnvio();
+              _iniciarRelojHoraFin();
             } else {
               opNombreOperario = "";
               opCedulaConfirmada = "";
+              opHoraInicioCadena = "";
+              _detenerRelojHoraFin();
+              _pintarHorasOperario();
               document.getElementById("opNombreConfirmado").style.display =
                 "none";
               alertaDiv.innerHTML = `<div class="msg err">${res.message}</div>`;
@@ -5143,6 +5534,11 @@
         if (opEnvioRegistroEnCurso) return; // evita doble envío (doble Enter/tap en móvil)
         if (!opCedulaConfirmada)
           return mostrarMsgOperario("Confirma tu cédula primero.", false);
+        if (!opHoraInicioCadena)
+          return mostrarMsgOperario(
+            "No se pudo calcular tu hora de inicio. Vuelve a confirmar tu cédula.",
+            false,
+          );
         const opCodSobrantesResult =
           obtenerCodigosSobrantesValidados("opCodigosSobrantes");
         if (!opCodSobrantesResult.ok)
@@ -5150,10 +5546,43 @@
             "Los códigos sobrantes deben ser un número entero (sin letras ni decimales).",
             false,
           );
+
+        // Las horas ya no vienen del formulario: el servidor las fija. Aquí solo
+        // se previene el envío que el Worker rechazaría de todos modos.
+        const bruta = _duracionPrevistaOperario();
+        const suplemento = Number(
+          document.getElementById("opSuplementoMin").value,
+        );
+        if (bruta === null || bruta < 0)
+          return mostrarMsgOperario(_mensajeHorasInvalidas(bruta), false);
+        if (bruta === 0)
+          return mostrarMsgOperario(
+            "Ya enviaste un registro en este minuto. Espera a que cambie el minuto para enviar el siguiente.",
+            false,
+          );
+        if (suplemento > bruta)
+          return mostrarMsgOperario(
+            "El suplemento (" +
+              suplemento +
+              " min) no puede ser mayor al tiempo trabajado (" +
+              bruta +
+              " min).",
+            false,
+          );
+
         const unidadesProcesadasTexto = document
           .getElementById("opUnidades")
           .value.trim();
+
+        // Se conserva entre reintentos: es lo que diferencia dos envíos
+        // legítimos iguales ahora que las horas salieron del payload.
+        if (!opIdEnvioActual) {
+          opIdEnvioActual = _nuevoIdEnvio();
+          _guardarIdEnvio(opIdEnvioActual);
+        }
+
         const payload = {
+          idEnvio: opIdEnvioActual,
           cedula: opCedulaConfirmada,
           coordinador: document.getElementById("opCoordinador").value.trim(),
           supernumerario: document
@@ -5164,11 +5593,7 @@
           proceso: procesoValidoOperario()
             ? procesoValidoOperario().nombre
             : document.getElementById("opProceso").value.trim(),
-          horaInicio: document.getElementById("opHoraInicio").value,
-          horaFin: document.getElementById("opHoraFin").value,
-          suplementoMin: Number(
-            document.getElementById("opSuplementoMin").value,
-          ),
+          suplementoMin: suplemento,
           unidadesProcesadas: Number(
             document.getElementById("opUnidades").value,
           ),
@@ -5187,8 +5612,6 @@
           return mostrarMsgOperario("Falta el coordinador.", false);
         if (!payload.supernumerario)
           return mostrarMsgOperario("Falta el supernumerario.", false);
-        if (!payload.horaInicio || !payload.horaFin)
-          return mostrarMsgOperario("Faltan las horas.", false);
         if (
           unidadesProcesadasTexto === "" ||
           !Number.isFinite(payload.unidadesProcesadas) ||
@@ -5199,6 +5622,38 @@
             false,
           );
 
+        if (bruta < DURACION_CORTA_MIN) {
+          opPayloadPendiente = payload;
+          document.getElementById("modalTiempoCortoTexto").textContent =
+            "Se va a enviar el registro con " +
+            bruta +
+            " minutos (" +
+            opHoraInicioCadena +
+            " a " +
+            _horaBogotaAhora() +
+            ").";
+          document.getElementById("modalTiempoCorto").classList.add("visible");
+          return;
+        }
+
+        _enviarOperarioAlServidor(payload);
+      }
+
+      function cerrarModalTiempoCorto() {
+        document.getElementById("modalTiempoCorto").classList.remove("visible");
+        opPayloadPendiente = null;
+      }
+
+      function confirmarTiempoCortoOperario() {
+        document.getElementById("modalTiempoCorto").classList.remove("visible");
+        if (opPayloadPendiente) {
+          const pendiente = opPayloadPendiente;
+          opPayloadPendiente = null;
+          _enviarOperarioAlServidor(pendiente);
+        }
+      }
+
+      function _enviarOperarioAlServidor(payload) {
         const btn = document.getElementById("opBtnSubmit");
         opEnvioRegistroEnCurso = true;
         btn.disabled = true;
@@ -5209,6 +5664,10 @@
             btn.disabled = false;
             btn.textContent = "Enviar registro";
             if (res.success) {
+              // El fin real que devolvió el servidor es el siguiente eslabón.
+              opIdEnvioActual = null;
+              _limpiarIdEnvio();
+              if (res.horaFin) opHoraInicioCadena = res.horaFin;
               mostrarMsgOperario("Registro guardado correctamente", true);
               mostrarModalAviso(
                 "Pedido: " +
@@ -5217,6 +5676,10 @@
                   payload.codigoEan +
                   "\nProceso: " +
                   payload.proceso +
+                  "\nHoras: " +
+                  res.horaInicio +
+                  " a " +
+                  res.horaFin +
                   "\nUnidades: " +
                   payload.unidadesProcesadas +
                   "\nEficiencia: " +
@@ -5228,6 +5691,7 @@
                 "Registro guardado correctamente",
               );
               resetFormularioOperario();
+              _pintarHorasOperario();
               localStorage.removeItem("rp_borrador_operario");
             } else if (
               res.message &&
@@ -5245,6 +5709,9 @@
           })
           .finally(function () {
             opEnvioRegistroEnCurso = false;
+            // Después de bajar la bandera: _validarHorasOperario sale temprano
+            // mientras está en true, así que pintar antes no hace nada.
+            _pintarHorasOperario();
           });
       }
 
@@ -5269,8 +5736,7 @@
         document.getElementById("opCodigosSobrantes").value = "";
         document.getElementById("opObservaciones").value = "";
         document.getElementById("opFecha").valueAsDate = new Date();
-        document.getElementById("opHoraInicio").value = "";
-        document.getElementById("opHoraFin").value = "";
+        document.getElementById("opAlertaHoras").innerHTML = "";
         // Cédula, coordinador y supernumerario se mantienen.
       }
     </script>
