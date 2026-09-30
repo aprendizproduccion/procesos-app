@@ -9,6 +9,9 @@ import {
   _obtenerProcesoValidado,
   _buscarCedulaPorNombre,
   _calcularDuracionValidada,
+  _ahoraBogota,
+  _inicioCadena,
+  HORA_LIMITE_ENVIO,
   _calcularMetricasProduccion,
   _validarCodigosSobrantes,
   _marcarPedidoIniciado,
@@ -106,6 +109,7 @@ export const accionesEscritura = {
 
       const suplementoMin = Number(payload.suplementoMin) || 0;
 
+      // Sin tope de duración: coherente con la edición y con el flujo operario.
       const { duracionBrutaMin, duracionRealMin } = _calcularDuracionValidada(
         payload.horaInicio,
         payload.horaFin,
@@ -138,7 +142,8 @@ export const accionesEscritura = {
         "UPDATE validacion_eanes SET " +
           "unidades_procesadas = unidades_procesadas + ?, " +
           "codigos_sobrantes = codigos_sobrantes + ?, " +
-          "estado = CASE WHEN sin_limite = 0 AND (unidades_procesadas + ? + codigos_sobrantes + ?) >= unidades_totales THEN 'Completado' ELSE 'En proceso' END, " +
+          "estado = CASE WHEN sin_limite = 0 AND (unidades_procesadas + ? + codigos_sobrantes + ? + " +
+          "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) >= unidades_totales THEN 'Completado' ELSE 'En proceso' END, " +
           "actualizado_en = ? " +
           "WHERE numero_pedido = ? AND ean_producto = ? " +
           "AND (sin_limite = 1 OR (unidades_procesadas + ? + codigos_sobrantes + ? + " +
@@ -149,6 +154,8 @@ export const accionesEscritura = {
           codigosSobrantes,
           total,
           codigosSobrantes,
+          pedido,
+          codigoEan,
           ahora,
           pedido,
           codigoEan,
@@ -189,6 +196,16 @@ export const accionesEscritura = {
       const cedulas = await Promise.all(
         operarios.map((nom) => _buscarCedulaPorNombre(env, nom)),
       );
+
+      const sinCedula = operarios.filter((nom, i) => !cedulas[i]);
+      if (sinCedula.length > 0) {
+        throw new Error(
+          "Estos operarios no tienen cédula en el catálogo: " +
+            sinCedula.join(", ") +
+            ". Sin cédula el registro no aparece en Control tiempos ni en el " +
+            "encadenado de horas. Pide que se corrija la hoja Operarios antes de registrar.",
+        );
+      }
 
       const statements = operarios.map((nombre, i) =>
         env.DB.prepare(
@@ -296,7 +313,15 @@ export const accionesEscritura = {
   },
 
   async submitRegistroOperario(payload, env, ctx) {
-    const huella = await _huellaPayload("submitRegistroOperario", payload);
+    const { fecha, hora } = _ahoraBogota();
+    // Las horas salían del payload y eran lo que distinguía dos envíos
+    // legítimos iguales. Al salir de ahí, la huella necesita otro
+    // diferenciador: el idEnvio del formulario, con la hora como respaldo
+    // para un navegador con caché vieja.
+    const huella = await _huellaPayload("submitRegistroOperario", {
+      ...payload,
+      _nonce: payload.idEnvio || hora,
+    });
     const chequeo = await _chequearIdempotencia(env, huella);
     if (chequeo.duplicado) return chequeo.respuesta;
     if (chequeo.enProceso) {
@@ -372,9 +397,43 @@ export const accionesEscritura = {
       );
       const tasaEstandar = procesoValidado.unidadesHora;
       const suplementoMin = Number(payload.suplementoMin) || 0;
-      const fecha = _fechaHoyBogota();
-      const horaInicio = String(payload.horaInicio || "").trim();
-      const horaFin = String(payload.horaFin || "").trim();
+      // El servidor fija las horas: payload.horaInicio y payload.horaFin se
+      // ignoran aunque lleguen. "fecha" y "hora" vienen del inicio de la acción.
+      const horaFin = hora;
+      const { inicio: horaInicio, turnoConfigurado } = await _inicioCadena(
+        env,
+        operarioMatch.cedula,
+        fecha,
+      );
+
+      if (hora > HORA_LIMITE_ENVIO) {
+        throw new Error(
+          "Fuera del horario de registro (6:00 a 19:00, con margen hasta las 21:00). Pide a tu supernumerario que registre por ti.",
+        );
+      }
+      // La cadena puede venir adelantada por un registro del administrador con
+      // la hora fin mal digitada: el mensaje tiene que decir qué hacer.
+      if (hora < horaInicio) {
+        throw new Error(
+          "Tu hora de inicio quedó en " +
+            horaInicio +
+            ", posterior a la hora actual (" +
+            hora +
+            "). Pide a tu supernumerario que corrija tu último registro del día en Editar registros.",
+        );
+      }
+      // Mensaje propio: con horas encadenadas esto lo dispara un operario
+      // haciendo lo correcto, no una captura invertida.
+      if (hora === horaInicio) {
+        throw new Error(
+          "Ya enviaste un registro en este minuto (" +
+            horaInicio +
+            "). Espera a que cambie el minuto y vuelve a enviar.",
+        );
+      }
+      // Sin piso de duración: con horas encadenadas el operario no elige la
+      // ventana, así que un bloque corto es dato real, no error de captura.
+      // Quedan vivas dos guardas: duración bruta 0 y suplemento > duración.
       const { duracionBrutaMin, duracionRealMin } = _calcularDuracionValidada(
         horaInicio,
         horaFin,
@@ -397,7 +456,8 @@ export const accionesEscritura = {
         "UPDATE validacion_eanes SET " +
           "unidades_procesadas = unidades_procesadas + ?, " +
           "codigos_sobrantes = codigos_sobrantes + ?, " +
-          "estado = CASE WHEN sin_limite = 0 AND (unidades_procesadas + ? + codigos_sobrantes + ?) >= unidades_totales THEN 'Completado' ELSE 'En proceso' END, " +
+          "estado = CASE WHEN sin_limite = 0 AND (unidades_procesadas + ? + codigos_sobrantes + ? + " +
+          "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) >= unidades_totales THEN 'Completado' ELSE 'En proceso' END, " +
           "actualizado_en = ? " +
           "WHERE numero_pedido = ? AND ean_producto = ? " +
           "AND (sin_limite = 1 OR (unidades_procesadas + ? + codigos_sobrantes + ? + " +
@@ -408,6 +468,8 @@ export const accionesEscritura = {
           codigosSobrantes,
           total,
           codigosSobrantes,
+          pedido,
+          codigoEan,
           ahora,
           pedido,
           codigoEan,
@@ -443,14 +505,20 @@ export const accionesEscritura = {
         .bind(listaActual.join(" - "), pedido, codigoEan)
         .run();
 
-      const statements = [
-        env.DB.prepare(
-          "INSERT INTO registros (lote_id, fecha, coordinador, cedula_operario, operario, supernumerario, cliente, " +
-            "proceso, unidades_hora_estandar, sublinea, evento, numero_pedido, ean, unidades_totales_procesadas, " +
-            "hora_inicio, hora_final, suplemento, observacion, clasificacion_proceso, duracion_bruta_min, tiempo_total, " +
-            "unidades_procesadas_operario, codigos_sobrantes, unidades_hora_real, eficiencia, creado_en) " +
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        ).bind(
+      // Guarda atómica de la cadena (P1-1): si otro envío del mismo operario
+      // ya ocupó una franja que termina después de esta hora de inicio, el
+      // INSERT no escribe nada y devuelve changes = 0. Es '>' estricto porque
+      // el predecesor legítimo tiene hora_final exactamente = horaInicio.
+      const insercion = await env.DB.prepare(
+        "INSERT INTO registros (lote_id, fecha, coordinador, cedula_operario, operario, supernumerario, cliente, " +
+          "proceso, unidades_hora_estandar, sublinea, evento, numero_pedido, ean, unidades_totales_procesadas, " +
+          "hora_inicio, hora_final, suplemento, observacion, clasificacion_proceso, duracion_bruta_min, tiempo_total, " +
+          "unidades_procesadas_operario, codigos_sobrantes, unidades_hora_real, eficiencia, creado_en, hora_inicio_auto) " +
+          "SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1 " +
+          "WHERE NOT EXISTS (SELECT 1 FROM registros WHERE cedula_operario = ? AND fecha = ? " +
+          "AND anulado = 0 AND hora_final > ?)",
+      )
+        .bind(
           loteId,
           fecha,
           coordinador,
@@ -477,16 +545,35 @@ export const accionesEscritura = {
           unidadesHoraReal,
           eficiencia,
           ahora,
-        ),
-      ];
+          operarioMatch.cedula,
+          fecha,
+          horaInicio,
+        )
+        .run();
 
-      if (await _pedidoEstaCompleto(env, pedido)) {
-        statements.push(
-          env.DB.prepare(
-            "INSERT INTO control_produccion (numero_pedido, estado, actualizado_en) VALUES (?, 'Completado', ?) " +
-              "ON CONFLICT(numero_pedido) DO UPDATE SET estado = 'Completado', actualizado_en = excluded.actualizado_en",
-          ).bind(pedido, ahora),
+      if (insercion.meta.changes === 0) {
+        throw new Error(
+          "Otro envío tuyo ocupó esta franja de tiempo justo antes (desde " +
+            horaInicio +
+            "). Vuelve a confirmar tu cédula para tomar la hora nueva y envía otra vez.",
         );
+      }
+      const idRegistro = insercion.meta.last_row_id;
+      // La fila ya existe: a partir de acá la reserva es legítima y NO debe
+      // revertirse. Antes el INSERT iba en el batch y un fallo no dejaba nada
+      // escrito; ahora sí. Si algo falla más abajo, el operario reintenta y la
+      // guarda de cadena rechaza el duplicado.
+      reservaAplicada = null;
+
+      // Fuera del lote a propósito: si el INSERT se rechaza por la guarda de
+      // arriba, este estado no debe quedar escrito de más.
+      if (await _pedidoEstaCompleto(env, pedido)) {
+        await env.DB.prepare(
+          "INSERT INTO control_produccion (numero_pedido, estado, actualizado_en) VALUES (?, 'Completado', ?) " +
+            "ON CONFLICT(numero_pedido) DO UPDATE SET estado = 'Completado', actualizado_en = excluded.actualizado_en",
+        )
+          .bind(pedido, ahora)
+          .run();
       }
 
       const filaParaSheets = [
@@ -516,18 +603,17 @@ export const accionesEscritura = {
         eficiencia,
       ];
 
-      const resultadosBatch = await env.DB.batch(statements);
       const respuestaFinal = {
         success: true,
         loteId,
         horaInicio,
         horaFin,
         eficiencia,
+        turnoConfigurado,
       };
 
       try {
         await _confirmarIdempotencia(env, huella, respuestaFinal);
-        const idRegistro = resultadosBatch[0].meta.last_row_id;
         ctx.waitUntil(
           _pushRegistrosYMarcar(
             env,
@@ -723,6 +809,8 @@ export const accionesEscritura = {
     const horaInicio = String(payload.horaInicio || "").trim();
     const horaFin = String(payload.horaFin || "").trim();
     const suplementoMin = Number(payload.suplementoMin) || 0;
+    // Sin tope de duración: la edición es la vía correctiva y debe poder tocar
+    // cualquier registro, incluidos los bloques largos que genera la cadena.
     const { duracionBrutaMin, duracionRealMin } = _calcularDuracionValidada(
       horaInicio,
       horaFin,
@@ -790,7 +878,11 @@ export const accionesEscritura = {
         "observacion = ?, duracion_bruta_min = ?, tiempo_total = ?, " +
         "unidades_procesadas_operario = ?, codigos_sobrantes = ?, unidades_hora_real = ?, " +
         "eficiencia = ?, editado_por = ?, editado_en = ?, motivo_edicion = ?, " +
-        "anulado_sincronizado_sheets = 0 " +
+        "anulado_sincronizado_sheets = 0, " +
+        // El CASE compara contra la hora_inicio ANTERIOR: en SQLite el lado
+        // derecho de un SET se evalúa sobre la fila original. Si el editor
+        // cambió la hora de inicio, la fila deja de ser automática.
+        "hora_inicio_auto = CASE WHEN hora_inicio = ? THEN hora_inicio_auto ELSE 0 END " +
         "WHERE id = ? AND anulado = 0",
     )
       .bind(
@@ -812,6 +904,7 @@ export const accionesEscritura = {
         editadoPor,
         ahora,
         motivo,
+        horaInicio,
         id,
       )
       .run();
