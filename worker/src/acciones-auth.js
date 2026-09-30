@@ -1,7 +1,8 @@
-// Acciones de autenticación — no tocan D1.
+const DEMORA_MAX_SEG = 10; // techo de demora tras intentos fallidos repetidos
+const DECAY_MS = 60 * 60 * 1000; // 1 hora sin fallos nuevos = contador se considera reiniciado
 
 export const accionesAuth = {
-  async validarLogin(datos, env) {
+  async validarLogin(datos, env, ctx, ip) {
     const rol = String(datos.rol || "")
       .trim()
       .toLowerCase();
@@ -25,8 +26,40 @@ export const accionesAuth = {
       };
     }
 
-    return clave === claveGuardada
-      ? { success: true, rol }
-      : { success: false, message: "Contraseña incorrecta." };
+    const identificador = ip || "desconocida";
+    const fila = await env.DB.prepare(
+      "SELECT intentos, actualizado_en FROM intentos_login WHERE identificador = ?",
+    )
+      .bind(identificador)
+      .first();
+    const yaExpiro =
+      fila && Date.now() - new Date(fila.actualizado_en).getTime() > DECAY_MS;
+    const intentosPrevios = fila && !yaExpiro ? fila.intentos : 0;
+
+    if (clave === claveGuardada) {
+      if (fila) {
+        await env.DB.prepare(
+          "DELETE FROM intentos_login WHERE identificador = ?",
+        )
+          .bind(identificador)
+          .run();
+      }
+      return { success: true, rol };
+    }
+
+    // Contraseña incorrecta: registrar el intento y aplicar demora creciente
+    // (no bloqueo duro, para no afectar a otros dispositivos que compartan IP).
+    const intentosNuevos = intentosPrevios + 1;
+    await env.DB.prepare(
+      "INSERT INTO intentos_login (identificador, intentos, actualizado_en) VALUES (?, ?, ?) " +
+        "ON CONFLICT(identificador) DO UPDATE SET intentos = excluded.intentos, actualizado_en = excluded.actualizado_en",
+    )
+      .bind(identificador, intentosNuevos, new Date().toISOString())
+      .run();
+
+    const demoraSeg = Math.min(intentosNuevos, DEMORA_MAX_SEG);
+    await new Promise((resolve) => setTimeout(resolve, demoraSeg * 1000));
+
+    return { success: false, message: "Contraseña incorrecta." };
   },
 };
