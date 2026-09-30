@@ -1812,7 +1812,7 @@
           <div class="campo-sugerencias">
             <input
               id="editProceso"
-              placeholder="Escribe para buscar un proceso..."
+              placeholder="Toca para ver los procesos o escribe para buscar..."
               autocomplete="off"
             />
             <div
@@ -3967,6 +3967,7 @@
         listaId,
         alElegir,
         obtenerLista,
+        listaCompleta,
       ) {
         const fuente = obtenerLista || (() => listaPedidos);
         const input = document.getElementById(inputId);
@@ -3979,20 +3980,33 @@
           actuales = [];
         }
 
-        function mostrar() {
-          const clave = normalizarPedido(input.value);
-          if (!clave) return ocultar();
-
+        // todo = true: se ignora lo escrito y se despliega la lista entera.
+        // Solo lo piden los campos de proceso, al enfocarlos.
+        function mostrar(todo) {
           const base = fuente();
-          const inician = base.filter((p) => p.clave.startsWith(clave));
-          const contienen = base.filter(
-            (p) => !p.clave.startsWith(clave) && p.clave.includes(clave),
-          );
-          actuales = inician.concat(contienen).slice(0, MAX_SUGERENCIAS_PEDIDO);
+          if (!base.length) return ocultar();
 
-          const yaExacto =
-            actuales.length === 1 && actuales[0].valor === input.value.trim();
-          if (actuales.length === 0 || yaExacto) return ocultar();
+          if (todo) {
+            actuales = base.slice();
+          } else {
+            const clave = normalizarPedido(input.value);
+            if (!clave && !listaCompleta) return ocultar();
+            const inician = base.filter((p) => p.clave.startsWith(clave));
+            const contienen = base.filter(
+              (p) => !p.clave.startsWith(clave) && p.clave.includes(clave),
+            );
+            const coincidencias = inician.concat(contienen);
+            const yaExacto =
+              coincidencias.length === 1 &&
+              coincidencias[0].valor === input.value.trim();
+            if (yaExacto && !listaCompleta) return ocultar();
+            // Con listaCompleta no hay tope: la lista hace scroll.
+            actuales = listaCompleta
+              ? coincidencias
+              : coincidencias.slice(0, MAX_SUGERENCIAS_PEDIDO);
+          }
+
+          if (actuales.length === 0) return ocultar();
 
           lista.innerHTML = actuales
             .map(
@@ -4019,7 +4033,10 @@
           if (alElegir) alElegir();
         });
 
-        input.addEventListener("input", mostrar);
+        input.addEventListener("input", () => mostrar(false));
+        input.addEventListener("focus", () => {
+          if (listaCompleta) mostrar(true);
+        });
         input.addEventListener("blur", ocultar);
         input.addEventListener("keydown", (e) => {
           if (e.key === "Enter" || e.key === "Escape") ocultar();
@@ -4079,7 +4096,7 @@
       function _sincronizarInputProceso(inputId, pedidoVal) {
         const input = document.getElementById(inputId);
         input.placeholder = pedidoVal
-          ? "Escribe para buscar un proceso..."
+          ? "Toca para ver los procesos o escribe para buscar..."
           : "Ingresa un pedido primero...";
         const escrito = input.value.trim();
         if (!escrito) return false;
@@ -4093,14 +4110,26 @@
         return true;
       }
 
-      activarSugerenciasPedido("proceso", "sugProceso", null, () =>
-        listaProcesosDe("pedido"),
+      activarSugerenciasPedido(
+        "proceso",
+        "sugProceso",
+        null,
+        () => listaProcesosDe("pedido"),
+        true,
       );
-      activarSugerenciasPedido("opProceso", "sugOpProceso", null, () =>
-        listaProcesosDe("opPedido"),
+      activarSugerenciasPedido(
+        "opProceso",
+        "sugOpProceso",
+        null,
+        () => listaProcesosDe("opPedido"),
+        true,
       );
-      activarSugerenciasPedido("editProceso", "sugEditProceso", null, () =>
-        listaProcesosDePedido(pedidoRegistroEnEdicion),
+      activarSugerenciasPedido(
+        "editProceso",
+        "sugEditProceso",
+        null,
+        () => listaProcesosDePedido(pedidoRegistroEnEdicion),
+        true,
       );
 
       function procesoValidoEdicion() {
