@@ -1195,6 +1195,22 @@
               </div>
             </div>
             <div>
+              <label>Proceso</label>
+              <div class="campo-sugerencias">
+                <input
+                  id="ctProcesoInput"
+                  placeholder="Toca para ver los procesos..."
+                  autocomplete="off"
+                  enterkeyhint="search"
+                />
+                <div
+                  id="sugCtProceso"
+                  class="lista-sugerencias"
+                  role="listbox"
+                ></div>
+              </div>
+            </div>
+            <div>
               <label>Mostrar</label>
               <select id="ctFiltro" onchange="cambiarFiltroControlTiempos()">
                 <option value="fecha">Por fecha</option>
@@ -1232,22 +1248,6 @@
                   autocomplete="off"
                   enterkeyhint="search"
                 />
-              </div>
-              <div>
-                <label>Proceso</label>
-                <div class="campo-sugerencias">
-                  <input
-                    id="ctProcesoInput"
-                    placeholder="Toca para ver los procesos..."
-                    autocomplete="off"
-                    enterkeyhint="search"
-                  />
-                  <div
-                    id="sugCtProceso"
-                    class="lista-sugerencias"
-                    role="listbox"
-                  ></div>
-                </div>
               </div>
               <div>
                 <label>EAN</label>
@@ -2486,6 +2486,7 @@
           },
           campos: [
             { id: "ctPedidoInput", etiqueta: "Pedido" },
+            { id: "ctProcesoInput", etiqueta: "Proceso" },
             {
               id: "ctCoordinador",
               etiqueta: "Coordinador",
@@ -2502,7 +2503,6 @@
               visible: _esAdminCT,
             },
             { id: "ctClienteInput", etiqueta: "Cliente", visible: _esAdminCT },
-            { id: "ctProcesoInput", etiqueta: "Proceso", visible: _esAdminCT },
             { id: "ctEanInput", etiqueta: "EAN", visible: _esAdminCT },
             {
               id: "ctFiltro",
@@ -2717,7 +2717,7 @@
           supernumerario: esAdmin ? _valorCT("ctSupernumerario") : "",
           operario: esAdmin ? _valorCT("ctOperarioInput") : "",
           cliente: esAdmin ? _valorCT("ctClienteInput") : "",
-          proceso: esAdmin ? _valorCT("ctProcesoInput") : "",
+          proceso: _valorCT("ctProcesoInput"),
           ean: esAdmin ? _valorCT("ctEanInput") : "",
         };
 
