@@ -49,6 +49,56 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
       }
 
+      .dashboard-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+      .tarjetaApp {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 22px 10px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        color: #374151;
+        transition:
+          background 0.15s,
+          transform 0.1s;
+      }
+      .tarjetaApp:active {
+        transform: scale(0.97);
+      }
+      .tarjetaApp-icono {
+        font-size: 28px;
+      }
+      .calc-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      .calc-valor-fijo {
+        background: #f3f4f6;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-weight: 700;
+        color: #111827;
+        text-align: center;
+      }
+      .calc-resultado .calc-valor-fijo {
+        background: #ecfdf5;
+        border-color: #6ee7b7;
+        color: #065f46;
+      }
+
       label {
         display: block;
         font-size: 13px;
@@ -152,6 +202,79 @@
       th {
         color: #666;
         font-weight: 600;
+      }
+
+      #vistaSeguimientoPaquetes th,
+      #vistaSeguimientoPaquetes td {
+        border-right: 1px solid #d1d5db;
+      }
+
+      #vistaSeguimientoPaquetes th:last-child,
+      #vistaSeguimientoPaquetes td:last-child {
+        border-right: none;
+      }
+
+      #vistaSeguimientoPaquetes th {
+        color: #3730a3;
+        background: #eef2ff;
+        border-bottom: 2px solid #c7d2fe;
+      }
+
+      .seguimiento-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+        gap: 10px;
+        margin-bottom: 16px;
+      }
+      .seguimiento-kpi {
+        background: #f3f4f6;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 10px 6px;
+        text-align: center;
+      }
+      .seguimiento-kpi-valor {
+        display: block;
+        font-size: 20px;
+        font-weight: 700;
+        color: #111827;
+      }
+      .seguimiento-kpi-label {
+        display: block;
+        font-size: 11px;
+        color: #6b7280;
+        margin-top: 2px;
+      }
+      .seguimiento-kpi-completado {
+        background: #ecfdf5;
+        border-color: #6ee7b7;
+      }
+      .seguimiento-kpi-completado .seguimiento-kpi-valor {
+        color: #065f46;
+      }
+      .seguimiento-kpi-proceso {
+        background: #eef2ff;
+        border-color: #c7d2fe;
+      }
+      .seguimiento-kpi-proceso .seguimiento-kpi-valor {
+        color: #3730a3;
+      }
+      .seguimiento-kpi-pendiente {
+        background: #fffbeb;
+        border-color: #fde68a;
+      }
+      .seguimiento-kpi-pendiente .seguimiento-kpi-valor {
+        color: #92400e;
+      }
+      .seguimiento-kpi-bajo {
+        background: #fef2f2;
+        border-color: #fca5a5;
+      }
+      .seguimiento-kpi-bajo .seguimiento-kpi-valor {
+        color: #991b1b;
+      }
+      .seguimiento-grafica-wrap {
+        margin-bottom: 18px;
       }
 
       .btn-submit {
@@ -399,6 +522,11 @@
           width: 100%;
         }
 
+        .modal-box .row2.row2-campos {
+          flex-direction: row;
+          flex-wrap: wrap;
+        }
+
         .btn-submit {
           font-size: 14px;
           padding: 12px;
@@ -421,17 +549,243 @@
           padding: 10px 12px;
         }
       }
+      .campo-sugerencias {
+        position: relative;
+      }
+      .lista-sugerencias {
+        display: none;
+        position: absolute;
+        top: calc(100% - 14px);
+        left: 0;
+        right: 0;
+        z-index: 50;
+        max-height: 220px;
+        overflow-y: auto;
+        background: #fff;
+        border: 1px solid #d7dade;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+      }
+      .lista-sugerencias.visible {
+        display: block;
+      }
+      .sugerencia-item {
+        padding: 12px 10px;
+        font-size: 14px;
+        border-bottom: 1px solid #f0f1f3;
+        cursor: pointer;
+      }
+      .add-row .campo-sugerencias {
+        flex: 1 1 120px;
+        min-width: 0;
+      }
+      .add-row .lista-sugerencias {
+        top: 100%;
+      }
+      @media (max-width: 480px) {
+        .add-row .campo-sugerencias {
+          flex: 0 0 auto;
+          width: 100%;
+        }
+      }
+      .sugerencia-item:last-child {
+        border-bottom: none;
+      }
+      .sugerencia-item:active {
+        background: #eef2ff;
+      }
+
+      /* ===== Filtros compactos (barra + chips + panel) ===== */
+      .filtros-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .btn-filtros {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #fff;
+        border: 1px solid #d7dade;
+        border-radius: 999px;
+        padding: 7px 13px;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        color: #2452c9;
+        cursor: pointer;
+      }
+      .btn-filtros[aria-expanded="true"] {
+        background: #eaf0ff;
+        border-color: #2452c9;
+      }
+      .btn-filtros .contador {
+        display: inline-block;
+        background: #2452c9;
+        color: #fff;
+        border-radius: 999px;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        font-size: 11px;
+        line-height: 18px;
+        text-align: center;
+      }
+      .btn-filtros .contador[hidden] {
+        display: none;
+      }
+      .btn-filtros .caret {
+        font-size: 10px;
+        color: #7a8089;
+      }
+      .btn-limpiar {
+        margin-left: auto;
+        background: none;
+        border: 0;
+        padding: 4px;
+        color: #6b7280;
+        font-family: inherit;
+        font-size: 12px;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+      }
+      .chips:empty {
+        display: none;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        max-width: 100%;
+        background: #eef1f6;
+        border: 1px solid #dfe3ea;
+        border-radius: 999px;
+        padding: 4px 6px 4px 10px;
+        font-size: 12px;
+        color: #33383f;
+      }
+      .chip > span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .chip b {
+        color: #5b6168;
+        font-weight: 600;
+      }
+      .chip button {
+        flex: 0 0 auto;
+        width: 17px;
+        height: 17px;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        background: #d9dee7;
+        color: #454a52;
+        font-size: 12px;
+        line-height: 15px;
+        cursor: pointer;
+      }
+      .panel-filtros {
+        margin-top: 10px;
+        border: 1px solid #dfe3ea;
+        border-radius: 8px;
+        background: #fafbfc;
+        padding: 12px;
+      }
+      .panel-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+        gap: 10px;
+      }
+      .panel-grid label {
+        margin-bottom: 4px;
+      }
+      .panel-grid input,
+      .panel-grid select {
+        margin-bottom: 0;
+      }
+      .panel-grid > div {
+        min-width: 0;
+      }
+      .panel-acciones {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .panel-acciones button {
+        flex: 1;
+        height: 38px;
+        border-radius: 6px;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .panel-acciones .aplicar {
+        background: #2452c9;
+        color: #fff;
+        border: none;
+      }
+      .panel-acciones .cancelar {
+        background: #fff;
+        color: #444;
+        border: 1px solid #d7dade;
+      }
+      #btnBuscarRegistrosEditar {
+        min-width: 84px;
+      }
+      @media (max-width: 480px) {
+        .add-row.filtro-principal {
+          flex-direction: row;
+          align-items: center;
+        }
+        .add-row.filtro-principal .campo-sugerencias,
+        .add-row.filtro-principal input {
+          flex: 1 1 auto;
+          width: auto;
+        }
+        .add-row.filtro-principal button {
+          flex: 0 0 auto;
+          width: auto;
+          padding: 0 14px;
+        }
+        .btn-filtros {
+          min-height: 38px;
+          font-size: 14px;
+        }
+        .btn-limpiar {
+          padding: 10px 4px;
+          font-size: 13px;
+        }
+        .chip {
+          padding: 6px 6px 6px 12px;
+          font-size: 13px;
+        }
+        .chip button {
+          width: 22px;
+          height: 22px;
+          line-height: 20px;
+          font-size: 14px;
+        }
+      }
     </style>
   </head>
 
   <body>
-    <h1>Registro de Producción</h1>
-
     <div
       id="vistaLogin"
       class="card"
       style="max-width: 360px; margin: 60px auto"
     >
+      <h1 style="text-align: center">Procesos App</h1>
       <img src="glovanze1_logo.svg" alt="Logo" class="logo-login" />
       <h1 style="text-align: center">Iniciar sesión</h1>
 
@@ -520,15 +874,435 @@
         </div>
       </div>
     </div>
+
+    <div
+      id="vistaDashboard"
+      class="card"
+      style="display: none; max-width: 400px; margin: 60px auto"
+    >
+      <h1 style="margin-top: 0; font-size: 20px">Menú</h1>
+      <div class="dashboard-grid">
+        <button
+          type="button"
+          class="tarjetaApp"
+          onclick="abrirRegistroDesdeDashboard()"
+        >
+          <span class="tarjetaApp-icono">📋</span>
+          <span>Registro de producción</span>
+        </button>
+        <button
+          type="button"
+          class="tarjetaApp"
+          onclick="abrirCalculadoraDesdeDashboard()"
+        >
+          <span class="tarjetaApp-icono">⏱️</span>
+          <span>Calculadora de tiempos</span>
+        </button>
+        <button
+          type="button"
+          class="tarjetaApp"
+          id="btnEdicionDashboard"
+          style="display: none"
+          onclick="abrirEdicionDesdeDashboard()"
+        >
+          <span class="tarjetaApp-icono">✏️</span>
+          <span>Editar registros</span>
+        </button>
+        <button
+          type="button"
+          class="tarjetaApp"
+          id="btnSeguimientoDashboard"
+          style="display: none"
+          onclick="abrirSeguimientoDesdeDashboard()"
+        >
+          <span class="tarjetaApp-icono">📦</span>
+          <span>Seguimiento de paquetes</span>
+        </button>
+        <button
+          type="button"
+          class="tarjetaApp"
+          onclick="abrirControlTiemposDesdeDashboard()"
+        >
+          <span class="tarjetaApp-icono">⏰</span>
+          <span>Control tiempos</span>
+        </button>
+      </div>
+      <button
+        type="button"
+        class="btn-submit"
+        style="background: #6b7280; margin-top: 18px"
+        onclick="volverALogin()"
+      >
+        ← Cerrar sesión
+      </button>
+    </div>
+
+    <div id="vistaEdicionRegistros" style="display: none">
+      <button
+        type="button"
+        class="btn-submit"
+        style="background: #6b7280; margin-bottom: 14px"
+        onclick="volverAlDashboard()"
+      >
+        ← Volver al dashboard
+      </button>
+      <h1>Editar registros</h1>
+      <div class="card">
+        <label>Número de pedido</label>
+        <div class="add-row filtro-principal">
+          <div class="campo-sugerencias">
+            <input
+              id="edicionPedidoInput"
+              placeholder="Ej: 3200"
+              autocomplete="off"
+              enterkeyhint="search"
+            />
+            <div
+              id="sugEdicionPedido"
+              class="lista-sugerencias"
+              role="listbox"
+            ></div>
+          </div>
+          <button
+            type="button"
+            id="btnBuscarRegistrosEditar"
+            onclick="buscarRegistrosParaEditar()"
+          >
+            Buscar
+          </button>
+        </div>
+        <div class="filtros-bar">
+          <button
+            type="button"
+            class="btn-filtros"
+            id="btnFiltrosEdicion"
+            aria-expanded="false"
+            onclick="togglePanelFiltros('edicion')"
+          >
+            Filtros<span class="contador" id="contadorFiltrosEdicion" hidden
+              >0</span
+            ><span class="caret" id="caretFiltrosEdicion">▼</span>
+          </button>
+          <button
+            type="button"
+            class="btn-limpiar"
+            id="btnLimpiarFiltrosEdicion"
+            hidden
+            onclick="limpiarFiltros('edicion')"
+          >
+            Limpiar
+          </button>
+        </div>
+        <div class="chips" id="chipsEdicion"></div>
+        <div class="panel-filtros" id="panelFiltrosEdicion" hidden>
+          <div class="panel-grid">
+            <div>
+              <label>Nombre de operario</label>
+              <input
+                id="edicionOperarioInput"
+                placeholder="Ej: Juan Pérez"
+                autocomplete="off"
+                enterkeyhint="search"
+              />
+            </div>
+            <div>
+              <label>Fecha</label>
+              <input id="edicionFechaInput" type="date" autocomplete="off" />
+            </div>
+          </div>
+          <div class="panel-acciones">
+            <button
+              type="button"
+              class="cancelar"
+              onclick="cancelarFiltros('edicion')"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              class="aplicar"
+              onclick="aplicarFiltros('edicion')"
+            >
+              Aplicar
+            </button>
+          </div>
+        </div>
+        <div id="edicionAlerta"></div>
+        <div id="listaRegistrosEditar"></div>
+      </div>
+    </div>
+
+    <div id="vistaSeguimientoPaquetes" style="display: none">
+      <button
+        type="button"
+        class="btn-submit"
+        style="background: #6b7280; margin-bottom: 14px"
+        onclick="volverAlDashboard()"
+      >
+        ← Volver al dashboard
+      </button>
+      <h1>Seguimiento de paquetes</h1>
+      <div class="card">
+        <div id="seguimientoAlerta"></div>
+
+        <div class="add-row" style="margin-bottom: 14px">
+          <input
+            id="seguimientoPedidoInput"
+            list="sugeridosPedidosSeguimiento"
+            placeholder="Buscar pedido..."
+            autocomplete="off"
+            enterkeyhint="search"
+          />
+          <datalist id="sugeridosPedidosSeguimiento"></datalist>
+        </div>
+
+        <div id="seguimientoVistaGeneral">
+          <div class="seguimiento-kpi-grid">
+            <div class="seguimiento-kpi">
+              <span class="seguimiento-kpi-valor" id="kpiTotalPedidos">—</span>
+              <span class="seguimiento-kpi-label">Pedidos</span>
+            </div>
+            <div class="seguimiento-kpi seguimiento-kpi-proceso">
+              <span class="seguimiento-kpi-valor" id="kpiEnProceso">—</span>
+              <span class="seguimiento-kpi-label">En proceso</span>
+            </div>
+            <div class="seguimiento-kpi seguimiento-kpi-pendiente">
+              <span class="seguimiento-kpi-valor" id="kpiPendientes">—</span>
+              <span class="seguimiento-kpi-label">Pendientes</span>
+            </div>
+            <div class="seguimiento-kpi">
+              <span class="seguimiento-kpi-valor" id="kpiEficienciaPromedio"
+                >—</span
+              >
+              <span class="seguimiento-kpi-label">Eficiencia prom.</span>
+            </div>
+          </div>
+
+          <div class="seguimiento-grafica-wrap">
+            <canvas id="graficaEstadoPaquetes" height="200"></canvas>
+          </div>
+          <div class="seguimiento-grafica-wrap">
+            <canvas id="graficaEficienciaPaquetes" height="220"></canvas>
+          </div>
+        </div>
+
+        <div id="seguimientoVistaDetalle" style="display: none">
+          <p
+            id="seguimientoDetallePedidoLabel"
+            style="font-weight: 700; margin-bottom: 6px"
+          ></p>
+          <div class="seguimiento-grafica-wrap" style="height: 120px">
+            <canvas id="graficaDetallePedido"></canvas>
+          </div>
+          <div class="seguimiento-grafica-wrap" style="height: 140px">
+            <canvas id="graficaGaugeEficiencia"></canvas>
+          </div>
+          <div
+            class="seguimiento-kpi"
+            id="kpiEficienciaDetalle"
+            style="margin-bottom: 18px"
+          >
+            <span class="seguimiento-kpi-valor" id="kpiEficienciaDetalleValor"
+              >—</span
+            >
+            <span class="seguimiento-kpi-label">Eficiencia</span>
+          </div>
+        </div>
+
+        <div style="overflow-x: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Pedido</th>
+                <th>Sub línea</th>
+                <th>Estado</th>
+                <th>Uni. totales</th>
+                <th>Uni. procesadas</th>
+                <th>Uni. pendientes</th>
+                <th>Horas totales</th>
+                <th>Eficiencia</th>
+              </tr>
+            </thead>
+            <tbody id="seguimientoPaquetesBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="vistaControlTiempos" style="display: none">
+      <button
+        type="button"
+        class="btn-submit"
+        style="background: #6b7280; margin-bottom: 14px"
+        onclick="volverAlDashboard()"
+      >
+        ← Volver al dashboard
+      </button>
+      <h1>Control tiempos</h1>
+      <div class="card">
+        <label>Cédula</label>
+        <div class="add-row filtro-principal">
+          <input
+            id="ctCedulaInput"
+            placeholder="Escanea o escribe tu cédula"
+            autocomplete="off"
+            enterkeyhint="search"
+          />
+          <button type="button" onclick="buscarControlTiempos()">Buscar</button>
+        </div>
+        <div class="filtros-bar">
+          <button
+            type="button"
+            class="btn-filtros"
+            id="btnFiltrosControl"
+            aria-expanded="false"
+            onclick="togglePanelFiltros('control')"
+          >
+            Filtros<span class="contador" id="contadorFiltrosControl" hidden
+              >0</span
+            ><span class="caret" id="caretFiltrosControl">▼</span>
+          </button>
+          <button
+            type="button"
+            class="btn-limpiar"
+            id="btnLimpiarFiltrosControl"
+            hidden
+            onclick="limpiarFiltros('control')"
+          >
+            Limpiar
+          </button>
+        </div>
+        <div class="chips" id="chipsControl"></div>
+        <div class="panel-filtros" id="panelFiltrosControl" hidden>
+          <div class="panel-grid">
+            <div>
+              <label>Pedido</label>
+              <div class="campo-sugerencias">
+                <input
+                  id="ctPedidoInput"
+                  placeholder="Ej: 3200"
+                  autocomplete="off"
+                  enterkeyhint="search"
+                />
+                <div
+                  id="sugCtPedido"
+                  class="lista-sugerencias"
+                  role="listbox"
+                ></div>
+              </div>
+            </div>
+            <div>
+              <label>Mostrar</label>
+              <select id="ctFiltro" onchange="cambiarFiltroControlTiempos()">
+                <option value="fecha">Por fecha</option>
+                <option value="historico">Histórico (últimos 100)</option>
+              </select>
+            </div>
+            <div id="ctFechaWrap">
+              <label>Fecha</label>
+              <input type="date" id="ctFecha" />
+            </div>
+            <!-- display:contents para que los hijos sigan en la misma grilla -->
+            <div id="ctFiltrosAdmin" style="display: none">
+              <div>
+                <label>Coordinador</label>
+                <select id="ctCoordinador"></select>
+              </div>
+              <div>
+                <label>Supernumerario</label>
+                <select id="ctSupernumerario"></select>
+              </div>
+              <div>
+                <label>Operario</label>
+                <input
+                  id="ctOperarioInput"
+                  placeholder="Ej: Juan Pérez"
+                  autocomplete="off"
+                  enterkeyhint="search"
+                />
+              </div>
+              <div>
+                <label>Cliente</label>
+                <input
+                  id="ctClienteInput"
+                  placeholder="Ej: Falabella"
+                  autocomplete="off"
+                  enterkeyhint="search"
+                />
+              </div>
+              <div>
+                <label>Proceso</label>
+                <input
+                  id="ctProcesoInput"
+                  placeholder="Ej: Etiquetado"
+                  autocomplete="off"
+                  enterkeyhint="search"
+                />
+              </div>
+              <div>
+                <label>EAN</label>
+                <input
+                  id="ctEanInput"
+                  placeholder="Escanea o escribe el EAN"
+                  autocomplete="off"
+                  enterkeyhint="search"
+                />
+              </div>
+            </div>
+          </div>
+          <div class="panel-acciones">
+            <button
+              type="button"
+              class="cancelar"
+              onclick="cancelarFiltros('control')"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              class="aplicar"
+              onclick="aplicarFiltros('control')"
+            >
+              Aplicar
+            </button>
+          </div>
+        </div>
+        <div id="ctAlerta"></div>
+        <div style="overflow-x: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Coordinador</th>
+                <th>Operario</th>
+                <th>Supernumerario</th>
+                <th>Pedido</th>
+                <th>Cliente</th>
+                <th>Proceso</th>
+                <th>EAN</th>
+                <th>Uni. procesadas</th>
+                <th>Eficiencia</th>
+                <th>Hora inicio</th>
+                <th>Hora fin</th>
+              </tr>
+            </thead>
+            <tbody id="ctBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <div id="vistaPrincipal" style="display: none">
       <button
         type="button"
         class="btn-submit"
         style="background: #6b7280; margin-bottom: 14px"
-        onclick="volverALogin()"
+        onclick="volverAlDashboard()"
       >
-        ← Volver al login
+        ← Volver al dashboard
       </button>
+      <h1>Registro de Producción</h1>
+      <div id="avisoBorradorSupervisor"></div>
       <div class="card">
         <div class="row2">
           <div>
@@ -548,19 +1322,31 @@
         <div class="row2">
           <div>
             <label>Número de pedido</label>
-            <input id="pedido" placeholder="Ej: 123" />
+            <div class="campo-sugerencias">
+              <input id="pedido" placeholder="Ej: 123" autocomplete="off" />
+              <div
+                id="sugPedido"
+                class="lista-sugerencias"
+                role="listbox"
+              ></div>
+            </div>
           </div>
           <div>
             <label>Fecha</label>
-            <input id="fecha" type="date" disabled />
+            <input id="fecha" type="date" />
           </div>
         </div>
 
         <div>
           <label>Proceso</label>
-          <select id="proceso">
-            <option value="">Ingresa un pedido primero...</option>
-          </select>
+          <div class="campo-sugerencias">
+            <input
+              id="proceso"
+              placeholder="Ingresa un pedido primero..."
+              autocomplete="off"
+            />
+            <div id="sugProceso" class="lista-sugerencias" role="listbox"></div>
+          </div>
         </div>
         <p class="tasa-hint" id="tasaHint"></p>
         <button
@@ -613,23 +1399,7 @@
         </div>
 
         <label>Suplemento (descanso)</label>
-        <select id="suplementoMin">
-          <option value="0">Sin suplemento</option>
-          <option value="5">5 minutos</option>
-          <option value="10">10 minutos</option>
-          <option value="15">15 minutos</option>
-          <option value="20">20 minutos</option>
-          <option value="25">25 minutos</option>
-          <option value="30">30 minutos</option>
-          <option value="35">35 minutos</option>
-          <option value="40">40 minutos</option>
-          <option value="45">45 minutos</option>
-          <option value="50">50 minutos</option>
-          <option value="55">55 minutos</option>
-          <option value="60">1 hora</option>
-          <option value="65">1 hora 5 minutos</option>
-          <option value="70">1 hora 10 minutos</option>
-        </select>
+        <select id="suplementoMin"></select>
 
         <label>Total de unidades (según escaneo final de banda)</label>
         <input
@@ -734,11 +1504,12 @@
         type="button"
         class="btn-submit"
         style="background: #6b7280; margin-bottom: 14px"
-        onclick="volverALogin()"
+        onclick="volverAlDashboard()"
       >
-        ← Volver al login
+        ← Volver al dashboard
       </button>
-      <h1>Registro de Producción — Operario</h1>
+      <h1>Registro de Producción</h1>
+      <div id="avisoBorradorOperario"></div>
 
       <label>Cédula</label>
       <div class="add-row" style="margin-bottom: 14px">
@@ -773,7 +1544,10 @@
       </div>
 
       <label>Número de pedido</label>
-      <input id="opPedido" placeholder="Ej: 123" />
+      <div class="campo-sugerencias">
+        <input id="opPedido" placeholder="Ej: 123" autocomplete="off" />
+        <div id="sugOpPedido" class="lista-sugerencias" role="listbox"></div>
+      </div>
 
       <label>Código EAN del producto</label>
       <div class="add-row" style="margin-bottom: 14px">
@@ -795,9 +1569,14 @@
       <div id="opAlertaEan"></div>
 
       <label>Proceso</label>
-      <select id="opProceso">
-        <option value="">Ingresa un pedido primero...</option>
-      </select>
+      <div class="campo-sugerencias">
+        <input
+          id="opProceso"
+          placeholder="Ingresa un pedido primero..."
+          autocomplete="off"
+        />
+        <div id="sugOpProceso" class="lista-sugerencias" role="listbox"></div>
+      </div>
       <p class="tasa-hint" id="opTasaHint"></p>
       <button
         type="button"
@@ -830,35 +1609,35 @@
       <div class="row2">
         <div>
           <label>Suplemento (descanso)</label>
-          <select id="opSuplementoMin">
-            <option value="0">Sin suplemento</option>
-            <option value="5">5 minutos</option>
-            <option value="10">10 minutos</option>
-            <option value="15">15 minutos</option>
-            <option value="20">20 minutos</option>
-            <option value="25">25 minutos</option>
-            <option value="30">30 minutos</option>
-            <option value="35">35 minutos</option>
-            <option value="40">40 minutos</option>
-            <option value="45">45 minutos</option>
-            <option value="50">50 minutos</option>
-            <option value="55">55 minutos</option>
-            <option value="60">1 hora</option>
-            <option value="65">1 hora 5 minutos</option>
-            <option value="70">1 hora 10 minutos</option>
-          </select>
+          <select
+            id="opSuplementoMin"
+            onchange="_validarHorasOperario()"
+          ></select>
         </div>
       </div>
       <div class="row2">
         <div>
           <label>Hora inicio</label>
-          <input id="opHoraInicio" type="time" />
+          <div
+            id="opHoraInicio"
+            class="calc-valor-fijo"
+            style="margin-bottom: 14px"
+          >
+            —
+          </div>
         </div>
         <div>
           <label>Hora fin</label>
-          <input id="opHoraFin" type="time" />
+          <div
+            id="opHoraFin"
+            class="calc-valor-fijo"
+            style="margin-bottom: 14px"
+          >
+            —
+          </div>
         </div>
       </div>
+      <div id="opAlertaHoras"></div>
 
       <label>Unidades procesadas</label>
       <input id="opUnidades" type="number" min="0" placeholder="Ej: 50" />
@@ -900,6 +1679,29 @@
             onclick="cerrarModalAviso()"
           >
             Entendido
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="modalTiempoCorto" class="modal-overlay">
+      <div class="modal-box">
+        <h3 style="color: #92400e">Registro corto</h3>
+        <p id="modalTiempoCortoTexto"></p>
+        <div class="row2">
+          <button
+            type="button"
+            style="background: #16a34a; color: #fff"
+            onclick="confirmarTiempoCortoOperario()"
+          >
+            Enviar registro
+          </button>
+          <button
+            type="button"
+            style="background: #e5e7eb; color: #333"
+            onclick="cerrarModalTiempoCorto()"
+          >
+            Cancelar
           </button>
         </div>
       </div>
@@ -987,6 +1789,248 @@
           </button>
         </div>
       </div>
+    </div>
+
+    <div id="modalEditarRegistro" class="modal-overlay">
+      <div class="modal-box" style="max-width: 480px">
+        <h3 style="color: #2452c9">Editar registro</h3>
+        <div id="editAlerta"></div>
+        <div style="max-height: 60vh; overflow-y: auto; padding-right: 4px">
+          <label>Fecha</label>
+          <input id="editFecha" type="date" />
+          <div class="row2 row2-campos">
+            <div>
+              <label>Coordinador</label>
+              <select id="editCoordinador"></select>
+            </div>
+            <div>
+              <label>Supernumerario</label>
+              <select id="editSupernumerario"></select>
+            </div>
+          </div>
+          <label>Proceso</label>
+          <div class="campo-sugerencias">
+            <input
+              id="editProceso"
+              placeholder="Escribe para buscar un proceso..."
+              autocomplete="off"
+            />
+            <div
+              id="sugEditProceso"
+              class="lista-sugerencias"
+              role="listbox"
+            ></div>
+          </div>
+          <p class="tasa-hint" id="editProcesoHint"></p>
+          <div class="row2 row2-campos">
+            <div>
+              <label>Hora inicio</label>
+              <input id="editHoraInicio" type="time" />
+            </div>
+            <div>
+              <label>Hora fin</label>
+              <input id="editHoraFin" type="time" />
+            </div>
+          </div>
+          <label>Suplemento (descanso)</label>
+          <select id="editSuplementoMin"></select>
+          <label>Unidades procesadas</label>
+          <input id="editUnidadesProcesadas" type="number" min="0" />
+          <label>Códigos sobrantes</label>
+          <input
+            id="editCodigosSobrantes"
+            type="number"
+            min="0"
+            step="1"
+            inputmode="numeric"
+          />
+          <label>Observaciones</label>
+          <textarea id="editObservaciones" rows="2"></textarea>
+          <label>Motivo de la edición (obligatorio)</label>
+          <textarea
+            id="editMotivo"
+            rows="2"
+            placeholder="Ej: el operario ingresó unidades de más por error de digitación"
+          ></textarea>
+          <label>Tu nombre (obligatorio)</label>
+          <input
+            id="editEditadoPor"
+            placeholder="Quién hace este cambio"
+            autocomplete="off"
+          />
+        </div>
+        <div class="row2" style="margin-top: 14px">
+          <button
+            type="button"
+            style="background: #9ca3af; color: #fff"
+            onclick="intentarCerrarModalEditar()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            id="btnGuardarEdicion"
+            style="background: #2452c9; color: #fff"
+            onclick="guardarEdicionRegistro()"
+          >
+            Guardar cambios
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="modalConfirmarDescartarEdicion" class="modal-overlay">
+      <div class="modal-box">
+        <h3>¿Descartar cambios?</h3>
+        <p>
+          Hay cambios sin guardar en este registro. Si sales ahora se perderán.
+        </p>
+        <div class="row2">
+          <button
+            type="button"
+            style="background: #9ca3af; color: #fff"
+            onclick="cancelarDescartarEdicion()"
+          >
+            Seguir editando
+          </button>
+          <button
+            type="button"
+            style="background: #dc2626; color: #fff"
+            onclick="confirmarDescartarEdicion()"
+          >
+            Descartar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="modalMotivoAccion" class="modal-overlay">
+      <div class="modal-box">
+        <h3 id="modalMotivoAccionTitulo">Anular registro</h3>
+        <div id="motivoAccionAlerta"></div>
+        <label>Motivo (obligatorio)</label>
+        <textarea
+          id="motivoAccionTexto"
+          rows="2"
+          placeholder="Ej: unidades ingresadas por error"
+        ></textarea>
+        <label>Tu nombre (obligatorio)</label>
+        <input
+          id="motivoAccionNombre"
+          placeholder="Quién hace este cambio"
+          autocomplete="off"
+        />
+        <div class="row2" style="margin-top: 8px">
+          <button
+            type="button"
+            style="background: #9ca3af; color: #fff"
+            onclick="cerrarModalMotivoAccion()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            id="btnConfirmarMotivoAccion"
+            style="background: #dc2626; color: #fff"
+            onclick="confirmarMotivoAccion()"
+          >
+            Anular
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="modalConfirmarEliminar" class="modal-overlay">
+      <div class="modal-box">
+        <h3 style="color: #991b1b">Eliminar registro</h3>
+        <div id="eliminarAlerta"></div>
+        <p style="color: #374151; font-size: 14px">
+          Esta acción no se puede deshacer.
+        </p>
+        <div class="row2" style="margin-top: 8px">
+          <button
+            type="button"
+            style="background: #9ca3af; color: #fff"
+            onclick="cerrarModalConfirmarEliminar()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            id="btnConfirmarEliminar"
+            style="background: #dc2626; color: #fff"
+            onclick="confirmarEliminarRegistro()"
+          >
+            Eliminar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="vistaCalculadora"
+      class="card"
+      style="display: none; max-width: 400px; margin: 60px auto"
+    >
+      <button
+        type="button"
+        class="btn-submit"
+        style="background: #6b7280; margin-bottom: 14px"
+        onclick="volverAlDashboard()"
+      >
+        ← Volver al dashboard
+      </button>
+      <h1 style="margin-top: 0; font-size: 20px">Calculadora de tiempos</h1>
+
+      <div class="calc-grid">
+        <div>
+          <label>Unidades estándar</label>
+          <input
+            type="number"
+            id="calcUnidadesEstandar"
+            placeholder="Ej: 600"
+            oninput="actualizarCalculadora()"
+          />
+        </div>
+        <div>
+          <label>Cantidad de operarios</label>
+          <input
+            type="number"
+            id="calcCantidadOperarios"
+            placeholder="Ej: 1"
+            value="1"
+            min="1"
+            step="1"
+            oninput="actualizarCalculadora()"
+          />
+        </div>
+        <div>
+          <label>Tiempo</label>
+          <div class="calc-valor-fijo">1 hora (60 min)</div>
+        </div>
+        <div>
+          <label>Unidades caja</label>
+          <input
+            type="number"
+            id="calcUnidadesCaja"
+            placeholder="Ej: 24"
+            oninput="actualizarCalculadora()"
+          />
+        </div>
+        <div class="calc-resultado" style="grid-column: 1 / -1">
+          <label>Tiempo total</label>
+          <div id="calcResultado" class="calc-valor-fijo">--</div>
+        </div>
+      </div>
+
+      <label style="margin-top: 14px">Suplemento (descanso)</label>
+      <select
+        id="calcSuplementoMin"
+        onchange="actualizarCalculadora()"
+      ></select>
+
+      <label style="margin-top: 10px">Tiempo con suplemento</label>
+      <div id="calcResultadoConSuplemento" class="calc-valor-fijo">--</div>
     </div>
 
     <div id="vistaJustificacion" class="card" style="display: none">
@@ -1077,9 +2121,188 @@
       </button>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
     <script src="api.js?v=20260819"></script>
     <script>
       let rolActual = null;
+
+      // ---------------- SESIÓN PERSISTENTE (localStorage) ----------------
+      const SESION_DURACION_MS = 8 * 60 * 60 * 1000; // 8 horas
+
+      function guardarSesion(rol) {
+        localStorage.setItem(
+          "rp_sesion",
+          JSON.stringify({ rol, expira: Date.now() + SESION_DURACION_MS }),
+        );
+      }
+
+      function _restaurarSesionGuardada() {
+        try {
+          const guardado = JSON.parse(localStorage.getItem("rp_sesion"));
+          if (guardado && guardado.rol && guardado.expira > Date.now()) {
+            return guardado.rol;
+          }
+        } catch (e) {}
+        localStorage.removeItem("rp_sesion");
+        return null;
+      }
+
+      function _mostrarDashboardTrasLogin() {
+        document.getElementById("vistaLogin").style.display = "none";
+        document.getElementById("vistaDashboard").style.display = "block";
+        document.getElementById("btnEdicionDashboard").style.display =
+          rolActual === "supervisor" ? "" : "none";
+        document.getElementById("btnSeguimientoDashboard").style.display =
+          rolActual === "supervisor" ? "" : "none";
+      }
+
+      const _rolRestaurado = _restaurarSesionGuardada();
+      if (_rolRestaurado) {
+        rolActual = _rolRestaurado;
+        _mostrarDashboardTrasLogin();
+      }
+
+      // ---------------- BORRADOR DE FORMULARIO (localStorage) ----------------
+      const BORRADOR_VIGENCIA_MS = 2 * 60 * 60 * 1000; // 2 horas
+
+      const CAMPOS_BORRADOR_SUPERVISOR = [
+        "pedido",
+        "proceso",
+        "horaInicio",
+        "horaFin",
+        "totalUnidades",
+        "codigosSobrantes",
+        "observaciones",
+      ];
+      const CAMPOS_BORRADOR_OPERARIO = [
+        "opCedula",
+        "opPedido",
+        "opProceso",
+        "opUnidades",
+        "opCodigosSobrantes",
+        "opObservaciones",
+      ];
+
+      function _guardarBorrador(clave, campos) {
+        const datos = {};
+        campos.forEach((id) => {
+          datos[id] = document.getElementById(id).value;
+        });
+        localStorage.setItem(
+          clave,
+          JSON.stringify({ datos, guardado: Date.now() }),
+        );
+      }
+
+      function _restaurarBorrador(clave, campos, avisoId) {
+        let guardado;
+        try {
+          guardado = JSON.parse(localStorage.getItem(clave));
+        } catch (e) {
+          guardado = null;
+        }
+        if (
+          !guardado ||
+          Date.now() - guardado.guardado > BORRADOR_VIGENCIA_MS
+        ) {
+          localStorage.removeItem(clave);
+          return;
+        }
+        let huboRestauracion = false;
+        campos.forEach((id) => {
+          const valor = guardado.datos[id];
+          if (valor) {
+            document.getElementById(id).value = valor;
+            huboRestauracion = true;
+          }
+        });
+        if (huboRestauracion) {
+          document.getElementById(avisoId).innerHTML =
+            '<div class="msg warn">Se recuperaron datos sin guardar. Coordinador, supernumerario y suplemento no se pudieron mantener — vuelve a seleccionarlos.</div>';
+        }
+      }
+
+      function _engancharAutoguardadoBorrador(clave, campos) {
+        let temporizador = null;
+        campos.forEach((id) => {
+          document.getElementById(id).addEventListener("input", () => {
+            clearTimeout(temporizador);
+            temporizador = setTimeout(
+              () => _guardarBorrador(clave, campos),
+              500,
+            );
+          });
+        });
+      }
+
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") {
+          _guardarBorrador(
+            "rp_borrador_supervisor",
+            CAMPOS_BORRADOR_SUPERVISOR,
+          );
+          _guardarBorrador("rp_borrador_operario", CAMPOS_BORRADOR_OPERARIO);
+        } else if (document.visibilityState === "visible") {
+          refrescarCatalogos();
+          if (opCedulaConfirmada) _refrescarHoraInicioCadena();
+        }
+      });
+
+      _engancharAutoguardadoBorrador(
+        "rp_borrador_supervisor",
+        CAMPOS_BORRADOR_SUPERVISOR,
+      );
+      _engancharAutoguardadoBorrador(
+        "rp_borrador_operario",
+        CAMPOS_BORRADOR_OPERARIO,
+      );
+      _restaurarBorrador(
+        "rp_borrador_supervisor",
+        CAMPOS_BORRADOR_SUPERVISOR,
+        "avisoBorradorSupervisor",
+      );
+      _restaurarBorrador(
+        "rp_borrador_operario",
+        CAMPOS_BORRADOR_OPERARIO,
+        "avisoBorradorOperario",
+      );
+
+      // ---------------- ESCAPE DE HTML (seguridad) ----------------
+      function escapeHtml(texto) {
+        return String(texto)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      // ---------------- OPCIONES DE SUPLEMENTO (fuente única) ----------------
+      const OPCIONES_SUPLEMENTO_MIN = [
+        0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70,
+      ];
+
+      function _etiquetaSuplemento(min) {
+        if (min === 0) return "Sin suplemento";
+        const horas = Math.floor(min / 60);
+        const minutos = min % 60;
+        if (horas === 0) return `${minutos} minutos`;
+        if (minutos === 0) return horas === 1 ? "1 hora" : `${horas} horas`;
+        return `${horas} hora${horas > 1 ? "s" : ""} ${minutos} minutos`;
+      }
+
+      function _generarOpcionesSuplemento() {
+        return OPCIONES_SUPLEMENTO_MIN.map(
+          (min) =>
+            `<option value="${min}">${_etiquetaSuplemento(min)}</option>`,
+        ).join("");
+      }
+
+      ["suplementoMin", "opSuplementoMin", "calcSuplementoMin"].forEach(
+        (id) => {
+          document.getElementById(id).innerHTML = _generarOpcionesSuplemento();
+        },
+      );
 
       function seleccionarRol(rol) {
         rolActual = rol;
@@ -1103,13 +2326,1400 @@
         resetBotonLogin();
       }
 
-      function volverALogin() {
-        // 1. Ocultar vistas
-        ["vistaPrincipal", "vistaOperario", "vistaJustificacion"].forEach(
-          (id) => {
-            document.getElementById(id).style.display = "none";
+      function abrirRegistroDesdeDashboard() {
+        document.getElementById("vistaDashboard").style.display = "none";
+        if (rolActual === "operario") {
+          document.getElementById("vistaOperario").style.display = "block";
+          if (opCedulaConfirmada) _iniciarRelojHoraFin();
+        } else {
+          document.getElementById("vistaPrincipal").style.display = "block";
+        }
+      }
+
+      function abrirCalculadoraDesdeDashboard() {
+        document.getElementById("vistaDashboard").style.display = "none";
+        document.getElementById("vistaCalculadora").style.display = "block";
+      }
+
+      function abrirEdicionDesdeDashboard() {
+        document.getElementById("vistaDashboard").style.display = "none";
+        document.getElementById("vistaEdicionRegistros").style.display =
+          "block";
+        document.getElementById("edicionPedidoInput").value = "";
+        document.getElementById("edicionOperarioInput").value = "";
+        document.getElementById("edicionFechaInput").value = "";
+        document.getElementById("edicionAlerta").innerHTML = "";
+        document.getElementById("listaRegistrosEditar").innerHTML = "";
+        registrosEditarActuales = [];
+        document.getElementById("panelFiltrosEdicion").hidden = true;
+        renderFiltros("edicion");
+      }
+
+      function abrirSeguimientoDesdeDashboard() {
+        document.getElementById("vistaDashboard").style.display = "none";
+        document.getElementById("vistaSeguimientoPaquetes").style.display =
+          "block";
+        cargarSeguimientoPaquetes();
+      }
+
+      function _hoyBogotaCT() {
+        return new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Bogota",
+        }).format(new Date());
+      }
+
+      function cambiarFiltroControlTiempos() {
+        const esFecha = document.getElementById("ctFiltro").value === "fecha";
+        document.getElementById("ctFechaWrap").style.display = esFecha
+          ? "block"
+          : "none";
+      }
+
+      function _esAdminCT() {
+        return rolActual === "supervisor";
+      }
+
+      // Copia las opciones del catálogo ya cargado en el formulario principal.
+      function _poblarSelectFiltroCT(idDestino, idOrigen, etiquetaVacia) {
+        const destino = document.getElementById(idDestino);
+        destino.innerHTML = document.getElementById(idOrigen).innerHTML;
+        if (destino.options.length) destino.options[0].text = etiquetaVacia;
+        destino.value = "";
+      }
+
+      function abrirControlTiemposDesdeDashboard() {
+        const esAdmin = _esAdminCT();
+        document.getElementById("vistaDashboard").style.display = "none";
+        document.getElementById("vistaControlTiempos").style.display = "block";
+        document.getElementById("ctFiltrosAdmin").style.display = esAdmin
+          ? "contents"
+          : "none";
+
+        const campoCedula = document.getElementById("ctCedulaInput");
+        campoCedula.value = "";
+        campoCedula.placeholder = esAdmin
+          ? "Cédula (opcional)"
+          : "Escanea o escribe tu cédula";
+
+        [
+          "ctPedidoInput",
+          "ctOperarioInput",
+          "ctClienteInput",
+          "ctProcesoInput",
+          "ctEanInput",
+        ].forEach(function (id) {
+          document.getElementById(id).value = "";
+        });
+
+        if (esAdmin) {
+          _poblarSelectFiltroCT("ctCoordinador", "coordinador", "Todos");
+          _poblarSelectFiltroCT("ctSupernumerario", "supernumerario", "Todos");
+        }
+
+        document.getElementById("ctFiltro").value = "fecha";
+        const campoFechaCt = document.getElementById("ctFecha");
+        campoFechaCt.max = _hoyBogotaCT();
+        campoFechaCt.value = _hoyBogotaCT();
+        document.getElementById("ctFechaWrap").style.display = "block";
+        document.getElementById("ctAlerta").innerHTML = "";
+        document.getElementById("ctBody").innerHTML = "";
+        document.getElementById("panelFiltrosControl").hidden = true;
+        renderFiltros("control");
+        // El administrador entra viendo el día completo, sin pulsar Buscar.
+        if (esAdmin) buscarControlTiempos();
+      }
+
+      // ---------------- FILTROS COMPACTOS (barra + chips + panel) ----------------
+      // Para agregar un filtro nuevo: súmalo al markup del panel y agrega una
+      // entrada en "campos". El alto en reposo no cambia.
+      const FILTROS_VISTAS = {
+        edicion: {
+          panel: "panelFiltrosEdicion",
+          boton: "btnFiltrosEdicion",
+          contador: "contadorFiltrosEdicion",
+          caret: "caretFiltrosEdicion",
+          limpiar: "btnLimpiarFiltrosEdicion",
+          chips: "chipsEdicion",
+          buscar: function () {
+            buscarRegistrosParaEditar();
+          },
+          puedeBuscar: function () {
+            return !!(
+              _valorFiltro("edicionPedidoInput") ||
+              _valorFiltro("edicionOperarioInput")
+            );
+          },
+          campos: [
+            { id: "edicionOperarioInput", etiqueta: "Operario" },
+            {
+              id: "edicionFechaInput",
+              etiqueta: "Fecha",
+              texto: _textoFechaChip,
+            },
+          ],
+        },
+        control: {
+          panel: "panelFiltrosControl",
+          boton: "btnFiltrosControl",
+          contador: "contadorFiltrosControl",
+          caret: "caretFiltrosControl",
+          limpiar: "btnLimpiarFiltrosControl",
+          chips: "chipsControl",
+          buscar: function () {
+            buscarControlTiempos();
+          },
+          puedeBuscar: function () {
+            return _esAdminCT() || !!_valorFiltro("ctCedulaInput");
+          },
+          alCambiar: function () {
+            cambiarFiltroControlTiempos();
+          },
+          campos: [
+            { id: "ctPedidoInput", etiqueta: "Pedido" },
+            {
+              id: "ctCoordinador",
+              etiqueta: "Coordinador",
+              visible: _esAdminCT,
+            },
+            {
+              id: "ctSupernumerario",
+              etiqueta: "Supernumerario",
+              visible: _esAdminCT,
+            },
+            {
+              id: "ctOperarioInput",
+              etiqueta: "Operario",
+              visible: _esAdminCT,
+            },
+            { id: "ctClienteInput", etiqueta: "Cliente", visible: _esAdminCT },
+            { id: "ctProcesoInput", etiqueta: "Proceso", visible: _esAdminCT },
+            { id: "ctEanInput", etiqueta: "EAN", visible: _esAdminCT },
+            {
+              id: "ctFiltro",
+              etiqueta: "Mostrar",
+              vacio: "fecha",
+              texto: function () {
+                return "Histórico";
+              },
+            },
+            {
+              id: "ctFecha",
+              etiqueta: "Fecha",
+              fijo: function () {
+                return _valorFiltro("ctFecha") === _hoyBogotaCT();
+              },
+              porDefecto: function () {
+                return _hoyBogotaCT();
+              },
+              visible: function () {
+                return document.getElementById("ctFiltro").value === "fecha";
+              },
+              texto: function (v) {
+                return v === _hoyBogotaCT() ? "Hoy" : _textoFechaChip(v);
+              },
+            },
+          ],
+        },
+      };
+
+      const _snapshotFiltros = {};
+
+      function _valorFiltro(id) {
+        const el = document.getElementById(id);
+        return el ? String(el.value || "").trim() : "";
+      }
+
+      function _textoFechaChip(v) {
+        const p = String(v).split("-");
+        return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : v;
+      }
+
+      function _valorPorDefecto(campo) {
+        if (campo.porDefecto) return campo.porDefecto();
+        return campo.vacio === undefined ? "" : campo.vacio;
+      }
+
+      function _esFijo(campo) {
+        return typeof campo.fijo === "function" ? campo.fijo() : !!campo.fijo;
+      }
+
+      function _filtrosActivos(clave) {
+        const activos = [];
+        FILTROS_VISTAS[clave].campos.forEach(function (campo) {
+          if (campo.visible && !campo.visible()) return;
+          const valor = _valorFiltro(campo.id);
+          if (
+            !valor ||
+            valor === (campo.vacio === undefined ? "" : campo.vacio)
+          )
+            return;
+          const texto = campo.texto ? campo.texto(valor) : valor;
+          if (!texto) return;
+          activos.push({ campo: campo, texto: texto });
+        });
+        return activos;
+      }
+
+      function renderFiltros(clave) {
+        const cfg = FILTROS_VISTAS[clave];
+        const activos = _filtrosActivos(clave);
+        const abierto = !document.getElementById(cfg.panel).hidden;
+
+        const cuentan = activos.filter(function (a) {
+          return !_esFijo(a.campo);
+        });
+        const contador = document.getElementById(cfg.contador);
+        contador.textContent = cuentan.length;
+        contador.hidden = cuentan.length === 0;
+        document.getElementById(cfg.caret).textContent = abierto ? "▲" : "▼";
+        document
+          .getElementById(cfg.boton)
+          .setAttribute("aria-expanded", abierto ? "true" : "false");
+        document.getElementById(cfg.limpiar).hidden =
+          abierto || cuentan.length === 0;
+
+        const chipsDiv = document.getElementById(cfg.chips);
+        if (abierto) {
+          chipsDiv.innerHTML = "";
+          return;
+        }
+        chipsDiv.innerHTML = activos
+          .map(function (a) {
+            const quitar = _esFijo(a.campo)
+              ? ""
+              : '<button type="button" aria-label="Quitar filtro" onclick="quitarFiltro(\'' +
+                clave +
+                "','" +
+                a.campo.id +
+                "')\">&times;</button>";
+            return (
+              '<span class="chip"><span><b>' +
+              escapeHtml(a.campo.etiqueta) +
+              ":</b> " +
+              escapeHtml(a.texto) +
+              "</span>" +
+              quitar +
+              "</span>"
+            );
+          })
+          .join("");
+      }
+
+      function togglePanelFiltros(clave) {
+        const cfg = FILTROS_VISTAS[clave];
+        const panel = document.getElementById(cfg.panel);
+        if (panel.hidden) {
+          _snapshotFiltros[clave] = cfg.campos.map(function (c) {
+            return _valorFiltro(c.id);
+          });
+          panel.hidden = false;
+        } else {
+          panel.hidden = true;
+        }
+        renderFiltros(clave);
+      }
+
+      function cancelarFiltros(clave) {
+        const cfg = FILTROS_VISTAS[clave];
+        const previo = _snapshotFiltros[clave];
+        if (previo) {
+          cfg.campos.forEach(function (c, i) {
+            const el = document.getElementById(c.id);
+            if (el) el.value = previo[i];
+          });
+          if (cfg.alCambiar) cfg.alCambiar();
+        }
+        document.getElementById(cfg.panel).hidden = true;
+        renderFiltros(clave);
+      }
+
+      function aplicarFiltros(clave) {
+        const cfg = FILTROS_VISTAS[clave];
+        document.getElementById(cfg.panel).hidden = true;
+        renderFiltros(clave);
+        cfg.buscar();
+      }
+
+      function quitarFiltro(clave, idCampo) {
+        const cfg = FILTROS_VISTAS[clave];
+        const campo = cfg.campos.filter(function (c) {
+          return c.id === idCampo;
+        })[0];
+        const el = document.getElementById(idCampo);
+        if (!campo || !el) return;
+        el.value = _valorPorDefecto(campo);
+        if (cfg.alCambiar) cfg.alCambiar();
+        renderFiltros(clave);
+        if (cfg.puedeBuscar()) cfg.buscar();
+      }
+
+      function limpiarFiltros(clave) {
+        const cfg = FILTROS_VISTAS[clave];
+        cfg.campos.forEach(function (c) {
+          const el = document.getElementById(c.id);
+          if (el) el.value = _valorPorDefecto(c);
+        });
+        if (cfg.alCambiar) cfg.alCambiar();
+        renderFiltros(clave);
+        if (cfg.puedeBuscar()) cfg.buscar();
+      }
+
+      function _valorCT(id) {
+        const el = document.getElementById(id);
+        return el ? String(el.value || "").trim() : "";
+      }
+
+      function buscarControlTiempos() {
+        const esAdmin = _esAdminCT();
+        const cedula = _valorCT("ctCedulaInput");
+        const alertaDiv = document.getElementById("ctAlerta");
+        const bodyEl = document.getElementById("ctBody");
+        if (!cedula && !esAdmin) {
+          alertaDiv.innerHTML =
+            '<div class="msg err">Escribe o escanea una cédula.</div>';
+          bodyEl.innerHTML = "";
+          return;
+        }
+        const filtro = document.getElementById("ctFiltro").value;
+        const fecha = document.getElementById("ctFecha").value;
+        if (filtro === "fecha") {
+          if (!fecha) {
+            alertaDiv.innerHTML =
+              '<div class="msg err">Selecciona una fecha.</div>';
+            bodyEl.innerHTML = "";
+            return;
+          }
+          if (fecha > _hoyBogotaCT()) {
+            alertaDiv.innerHTML =
+              '<div class="msg err">No se permiten fechas futuras.</div>';
+            bodyEl.innerHTML = "";
+            return;
+          }
+        }
+
+        const payload = {
+          admin: esAdmin,
+          cedula: cedula,
+          filtro: filtro,
+          fecha: fecha,
+          pedido: _valorCT("ctPedidoInput"),
+          coordinador: esAdmin ? _valorCT("ctCoordinador") : "",
+          supernumerario: esAdmin ? _valorCT("ctSupernumerario") : "",
+          operario: esAdmin ? _valorCT("ctOperarioInput") : "",
+          cliente: esAdmin ? _valorCT("ctClienteInput") : "",
+          proceso: esAdmin ? _valorCT("ctProcesoInput") : "",
+          ean: esAdmin ? _valorCT("ctEanInput") : "",
+        };
+
+        alertaDiv.innerHTML = '<p class="hint">Buscando...</p>';
+        bodyEl.innerHTML = "";
+
+        llamarAPI("obtenerControlTiempos", payload)
+          .then(function (res) {
+            if (!res.success) {
+              alertaDiv.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
+              return;
+            }
+            const registros = res.registros || [];
+            renderControlTiempos(registros);
+            if (registros.length) {
+              alertaDiv.innerHTML = esAdmin
+                ? `<p class="hint">${registros.length} registros.</p>`
+                : "";
+            } else if (filtro === "fecha") {
+              alertaDiv.innerHTML =
+                '<p class="hint">No hay registros con esos filtros en esa fecha. Prueba cambiando "Mostrar" a Histórico dentro de Filtros.</p>';
+            } else {
+              alertaDiv.innerHTML =
+                '<p class="hint">No hay registros con esos filtros.</p>';
+            }
+          })
+          .catch(function (err) {
+            alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
+          });
+      }
+
+      function renderControlTiempos(registros) {
+        const bodyEl = document.getElementById("ctBody");
+        bodyEl.innerHTML = registros
+          .map(function (r) {
+            const eficienciaTxt =
+              r.eficiencia === null ? "N/A" : r.eficiencia + "%";
+            const filaEstilo = r.anulado
+              ? ' style="opacity:0.55;text-decoration:line-through"'
+              : "";
+            const etiquetaAnulado = r.anulado
+              ? ' <span style="color:#991b1b;font-weight:600">(Anulado)</span>'
+              : "";
+            return (
+              `<tr${filaEstilo}>` +
+              `<td>${escapeHtml(r.fecha)}</td>` +
+              `<td>${escapeHtml(r.coordinador)}</td>` +
+              `<td>${escapeHtml(r.operario)}${etiquetaAnulado}</td>` +
+              `<td>${escapeHtml(r.supernumerario)}</td>` +
+              `<td>${escapeHtml(r.pedido)}</td>` +
+              `<td>${escapeHtml(r.cliente || "")}</td>` +
+              `<td>${escapeHtml(r.proceso)}</td>` +
+              `<td>${escapeHtml(r.ean || "")}</td>` +
+              `<td>${r.unidadesProcesadas}</td>` +
+              `<td>${eficienciaTxt}</td>` +
+              `<td>${escapeHtml(r.horaInicio)}</td>` +
+              `<td>${escapeHtml(r.horaFinal)}</td>` +
+              `</tr>`
+            );
+          })
+          .join("");
+      }
+
+      document
+        .getElementById("ctCedulaInput")
+        .addEventListener("keydown", function (e) {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            buscarControlTiempos();
+          }
+        });
+
+      function cargarSeguimientoPaquetes() {
+        const alertaDiv = document.getElementById("seguimientoAlerta");
+        const bodyEl = document.getElementById("seguimientoPaquetesBody");
+        alertaDiv.innerHTML = '<p class="hint">Cargando...</p>';
+        bodyEl.innerHTML = "";
+        document.getElementById("seguimientoPedidoInput").value = "";
+
+        llamarAPI("obtenerSeguimientoPaquetes", {})
+          .then(function (res) {
+            if (!res.success) {
+              alertaDiv.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
+              return;
+            }
+            paquetesActuales = res.paquetes || [];
+            poblarDatalistPedidos(paquetesActuales);
+            if (paquetesActuales.length === 0) {
+              alertaDiv.innerHTML =
+                '<p class="hint">No hay paquetes registrados.</p>';
+              mostrarVistaGeneral();
+              return;
+            }
+            alertaDiv.innerHTML = "";
+            mostrarVistaGeneral();
+          })
+          .catch(function (err) {
+            alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
+          });
+      }
+
+      let chartEstadoPaquetes = null;
+      let chartEficienciaPaquetes = null;
+
+      function actualizarKpisPaquetes(paquetes) {
+        const total = paquetes.length;
+        const enProceso = paquetes.filter(
+          (p) => p.estado === "En proceso",
+        ).length;
+        const pendientes = paquetes.filter(
+          (p) => p.estado === "Pendiente",
+        ).length;
+        const conEficiencia = paquetes.filter((p) => p.eficiencia !== null);
+        const eficienciaProm = conEficiencia.length
+          ? Math.round(
+              conEficiencia.reduce((suma, p) => suma + p.eficiencia, 0) /
+                conEficiencia.length,
+            )
+          : null;
+
+        document.getElementById("kpiTotalPedidos").textContent = total;
+        document.getElementById("kpiEnProceso").textContent = enProceso;
+        document.getElementById("kpiPendientes").textContent = pendientes;
+        document.getElementById("kpiEficienciaPromedio").textContent =
+          eficienciaProm !== null ? eficienciaProm + "%" : "—";
+      }
+
+      function renderGraficasPaquetes(paquetes) {
+        const enProceso = paquetes.filter(
+          (p) => p.estado === "En proceso",
+        ).length;
+        const pendientes = paquetes.filter(
+          (p) => p.estado === "Pendiente",
+        ).length;
+
+        if (chartEstadoPaquetes) chartEstadoPaquetes.destroy();
+        chartEstadoPaquetes = new Chart(
+          document.getElementById("graficaEstadoPaquetes").getContext("2d"),
+          {
+            type: "doughnut",
+            data: {
+              labels: ["En proceso", "Pendiente"],
+              datasets: [
+                {
+                  data: [enProceso, pendientes],
+                  backgroundColor: ["#c7d2fe", "#fde68a"],
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              plugins: { legend: { position: "bottom" } },
+            },
           },
         );
+
+        const conEficiencia = paquetes.filter((p) => p.eficiencia !== null);
+        if (chartEficienciaPaquetes) chartEficienciaPaquetes.destroy();
+        chartEficienciaPaquetes = new Chart(
+          document.getElementById("graficaEficienciaPaquetes").getContext("2d"),
+          {
+            type: "bar",
+            data: {
+              labels: conEficiencia.map((p) => p.pedido),
+              datasets: [
+                {
+                  label: "Eficiencia (%)",
+                  data: conEficiencia.map((p) => p.eficiencia),
+                  backgroundColor: "#3730a3",
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              scales: { y: { beginAtZero: true, max: 100 } },
+              plugins: { legend: { display: false } },
+            },
+          },
+        );
+      }
+
+      let chartDetallePedido = null;
+      let paquetesActuales = [];
+
+      function poblarDatalistPedidos(paquetes) {
+        document.getElementById("sugeridosPedidosSeguimiento").innerHTML =
+          paquetes
+            .map((p) => `<option value="${escapeHtml(p.pedido)}"></option>`)
+            .join("");
+      }
+
+      function textoTotalPaquete(p) {
+        if (!p.sinLimite) return String(p.unidadesTotales);
+        return p.unidadesTotales > 0
+          ? p.unidadesTotales + " + sin límite"
+          : "Sin límite";
+      }
+
+      function renderFilasPaquetes(lista) {
+        document.getElementById("seguimientoPaquetesBody").innerHTML = lista
+          .map(function (p) {
+            return (
+              `<tr>` +
+              `<td>${escapeHtml(p.pedido)}</td>` +
+              `<td>${escapeHtml(p.subLinea)}</td>` +
+              `<td>${escapeHtml(p.estado)}</td>` +
+              `<td>${textoTotalPaquete(p)}</td>` +
+              `<td>${p.unidadesProcesadas}</td>` +
+              `<td>${p.unidadesPendientes !== null ? p.unidadesPendientes : "—"}</td>` +
+              `<td>${p.horasTotales !== null ? p.horasTotales : "—"}</td>` +
+              `<td>${p.eficiencia !== null ? p.eficiencia + "%" : "—"}</td>` +
+              `</tr>`
+            );
+          })
+          .join("");
+      }
+
+      function mostrarVistaGeneral() {
+        document.getElementById("seguimientoVistaGeneral").style.display =
+          "block";
+        document.getElementById("seguimientoVistaDetalle").style.display =
+          "none";
+        const activos = paquetesActuales.filter(
+          (p) => p.estado !== "Completado" && !p.soloSinLimite,
+        );
+        if (paquetesActuales.length > 0 && activos.length === 0) {
+          const ocultosSinLimite = paquetesActuales.some(
+            (p) => p.soloSinLimite && p.estado !== "Completado",
+          );
+          document.getElementById("seguimientoAlerta").innerHTML =
+            ocultosSinLimite
+              ? '<p class="hint">No hay pedidos activos con unidades definidas. Los pedidos sin límite no se listan aquí: búscalos por número.</p>'
+              : '<p class="hint">No hay pedidos pendientes ni en proceso.</p>';
+        }
+        renderFilasPaquetes(activos);
+        actualizarKpisPaquetes(activos);
+        renderGraficasPaquetes(activos);
+      }
+
+      function mostrarVistaDetallePedido(p) {
+        document.getElementById("seguimientoVistaGeneral").style.display =
+          "none";
+        document.getElementById("seguimientoVistaDetalle").style.display =
+          "block";
+        document.getElementById("seguimientoDetallePedidoLabel").textContent =
+          `Pedido ${p.pedido} — Total: ${textoTotalPaquete(p)} uds`;
+        renderFilasPaquetes([p]);
+        renderGraficaDetallePedido(p);
+        renderGaugeEficienciaDetalle(p);
+        actualizarKpiEficienciaDetalle(p);
+      }
+
+      function filtrarPedidoBuscado() {
+        const valor = document
+          .getElementById("seguimientoPedidoInput")
+          .value.trim();
+        const alertaDiv = document.getElementById("seguimientoAlerta");
+
+        if (!valor) {
+          alertaDiv.innerHTML = "";
+          mostrarVistaGeneral();
+          return;
+        }
+
+        const encontrado = paquetesActuales.find(
+          (p) => String(p.pedido) === valor,
+        );
+
+        if (!encontrado) {
+          alertaDiv.innerHTML =
+            '<p class="hint">No se encontró ese pedido.</p>';
+          document.getElementById("seguimientoVistaGeneral").style.display =
+            "none";
+          document.getElementById("seguimientoVistaDetalle").style.display =
+            "none";
+          document.getElementById("seguimientoPaquetesBody").innerHTML = "";
+          return;
+        }
+
+        alertaDiv.innerHTML = "";
+        mostrarVistaDetallePedido(encontrado);
+      }
+
+      function renderGraficaDetallePedido(p) {
+        const ctx = document
+          .getElementById("graficaDetallePedido")
+          .getContext("2d");
+        if (chartDetallePedido) chartDetallePedido.destroy();
+
+        const procesadas = p.sinLimite
+          ? p.unidadesProcesadas
+          : Math.min(p.unidadesProcesadas, p.unidadesTotales);
+        const pendientes = p.sinLimite
+          ? 0
+          : Math.max(p.unidadesTotales - p.unidadesProcesadas, 0);
+        const exceso = p.sinLimite
+          ? 0
+          : Math.max(p.unidadesProcesadas - p.unidadesTotales, 0);
+
+        const datasets = [
+          {
+            label: "Procesadas",
+            data: [procesadas],
+            backgroundColor: "#6ee7b7",
+            borderColor: "#065f46",
+            borderWidth: 1,
+          },
+          {
+            label: "Pendientes",
+            data: [pendientes],
+            backgroundColor: "#fde68a",
+            borderColor: "#92400e",
+            borderWidth: 1,
+          },
+        ];
+
+        if (exceso > 0) {
+          datasets.push({
+            label: "Exceso",
+            data: [exceso],
+            backgroundColor: "#fca5a5",
+            borderColor: "#991b1b",
+            borderWidth: 1,
+          });
+        }
+
+        chartDetallePedido = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: [""],
+            datasets,
+          },
+          options: {
+            indexAxis: "y",
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: {
+                stacked: true,
+                beginAtZero: true,
+                title: { display: true, text: "Unidades" },
+              },
+              y: { stacked: true, display: false },
+            },
+            plugins: {
+              legend: { position: "bottom" },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => `${ctx.dataset.label}: ${ctx.raw} uds`,
+                },
+              },
+            },
+          },
+        });
+      }
+
+      let chartGaugeEficiencia = null;
+
+      function renderGaugeEficienciaDetalle(p) {
+        const ctx = document
+          .getElementById("graficaGaugeEficiencia")
+          .getContext("2d");
+        if (chartGaugeEficiencia) chartGaugeEficiencia.destroy();
+
+        const ef = p.eficiencia;
+        let colorRelleno = "#e5e7eb";
+        let colorTexto = "#6b7280";
+        if (ef !== null && ef >= 75) {
+          colorRelleno = "#6ee7b7";
+          colorTexto = "#065f46";
+        } else if (ef !== null && ef >= 50) {
+          colorRelleno = "#fde68a";
+          colorTexto = "#92400e";
+        } else if (ef !== null) {
+          colorRelleno = "#fca5a5";
+          colorTexto = "#991b1b";
+        }
+
+        const relleno = ef === null ? 0 : Math.min(Math.max(ef, 0), 100);
+        const textoCentro = ef === null ? "—" : ef + "%";
+
+        const pluginTextoCentro = {
+          id: "textoCentroGauge",
+          afterDraw(chart) {
+            const arco = chart.getDatasetMeta(0).data[0];
+            if (!arco) return;
+            const c = chart.ctx;
+            c.save();
+            c.font = "700 22px sans-serif";
+            c.fillStyle = colorTexto;
+            c.textAlign = "center";
+            c.textBaseline = "bottom";
+            c.fillText(textoCentro, arco.x, arco.y - 4);
+            c.restore();
+          },
+        };
+
+        chartGaugeEficiencia = new Chart(ctx, {
+          type: "doughnut",
+          data: {
+            datasets: [
+              {
+                data: [relleno, 100 - relleno],
+                backgroundColor: [colorRelleno, "#e5e7eb"],
+                borderWidth: 0,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            rotation: -90,
+            circumference: 180,
+            cutout: "70%",
+            plugins: {
+              legend: { display: false },
+              tooltip: { enabled: false },
+            },
+          },
+          plugins: [pluginTextoCentro],
+        });
+      }
+
+      function actualizarKpiEficienciaDetalle(p) {
+        const card = document.getElementById("kpiEficienciaDetalle");
+        const valorEl = document.getElementById("kpiEficienciaDetalleValor");
+        card.classList.remove(
+          "seguimiento-kpi-completado",
+          "seguimiento-kpi-pendiente",
+          "seguimiento-kpi-bajo",
+        );
+        if (p.eficiencia === null) {
+          valorEl.textContent = "—";
+        } else if (p.eficiencia >= 75) {
+          card.classList.add("seguimiento-kpi-completado");
+          valorEl.textContent = p.eficiencia + "%";
+        } else if (p.eficiencia >= 50) {
+          card.classList.add("seguimiento-kpi-pendiente");
+          valorEl.textContent = p.eficiencia + "%";
+        } else {
+          card.classList.add("seguimiento-kpi-bajo");
+          valorEl.textContent = p.eficiencia + "%";
+        }
+      }
+
+      let buscarRegistrosEditarEnCurso = false;
+      let registrosEditarActuales = [];
+      let idRegistroEnEdicion = null;
+      let pedidoRegistroEnEdicion = "";
+      let snapshotFormularioEdicion = "";
+
+      function buscarRegistrosParaEditar() {
+        const pedidoInputEd = document.getElementById("edicionPedidoInput");
+        const pedido = pedidoCanonico(pedidoInputEd.value);
+        if (pedido && pedido !== pedidoInputEd.value) {
+          pedidoInputEd.value = pedido;
+        }
+        const operario = document
+          .getElementById("edicionOperarioInput")
+          .value.trim();
+        const fecha = document.getElementById("edicionFechaInput").value;
+        const alertaDiv = document.getElementById("edicionAlerta");
+        const listaDiv = document.getElementById("listaRegistrosEditar");
+        alertaDiv.innerHTML = "";
+        if (!pedido && !operario) {
+          alertaDiv.innerHTML =
+            '<div class="msg err">Escribe un número de pedido o un nombre de operario.</div>';
+          return;
+        }
+        if (buscarRegistrosEditarEnCurso) return;
+        buscarRegistrosEditarEnCurso = true;
+
+        const btn = document.getElementById("btnBuscarRegistrosEditar");
+        const textoOriginal = btn.textContent;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>';
+
+        llamarAPI("obtenerRegistrosParaEditar", {
+          pedido: pedido,
+          operario: operario,
+          fecha: fecha,
+        })
+          .then(function (res) {
+            if (res.success) {
+              renderListaRegistrosEditar(res.registros);
+            } else {
+              registrosEditarActuales = [];
+              listaDiv.innerHTML = "";
+              alertaDiv.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
+            }
+          })
+          .catch(function (err) {
+            registrosEditarActuales = [];
+            listaDiv.innerHTML = "";
+            alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
+          })
+          .finally(function () {
+            btn.disabled = false;
+            btn.textContent = textoOriginal;
+            buscarRegistrosEditarEnCurso = false;
+          });
+      }
+
+      function renderListaRegistrosEditar(registros) {
+        registrosEditarActuales = registros || [];
+        const listaDiv = document.getElementById("listaRegistrosEditar");
+        if (!registros || registros.length === 0) {
+          listaDiv.innerHTML =
+            '<p class="hint">Este pedido no tiene registros.</p>';
+          return;
+        }
+        listaDiv.innerHTML = registros
+          .map(function (r) {
+            const anulado = r.anulado === 1;
+            const estiloCard = anulado
+              ? "opacity:0.55; background:#f3f4f6;"
+              : "background:#f9fafb; cursor:pointer;";
+            const etiquetaAnulado = anulado
+              ? '<span style="color:#b91c1c; font-weight:700; font-size:12px;">ANULADO</span> '
+              : "";
+            const sobrantesTexto =
+              r.codigosSobrantes > 0
+                ? ` · ${r.codigosSobrantes} sobrantes`
+                : "";
+            const observacionesTexto = r.observacion
+              ? `<div style="font-size:13px; color:#6b7280; margin-bottom:6px; font-style:italic;">Obs: ${escapeHtml(r.observacion)}</div>`
+              : "";
+            const suplementoTexto = r.suplemento
+              ? `<div style="font-size:13px; color:#6b7280; margin-bottom:6px; font-style:italic;">Supl: ${_etiquetaSuplemento(r.suplemento)}</div>`
+              : "";
+            const clickAttr = anulado
+              ? ""
+              : ` onclick="abrirModalEditar(${r.id})"`;
+            const botonAccion = anulado
+              ? `<div style="margin-top:8px; text-align:right; display:flex; gap:8px; justify-content:flex-end;">` +
+                `<button type="button" onclick="abrirModalConfirmarEliminar(${r.id})" style="background:#fff; color:#b91c1c; border:1px solid #b91c1c; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer;">Eliminar</button>` +
+                `<button type="button" onclick="abrirModalReactivar(${r.id})" style="background:#16a34a; color:#fff; border:none; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer;">Reactivar</button>` +
+                `</div>`
+              : `<div style="margin-top:8px; text-align:right;"><button type="button" onclick="event.stopPropagation(); abrirModalAnular(${r.id})" style="background:#dc2626; color:#fff; border:none; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer;">Anular</button></div>`;
+            return (
+              `<div data-id="${r.id}" style="border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin-bottom:10px; ${estiloCard}"${clickAttr}>` +
+              `<div style="font-size:13px; color:#6b7280; margin-bottom:4px;">${etiquetaAnulado}Pedido ${escapeHtml(r.pedido)} · ${escapeHtml(r.fecha)} · ${escapeHtml(r.horaInicio)}–${escapeHtml(r.horaFinal)}</div>` +
+              `<div style="font-weight:600; margin-bottom:2px; display:flex; align-items:center; gap:8px;">${escapeHtml(r.operario)} <span style="background:#e0e7ff; color:#3730a3; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; white-space:nowrap;">EAN ${escapeHtml(r.ean)}</span></div>` +
+              `<div style="font-size:13px; color:#374151; margin-bottom:6px;">${escapeHtml(r.proceso)}</div>` +
+              observacionesTexto +
+              suplementoTexto +
+              `<div style="font-size:13px;"><strong>${r.unidadesProcesadas}</strong> unidades${sobrantesTexto}</div>` +
+              `<div style="font-size:12px; color:#6b7280; margin-top:4px;">Coord: ${escapeHtml(r.coordinador)} · Supernum: ${escapeHtml(r.supernumerario)}</div>` +
+              botonAccion +
+              `</div>`
+            );
+          })
+          .join("");
+      }
+
+      function abrirModalEditar(id) {
+        const registro = registrosEditarActuales.find((r) => r.id === id);
+        if (!registro) return;
+
+        idRegistroEnEdicion = id;
+        document.getElementById("editAlerta").innerHTML = "";
+
+        document.getElementById("editCoordinador").innerHTML =
+          document.getElementById("coordinador").innerHTML;
+        document.getElementById("editSupernumerario").innerHTML =
+          document.getElementById("supernumerario").innerHTML;
+
+        pedidoRegistroEnEdicion = registro.pedido;
+
+        document.getElementById("editSuplementoMin").innerHTML =
+          _generarOpcionesSuplemento();
+
+        document.getElementById("editCoordinador").value =
+          registro.coordinador || "";
+        document.getElementById("editSupernumerario").value =
+          registro.supernumerario || "";
+        document.getElementById("editProceso").value = registro.proceso || "";
+        document
+          .getElementById("editProceso")
+          .dispatchEvent(new Event("change"));
+        document.getElementById("editHoraInicio").value =
+          registro.horaInicio || "";
+        document.getElementById("editHoraFin").value = registro.horaFinal || "";
+        document.getElementById("editSuplementoMin").value =
+          registro.suplemento || 0;
+        document.getElementById("editUnidadesProcesadas").value =
+          registro.unidadesProcesadas != null
+            ? registro.unidadesProcesadas
+            : "";
+        document.getElementById("editCodigosSobrantes").value =
+          registro.codigosSobrantes || "";
+        document.getElementById("editObservaciones").value =
+          registro.observacion || "";
+        const campoFechaEdit = document.getElementById("editFecha");
+        campoFechaEdit.max = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Bogota",
+        }).format(new Date());
+        campoFechaEdit.value = registro.fecha || "";
+        document.getElementById("editMotivo").value = "";
+        document.getElementById("editEditadoPor").value = "";
+
+        snapshotFormularioEdicion = _capturarSnapshotEdicion();
+        document.getElementById("modalEditarRegistro").classList.add("visible");
+      }
+
+      function _capturarSnapshotEdicion() {
+        return JSON.stringify({
+          coordinador: document.getElementById("editCoordinador").value,
+          supernumerario: document.getElementById("editSupernumerario").value,
+          proceso: document.getElementById("editProceso").value,
+          fecha: document.getElementById("editFecha").value,
+          horaInicio: document.getElementById("editHoraInicio").value,
+          horaFin: document.getElementById("editHoraFin").value,
+          suplementoMin: document.getElementById("editSuplementoMin").value,
+          unidadesProcesadas: document.getElementById("editUnidadesProcesadas")
+            .value,
+          codigosSobrantes: document.getElementById("editCodigosSobrantes")
+            .value,
+          observaciones: document.getElementById("editObservaciones").value,
+          motivo: document.getElementById("editMotivo").value,
+          editadoPor: document.getElementById("editEditadoPor").value,
+        });
+      }
+
+      function intentarCerrarModalEditar() {
+        if (_capturarSnapshotEdicion() !== snapshotFormularioEdicion) {
+          document
+            .getElementById("modalConfirmarDescartarEdicion")
+            .classList.add("visible");
+        } else {
+          cerrarModalEditarDefinitivo();
+        }
+      }
+
+      function cancelarDescartarEdicion() {
+        document
+          .getElementById("modalConfirmarDescartarEdicion")
+          .classList.remove("visible");
+      }
+
+      function confirmarDescartarEdicion() {
+        document
+          .getElementById("modalConfirmarDescartarEdicion")
+          .classList.remove("visible");
+        cerrarModalEditarDefinitivo();
+      }
+
+      function cerrarModalEditarDefinitivo() {
+        document
+          .getElementById("modalEditarRegistro")
+          .classList.remove("visible");
+        idRegistroEnEdicion = null;
+        refrescarCatalogos();
+      }
+
+      let guardarEdicionEnCurso = false;
+
+      function guardarEdicionRegistro() {
+        if (guardarEdicionEnCurso) return;
+
+        const alertaDiv = document.getElementById("editAlerta");
+        alertaDiv.innerHTML = "";
+
+        const motivo = document.getElementById("editMotivo").value.trim();
+        if (!motivo) {
+          alertaDiv.innerHTML =
+            '<div class="msg err">Indica el motivo de la edición.</div>';
+          return;
+        }
+        const editadoPor = document
+          .getElementById("editEditadoPor")
+          .value.trim();
+        if (!editadoPor) {
+          alertaDiv.innerHTML = '<div class="msg err">Indica tu nombre.</div>';
+          return;
+        }
+        const fechaEdit = document.getElementById("editFecha").value;
+        if (!fechaEdit) {
+          alertaDiv.innerHTML =
+            '<div class="msg err">Indica la fecha del registro.</div>';
+          return;
+        }
+        const unidadesTexto = document
+          .getElementById("editUnidadesProcesadas")
+          .value.trim();
+        const unidadesNum = Number(unidadesTexto);
+        if (
+          unidadesTexto === "" ||
+          !Number.isFinite(unidadesNum) ||
+          unidadesNum < 0
+        ) {
+          alertaDiv.innerHTML =
+            '<div class="msg err">Ingresa unidades procesadas válidas.</div>';
+          return;
+        }
+        const codSobrantesResult = obtenerCodigosSobrantesValidados(
+          "editCodigosSobrantes",
+        );
+        if (!codSobrantesResult.ok) {
+          alertaDiv.innerHTML =
+            '<div class="msg err">Los códigos sobrantes deben ser un número entero (sin letras ni decimales).</div>';
+          return;
+        }
+
+        const procesoEdit = procesoValidoEdicion();
+        if (!procesoEdit) {
+          alertaDiv.innerHTML = document
+            .getElementById("editProceso")
+            .value.trim()
+            ? '<div class="msg err">Ese proceso no existe o no está asignado a este pedido.</div>'
+            : '<div class="msg err">Indica el proceso.</div>';
+          return;
+        }
+
+        guardarEdicionEnCurso = true;
+        const btn = document.getElementById("btnGuardarEdicion");
+        const textoOriginal = btn.textContent;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>';
+
+        const payload = {
+          id: idRegistroEnEdicion,
+          fecha: fechaEdit,
+          coordinador: document.getElementById("editCoordinador").value.trim(),
+          supernumerario: document
+            .getElementById("editSupernumerario")
+            .value.trim(),
+          proceso: procesoEdit.nombre,
+          horaInicio: document.getElementById("editHoraInicio").value,
+          horaFin: document.getElementById("editHoraFin").value,
+          suplementoMin: Number(
+            document.getElementById("editSuplementoMin").value,
+          ),
+          unidadesProcesadas: unidadesNum,
+          codigosSobrantes: codSobrantesResult.valor,
+          observaciones: document
+            .getElementById("editObservaciones")
+            .value.trim(),
+          motivo: motivo,
+          editadoPor: editadoPor,
+        };
+
+        llamarAPI("editarRegistro", payload)
+          .then(function (res) {
+            if (res.success) {
+              cerrarModalEditarDefinitivo();
+              buscarRegistrosParaEditar();
+            } else {
+              alertaDiv.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
+            }
+          })
+          .catch(function (err) {
+            alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
+          })
+          .finally(function () {
+            btn.disabled = false;
+            btn.textContent = textoOriginal;
+            guardarEdicionEnCurso = false;
+          });
+      }
+
+      let idRegistroAccion = null;
+      let tipoAccionPendiente = null;
+      let accionEnCurso = false;
+
+      function abrirModalAnular(id) {
+        idRegistroAccion = id;
+        tipoAccionPendiente = "anular";
+        document.getElementById("motivoAccionTexto").value = "";
+        document.getElementById("motivoAccionNombre").value = "";
+        document.getElementById("motivoAccionAlerta").innerHTML = "";
+        const titulo = document.getElementById("modalMotivoAccionTitulo");
+        titulo.textContent = "Anular registro";
+        titulo.style.color = "#991b1b";
+        const btn = document.getElementById("btnConfirmarMotivoAccion");
+        btn.textContent = "Anular";
+        btn.style.background = "#dc2626";
+        document.getElementById("modalMotivoAccion").classList.add("visible");
+      }
+
+      function abrirModalReactivar(id) {
+        idRegistroAccion = id;
+        tipoAccionPendiente = "reactivar";
+        document.getElementById("motivoAccionTexto").value = "";
+        document.getElementById("motivoAccionNombre").value = "";
+        document.getElementById("motivoAccionAlerta").innerHTML = "";
+        const titulo = document.getElementById("modalMotivoAccionTitulo");
+        titulo.textContent = "Reactivar registro";
+        titulo.style.color = "#166534";
+        const btn = document.getElementById("btnConfirmarMotivoAccion");
+        btn.textContent = "Reactivar";
+        btn.style.background = "#16a34a";
+        document.getElementById("modalMotivoAccion").classList.add("visible");
+      }
+
+      function cerrarModalMotivoAccion() {
+        document
+          .getElementById("modalMotivoAccion")
+          .classList.remove("visible");
+        idRegistroAccion = null;
+        tipoAccionPendiente = null;
+      }
+
+      function confirmarMotivoAccion() {
+        if (accionEnCurso) return;
+
+        const alertaDiv = document.getElementById("motivoAccionAlerta");
+        alertaDiv.innerHTML = "";
+
+        const motivo = document
+          .getElementById("motivoAccionTexto")
+          .value.trim();
+        if (!motivo) {
+          alertaDiv.innerHTML = '<div class="msg err">Indica el motivo.</div>';
+          return;
+        }
+        const nombre = document
+          .getElementById("motivoAccionNombre")
+          .value.trim();
+        if (!nombre) {
+          alertaDiv.innerHTML = '<div class="msg err">Indica tu nombre.</div>';
+          return;
+        }
+
+        accionEnCurso = true;
+        const btn = document.getElementById("btnConfirmarMotivoAccion");
+        const textoOriginal = btn.textContent;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>';
+
+        const accion =
+          tipoAccionPendiente === "anular"
+            ? "anularRegistro"
+            : "reactivarRegistro";
+        const payload = { id: idRegistroAccion, motivo: motivo };
+        if (tipoAccionPendiente === "anular") {
+          payload.anuladoPor = nombre;
+        } else {
+          payload.reactivadoPor = nombre;
+        }
+
+        llamarAPI(accion, payload)
+          .then(function (res) {
+            if (res.success) {
+              cerrarModalMotivoAccion();
+              buscarRegistrosParaEditar();
+            } else {
+              alertaDiv.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
+            }
+          })
+          .catch(function (err) {
+            alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
+          })
+          .finally(function () {
+            btn.disabled = false;
+            btn.textContent = textoOriginal;
+            accionEnCurso = false;
+          });
+      }
+
+      let idRegistroEliminar = null;
+
+      function abrirModalConfirmarEliminar(id) {
+        idRegistroEliminar = id;
+        document.getElementById("eliminarAlerta").innerHTML = "";
+        document
+          .getElementById("modalConfirmarEliminar")
+          .classList.add("visible");
+      }
+
+      function cerrarModalConfirmarEliminar() {
+        document
+          .getElementById("modalConfirmarEliminar")
+          .classList.remove("visible");
+        idRegistroEliminar = null;
+      }
+
+      function confirmarEliminarRegistro() {
+        if (accionEnCurso) return;
+        const alertaDiv = document.getElementById("eliminarAlerta");
+        alertaDiv.innerHTML = "";
+
+        accionEnCurso = true;
+        const btn = document.getElementById("btnConfirmarEliminar");
+        const textoOriginal = btn.textContent;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>';
+
+        llamarAPI("eliminarRegistro", { id: idRegistroEliminar })
+          .then(function (res) {
+            if (res.success) {
+              cerrarModalConfirmarEliminar();
+              buscarRegistrosParaEditar();
+            } else {
+              alertaDiv.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
+            }
+          })
+          .catch(function (err) {
+            alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
+          })
+          .finally(function () {
+            btn.disabled = false;
+            btn.textContent = textoOriginal;
+            accionEnCurso = false;
+          });
+      }
+
+      const edicionPedidoInput = document.getElementById("edicionPedidoInput");
+      edicionPedidoInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          buscarRegistrosParaEditar();
+        }
+      });
+      edicionPedidoInput.addEventListener("search", buscarRegistrosParaEditar);
+
+      const edicionOperarioInput = document.getElementById(
+        "edicionOperarioInput",
+      );
+      edicionOperarioInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          aplicarFiltros("edicion");
+        }
+      });
+      edicionOperarioInput.addEventListener("search", function () {
+        aplicarFiltros("edicion");
+      });
+
+      document
+        .getElementById("seguimientoPedidoInput")
+        .addEventListener("input", filtrarPedidoBuscado);
+
+      function volverAlDashboard() {
+        [
+          "vistaPrincipal",
+          "vistaOperario",
+          "vistaCalculadora",
+          "vistaEdicionRegistros",
+          "vistaSeguimientoPaquetes",
+          "vistaControlTiempos",
+        ].forEach((id) => {
+          document.getElementById(id).style.display = "none";
+        });
+        // Sin esto el intervalo sigue repintando elementos ocultos hasta
+        // cerrar sesión.
+        _detenerRelojHoraFin();
+        document.getElementById("vistaDashboard").style.display = "block";
+      }
+
+      function actualizarCalculadora() {
+        const estandar = parseFloat(
+          document.getElementById("calcUnidadesEstandar").value,
+        );
+        const caja = parseFloat(
+          document.getElementById("calcUnidadesCaja").value,
+        );
+        const operariosTexto = document.getElementById(
+          "calcCantidadOperarios",
+        ).value;
+        const operarios = Number(operariosTexto);
+        const operariosValidos =
+          operariosTexto !== "" &&
+          Number.isInteger(operarios) &&
+          operarios >= 1;
+        const suplemento =
+          Number(document.getElementById("calcSuplementoMin").value) || 0;
+        const resultadoEl = document.getElementById("calcResultado");
+        const resultadoSuplementoEl = document.getElementById(
+          "calcResultadoConSuplemento",
+        );
+
+        if (
+          !estandar ||
+          estandar <= 0 ||
+          !caja ||
+          caja <= 0 ||
+          !operariosValidos
+        ) {
+          resultadoEl.textContent = "--";
+          resultadoSuplementoEl.textContent = "--";
+          return;
+        }
+
+        const minutosTotales = Math.round((caja * 60) / (estandar * operarios));
+        resultadoEl.textContent = _formatearMinutos(minutosTotales);
+
+        const minutosConSuplemento = minutosTotales + suplemento;
+        resultadoSuplementoEl.textContent =
+          _formatearMinutos(minutosConSuplemento);
+      }
+
+      function _formatearMinutos(totalMin) {
+        const horas = Math.floor(totalMin / 60);
+        const minutos = totalMin % 60;
+        return horas > 0 ? `${horas} h ${minutos} min` : `${minutos} min`;
+      }
+
+      function volverALogin() {
+        // 1. Ocultar vistas
+        [
+          "vistaPrincipal",
+          "vistaOperario",
+          "vistaJustificacion",
+          "vistaDashboard",
+          "vistaCalculadora",
+          "vistaEdicionRegistros",
+          "vistaSeguimientoPaquetes",
+          "vistaControlTiempos",
+        ].forEach((id) => {
+          document.getElementById(id).style.display = "none";
+        });
 
         // 2. Vaciar inputs, textareas y selects simples
         const camposAVaciar = [
@@ -1130,14 +3740,17 @@
           "opPedido",
           "opEanInput",
           "opFecha",
-          "opHoraInicio",
-          "opHoraFin",
           "opUnidades",
           "opCodigosSobrantes",
           "opObservaciones",
           "loginPassword",
+          "calcUnidadesEstandar",
+          "calcUnidadesCaja",
         ];
         camposAVaciar.forEach((id) => (document.getElementById(id).value = ""));
+        document.getElementById("calcResultado").textContent = "--";
+        document.getElementById("calcResultadoConSuplemento").textContent =
+          "--";
 
         // 3. Limpiar contenido de alertas, hints y confirmaciones
         const elementosACancelarText = [
@@ -1175,14 +3788,17 @@
         ].forEach((id) => (document.getElementById(id).style.display = "none"));
 
         // 5. Valores por defecto específicos
-        document.getElementById("fecha").valueAsDate = new Date();
+        _resetFechaAdmin();
         document.getElementById("suplementoMin").value = "0";
         document.getElementById("opSuplementoMin").value = "0";
+        document.getElementById("calcSuplementoMin").value = "0";
+        document.getElementById("calcCantidadOperarios").value = "1";
 
-        const defaultOption =
-          '<option value="">Ingresa un pedido primero...</option>';
-        document.getElementById("proceso").innerHTML = defaultOption;
-        document.getElementById("opProceso").innerHTML = defaultOption;
+        ["proceso", "opProceso"].forEach((id) => {
+          const campo = document.getElementById(id);
+          campo.value = "";
+          campo.placeholder = "Ingresa un pedido primero...";
+        });
 
         ["btnSubmit", "opBtnSubmit"].forEach((id) => {
           const btn = document.getElementById(id);
@@ -1208,13 +3824,19 @@
         // 9. Resetear variables globales
         codigoEan =
           pedidoValidado =
-          estadoPaquete =
           opNombreOperario =
           opCedulaConfirmada =
           opCodigoEan =
           opPedidoValidado =
             "";
         unidadesEsperadas = unidadesRestantes = rolActual = null;
+        opHoraInicioCadena = "";
+        opIdEnvioActual = null;
+        _limpiarIdEnvio();
+        opPayloadPendiente = null;
+        _detenerRelojHoraFin();
+        _pintarHorasOperario();
+        localStorage.removeItem("rp_sesion");
         operarios = [];
         justEanSeleccionado = "";
         restanteNetoSeleccionado = null;
@@ -1239,20 +3861,10 @@
         llamarAPI("validarLogin", { rol: rolActual, password: clave })
           .then(function (res) {
             if (res.success) {
-              document.getElementById("vistaLogin").style.display = "none";
-              if (rolActual === "operario") {
-                document.getElementById("vistaOperario").style.display =
-                  "block";
-                document.getElementById("coordinador") &&
-                  (document.getElementById("opCoordinador").innerHTML =
-                    document.getElementById("coordinador").innerHTML);
-                document.getElementById("supernumerario") &&
-                  (document.getElementById("opSupernumerario").innerHTML =
-                    document.getElementById("supernumerario").innerHTML);
-              } else {
-                document.getElementById("vistaPrincipal").style.display =
-                  "block";
-              }
+              guardarSesion(rolActual);
+              _mostrarDashboardTrasLogin();
+              // La carga inicial se lo saltó porque rolActual aún era null.
+              if (rolActual === "supervisor") cargarOperarios();
             } else {
               document.getElementById("loginError").innerHTML =
                 `<div class="msg err">${res.message}</div>`;
@@ -1300,7 +3912,6 @@
           }
         });
 
-      let estadoPaquete = "";
       let procesos = [];
       let operarios = [];
       let catalogoOperarios = [];
@@ -1308,7 +3919,224 @@
       let unidadesEsperadas = null;
       let unidadesRestantes = null;
 
-      document.getElementById("fecha").valueAsDate = new Date();
+      // ---------------- NORMALIZACIÓN DE PEDIDOS ----------------
+      // Clave normalizada -> texto exacto del pedido en D1 (null si la clave es ambigua).
+      let indicePedidos = new Map();
+      let listaPedidos = []; // [{ valor, clave }] para las sugerencias
+      const MAX_SUGERENCIAS_PEDIDO = 8;
+
+      function normalizarPedido(texto) {
+        return String(texto || "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .replace(/\s+/g, "");
+      }
+
+      function construirIndicePedidos() {
+        indicePedidos = new Map();
+        const unicos = [
+          ...new Set(
+            procesos.map((p) => String(p.pedido || "").trim()).filter(Boolean),
+          ),
+        ].sort((a, b) => a.localeCompare(b, "es", { numeric: true }));
+
+        unicos.forEach((ped) => {
+          const clave = normalizarPedido(ped);
+          if (indicePedidos.has(clave)) {
+            indicePedidos.set(clave, null);
+          } else {
+            indicePedidos.set(clave, ped);
+          }
+        });
+
+        listaPedidos = unicos.map((ped) => ({
+          valor: ped,
+          clave: normalizarPedido(ped),
+        }));
+      }
+
+      function pedidoCanonico(texto) {
+        const limpio = String(texto || "").trim();
+        if (!limpio) return "";
+        return indicePedidos.get(normalizarPedido(limpio)) || limpio;
+      }
+
+      function activarSugerenciasPedido(
+        inputId,
+        listaId,
+        alElegir,
+        obtenerLista,
+      ) {
+        const fuente = obtenerLista || (() => listaPedidos);
+        const input = document.getElementById(inputId);
+        const lista = document.getElementById(listaId);
+        let actuales = [];
+
+        function ocultar() {
+          lista.classList.remove("visible");
+          lista.innerHTML = "";
+          actuales = [];
+        }
+
+        function mostrar() {
+          const clave = normalizarPedido(input.value);
+          if (!clave) return ocultar();
+
+          const base = fuente();
+          const inician = base.filter((p) => p.clave.startsWith(clave));
+          const contienen = base.filter(
+            (p) => !p.clave.startsWith(clave) && p.clave.includes(clave),
+          );
+          actuales = inician.concat(contienen).slice(0, MAX_SUGERENCIAS_PEDIDO);
+
+          const yaExacto =
+            actuales.length === 1 && actuales[0].valor === input.value.trim();
+          if (actuales.length === 0 || yaExacto) return ocultar();
+
+          lista.innerHTML = actuales
+            .map(
+              (p, i) =>
+                `<div class="sugerencia-item" role="option" data-i="${i}">${escapeHtml(p.valor)}</div>`,
+            )
+            .join("");
+          lista.classList.add("visible");
+        }
+
+        // Evita que el input pierda el foco antes de registrar el toque.
+        lista.addEventListener("pointerdown", (e) => e.preventDefault());
+
+        lista.addEventListener("click", (e) => {
+          const item = e.target.closest(".sugerencia-item");
+          if (!item) return;
+          const elegido = actuales[Number(item.dataset.i)];
+          if (!elegido) return;
+          input.value = elegido.valor;
+          input.dispatchEvent(new Event("input"));
+          input.dispatchEvent(new Event("change"));
+          ocultar();
+          input.blur();
+          if (alElegir) alElegir();
+        });
+
+        input.addEventListener("input", mostrar);
+        input.addEventListener("blur", ocultar);
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === "Escape") ocultar();
+        });
+      }
+
+      activarSugerenciasPedido("pedido", "sugPedido");
+      activarSugerenciasPedido("opPedido", "sugOpPedido");
+      activarSugerenciasPedido("ctPedidoInput", "sugCtPedido");
+      [
+        "ctPedidoInput",
+        "ctOperarioInput",
+        "ctClienteInput",
+        "ctProcesoInput",
+        "ctEanInput",
+      ].forEach(function (id) {
+        document.getElementById(id).addEventListener("keydown", function (e) {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            aplicarFiltros("control");
+          }
+        });
+      });
+      activarSugerenciasPedido(
+        "edicionPedidoInput",
+        "sugEdicionPedido",
+        buscarRegistrosParaEditar,
+      );
+
+      // ---------------- BUSCADOR DE PROCESOS (misma base que pedido) ----------------
+      function procesoDe(nombre, pedidoVal) {
+        const clave = normalizarPedido(nombre);
+        if (!clave || !pedidoVal) return null;
+        return (
+          procesos.find(
+            (p) =>
+              p.pedido === pedidoVal && normalizarPedido(p.nombre) === clave,
+          ) || null
+        );
+      }
+
+      function listaProcesosDePedido(pedidoVal) {
+        if (!pedidoVal) return [];
+        return procesos
+          .filter((p) => p.pedido === pedidoVal)
+          .map((p) => ({ valor: p.nombre, clave: normalizarPedido(p.nombre) }));
+      }
+
+      function listaProcesosDe(pedidoInputId) {
+        return listaProcesosDePedido(
+          pedidoCanonico(document.getElementById(pedidoInputId).value),
+        );
+      }
+
+      // Ajusta placeholder y valida lo escrito contra el pedido actual.
+      // Devuelve true si se borró un proceso que ya no existe para ese pedido.
+      function _sincronizarInputProceso(inputId, pedidoVal) {
+        const input = document.getElementById(inputId);
+        input.placeholder = pedidoVal
+          ? "Escribe para buscar un proceso..."
+          : "Ingresa un pedido primero...";
+        const escrito = input.value.trim();
+        if (!escrito) return false;
+        const p = procesoDe(escrito, pedidoVal);
+        if (p) {
+          input.value = p.nombre;
+          return false;
+        }
+        if (document.activeElement === input) return false; // no borrar mientras escribe
+        input.value = "";
+        return true;
+      }
+
+      activarSugerenciasPedido("proceso", "sugProceso", null, () =>
+        listaProcesosDe("pedido"),
+      );
+      activarSugerenciasPedido("opProceso", "sugOpProceso", null, () =>
+        listaProcesosDe("opPedido"),
+      );
+      activarSugerenciasPedido("editProceso", "sugEditProceso", null, () =>
+        listaProcesosDePedido(pedidoRegistroEnEdicion),
+      );
+
+      function procesoValidoEdicion() {
+        return procesoDe(
+          document.getElementById("editProceso").value.trim(),
+          pedidoRegistroEnEdicion,
+        );
+      }
+
+      document
+        .getElementById("editProceso")
+        .addEventListener("change", function () {
+          const hint = document.getElementById("editProcesoHint");
+          const p = procesoValidoEdicion();
+          if (p) this.value = p.nombre;
+          if (!this.value.trim()) {
+            hint.textContent = "";
+          } else if (p) {
+            hint.textContent = `Tasa Estándar: ${p.unidadesHora} unidades/hora`;
+          } else {
+            hint.innerHTML =
+              '<span style="color:#991b1b;">⚠ Ese proceso no existe o no está asignado a este pedido.</span>';
+          }
+        });
+
+      function _resetFechaAdmin() {
+        const campo = document.getElementById("fecha");
+        const hoy = new Date();
+        const limiteAtras = new Date(hoy);
+        limiteAtras.setUTCDate(limiteAtras.getUTCDate() - 7);
+        campo.max = hoy.toISOString().slice(0, 10);
+        campo.min = limiteAtras.toISOString().slice(0, 10);
+        campo.valueAsDate = hoy;
+      }
+
+      _resetFechaAdmin();
       let codigoEan = "";
       let pedidoValidado = "";
       let envioRegistroEnCurso = false;
@@ -1319,7 +4147,7 @@
         filtrarProcesosPorPedido();
         resetContadorPedido();
 
-        if (codigoEan && pedidoInput.value.trim() !== pedidoValidado) {
+        if (codigoEan && pedidoCanonico(pedidoInput.value) !== pedidoValidado) {
           codigoEan = "";
           unidadesEsperadas = null;
           unidadesRestantes = null;
@@ -1332,103 +4160,203 @@
         }
       });
 
-      // ---------------- CARGA DE DATOS INICIALES ----------------
+      pedidoInput.addEventListener("change", function () {
+        const canonico = pedidoCanonico(pedidoInput.value);
+        if (canonico && canonico !== pedidoInput.value) {
+          pedidoInput.value = canonico;
+        }
+      });
 
-      // 1. Cargar Procesos
-      llamarAPI("getProcesos", {})
-        .then(function (resp) {
-          if (!resp.success) {
-            console.error("Error cargando procesos:", resp.message);
-            return;
-          }
-          procesos = resp.data;
-          filtrarProcesosPorPedido();
-          actualizarTasaHint();
-          actualizarPreview();
-        })
-        .catch(function (err) {
-          console.error("Error de conexión cargando procesos:", err.message);
-        });
+      // ---------------- CARGA Y REFRESCO DE CATÁLOGOS ----------------
 
-      // 2. Cargar Operarios
-      llamarAPI("getOperariosData", {})
-        .then(function (resp) {
-          if (!resp.success) {
-            console.error("Error cargando operarios:", resp.message);
-            return;
-          }
-          catalogoOperarios = resp.data;
-          document.getElementById("sugeridos").innerHTML = catalogoOperarios
-            .map((op) => `<option value="${op.nombre}">`)
-            .join("");
-          const equiposUnicos = [
-            ...new Set(
-              catalogoOperarios.map((op) => op.equipo).filter(Boolean),
-            ),
-          ];
-          const selEquipo = document.getElementById("equipoSelect");
-          selEquipo.innerHTML =
-            '<option value="">Selecciona un equipo...</option>' +
-            equiposUnicos
-              .map((eq) => `<option value="${eq}">${eq}</option>`)
-              .join("");
-        })
-        .catch(function (err) {
-          console.error("Error de conexión cargando operarios:", err.message);
-        });
+      const REFRESCO_CATALOGOS_MIN_MS = 60 * 1000; // tope entre refrescos automáticos
+      let _ultimoRefrescoCatalogos = 0;
+      let _refrescoCatalogosEnCurso = false;
 
-      // 3. Cargar Supervisores y Supernumerarios
-      llamarAPI("getSupervisoresData", {})
-        .then(function (resp) {
-          if (!resp.success) {
-            console.error("Error cargando supervisores:", resp.message);
-            return;
-          }
-          const data = resp.data;
-          datosSupervisores = data;
-          document.getElementById("coordinador").innerHTML =
-            '<option value="">Selecciona un coordinador...</option>' +
-            data.coordinadores
-              .map((c) => `<option value="${c}">${c}</option>`)
+      // Devuelve true si el valor ya no existe en las opciones actuales.
+      function _restaurarValorSelect(id, valor) {
+        if (!valor) return false;
+        const sel = document.getElementById(id);
+        const sigueExistiendo = Array.prototype.some.call(
+          sel.options,
+          (o) => o.value === valor,
+        );
+        if (sigueExistiendo) {
+          sel.value = valor;
+          return false;
+        }
+        return true;
+      }
+
+      // Reemplaza las opciones conservando la selección actual.
+      function _reconstruirSelect(id, html) {
+        const sel = document.getElementById(id);
+        const anterior = sel.value;
+        sel.innerHTML = html;
+        return _restaurarValorSelect(id, anterior);
+      }
+
+      function _avisarSeleccionPerdida(avisoId, campos) {
+        if (!campos.length) return;
+        document.getElementById(avisoId).innerHTML =
+          '<div class="msg warn">El catálogo se actualizó y ya no existe: ' +
+          escapeHtml(campos.join(", ")) +
+          ". Vuelve a seleccionarlo antes de enviar.</div>";
+      }
+
+      // 1. Procesos
+      function cargarProcesos() {
+        return llamarAPI("getProcesos", {})
+          .then(function (resp) {
+            if (!resp.success) {
+              console.error("Error cargando procesos:", resp.message);
+              return;
+            }
+            procesos = resp.data;
+            construirIndicePedidos();
+
+            if (filtrarProcesosPorPedido()) {
+              _avisarSeleccionPerdida("avisoBorradorSupervisor", [
+                "el proceso",
+              ]);
+            }
+            actualizarTasaHint();
+            actualizarPreview();
+
+            if (filtrarProcesosOperarioPorPedido()) {
+              _avisarSeleccionPerdida("avisoBorradorOperario", ["el proceso"]);
+            }
+            document
+              .getElementById("opProceso")
+              .dispatchEvent(new Event("change"));
+          })
+          .catch(function (err) {
+            console.error("Error de conexión cargando procesos:", err.message);
+          });
+      }
+
+      // 2. Operarios
+      function cargarOperarios() {
+        return llamarAPI("getOperariosData", {})
+          .then(function (resp) {
+            if (!resp.success) {
+              console.error("Error cargando operarios:", resp.message);
+              return;
+            }
+            catalogoOperarios = resp.data;
+            document.getElementById("sugeridos").innerHTML = catalogoOperarios
+              .map((op) => `<option value="${op.nombre}">`)
               .join("");
-          document.getElementById("supernumerario").innerHTML =
-            '<option value="">Selecciona un supernumerario...</option>' +
-            data.supernumerarios
-              .map((s) => `<option value="${s.nombre}">${s.nombre}</option>`)
-              .join("");
-        })
-        .catch(function (err) {
-          console.error(
-            "Error de conexión cargando supervisores:",
-            err.message,
-          );
-        });
+            const equiposUnicos = [
+              ...new Set(
+                catalogoOperarios.map((op) => op.equipo).filter(Boolean),
+              ),
+            ];
+            _reconstruirSelect(
+              "equipoSelect",
+              '<option value="">Selecciona un equipo...</option>' +
+                equiposUnicos
+                  .map((eq) => `<option value="${eq}">${eq}</option>`)
+                  .join(""),
+            );
+          })
+          .catch(function (err) {
+            console.error("Error de conexión cargando operarios:", err.message);
+          });
+      }
+
+      // 3. Supervisores y supernumerarios
+      function cargarSupervisores() {
+        return llamarAPI("getSupervisoresData", {})
+          .then(function (resp) {
+            if (!resp.success) {
+              console.error("Error cargando supervisores:", resp.message);
+              return;
+            }
+            const data = resp.data;
+            datosSupervisores = data;
+            const htmlCoordinadores =
+              '<option value="">Selecciona un coordinador...</option>' +
+              data.coordinadores
+                .map((c) => `<option value="${c}">${c}</option>`)
+                .join("");
+            const htmlSupernumerarios =
+              '<option value="">Selecciona un supernumerario...</option>' +
+              data.supernumerarios
+                .map((s) => `<option value="${s.nombre}">${s.nombre}</option>`)
+                .join("");
+
+            const perdidosSupervisor = [];
+            if (_reconstruirSelect("coordinador", htmlCoordinadores))
+              perdidosSupervisor.push("el coordinador");
+            if (_reconstruirSelect("supernumerario", htmlSupernumerarios))
+              perdidosSupervisor.push("el supernumerario");
+            _avisarSeleccionPerdida(
+              "avisoBorradorSupervisor",
+              perdidosSupervisor,
+            );
+
+            const perdidosOperario = [];
+            if (_reconstruirSelect("opCoordinador", htmlCoordinadores))
+              perdidosOperario.push("el coordinador");
+            if (_reconstruirSelect("opSupernumerario", htmlSupernumerarios))
+              perdidosOperario.push("el supernumerario");
+            _avisarSeleccionPerdida("avisoBorradorOperario", perdidosOperario);
+          })
+          .catch(function (err) {
+            console.error(
+              "Error de conexión cargando supervisores:",
+              err.message,
+            );
+          });
+      }
+
+      // Orquestador: guarda de modal abierto + tope de frecuencia.
+      function refrescarCatalogos(forzar) {
+        if (_refrescoCatalogosEnCurso) return Promise.resolve(false);
+        if (!forzar) {
+          if (idRegistroEnEdicion !== null) return Promise.resolve(false);
+          if (Date.now() - _ultimoRefrescoCatalogos < REFRESCO_CATALOGOS_MIN_MS)
+            return Promise.resolve(false);
+        }
+        _refrescoCatalogosEnCurso = true;
+        // getOperariosData son 241 filas y solo alimenta #sugeridos y
+        // #equipoSelect, ambos exclusivos de la vista del administrador. Con
+        // 200 operarios con la app abierta toda la jornada, esta consulta es
+        // la que más pesa en filas leídas de D1. En la carga inicial sin
+        // sesión restaurada rolActual es null, así que tampoco corre: el
+        // supervisor la pide al entrar (ver enviarLogin).
+        const tareas = [cargarProcesos(), cargarSupervisores()];
+        if (rolActual === "supervisor") tareas.push(cargarOperarios());
+        return Promise.all(tareas)
+          .then(function () {
+            _ultimoRefrescoCatalogos = Date.now();
+            return true;
+          })
+          .finally(function () {
+            _refrescoCatalogosEnCurso = false;
+          });
+      }
+
+      // Carga inicial (forzada: arranca el reloj del tope de frecuencia).
+      refrescarCatalogos(true);
 
       // ---------------- LÓGICA DE FILTROS ----------------
 
       function filtrarProcesosPorPedido() {
-        const pedidoVal = document.getElementById("pedido").value.trim();
-        const sel = document.getElementById("proceso");
-
-        const filtrados = procesos.filter((p) => p.pedido === pedidoVal);
-        sel.innerHTML =
-          '<option value="">' +
-          (pedidoVal
-            ? "Selecciona un proceso..."
-            : "Ingresa un pedido primero...") +
-          "</option>" +
-          filtrados
-            .map((p) => `<option value="${p.nombre}">${p.nombre}</option>`)
-            .join("");
-
+        const pedidoVal = pedidoCanonico(
+          document.getElementById("pedido").value,
+        );
+        const perdido = _sincronizarInputProceso("proceso", pedidoVal);
         actualizarTasaHint();
         actualizarPreview();
+        return perdido;
       }
 
       // ---------------- EVENTOS DEL ESCÁNER EAN ----------------
       function confirmarEan() {
         const valor = eanInput.value.trim();
-        const pedidoVal = pedidoInput.value.trim();
+        const pedidoVal = pedidoCanonico(pedidoInput.value);
 
         if (!valor) return;
         if (!pedidoVal) {
@@ -1456,13 +4384,15 @@
             if (res.success) {
               unidadesEsperadas = res.unidadesEsperadas;
               unidadesRestantes = res.restantes;
-              alertaEanDiv.innerHTML = "";
+              alertaEanDiv.innerHTML = res.sinLimite
+                ? '<div class="msg" style="background:#e0f2fe; color:#0369a1;">EAN sin límite de unidades: este registro no tiene tope.</div>'
+                : "";
               ejecutarValidacionCantidades();
               cargarResumenPedido(pedidoVal);
             } else {
               unidadesEsperadas = null;
               unidadesRestantes = null;
-              alertaEanDiv.innerHTML = `<div class="msg err">AVISO: ${res.message}</div>`;
+              alertaEanDiv.innerHTML = `<div class="msg err">AVISO: ${escapeHtml(res.message)}</div>`;
               document.getElementById("btnSubmit").disabled = true;
             }
           })
@@ -1545,13 +4475,15 @@
         document.getElementById("chips").innerHTML = operarios
           .map(
             (n) =>
-              `<span class="chip">${n}<button onclick="quitarOperario('${n}')">×</button></span>`,
+              `<span class="chip">${escapeHtml(n)}<button onclick="quitarOperario('${n.replace(/'/g, "\\'")}')">×</button></span>`,
           )
           .join("");
       }
 
       // ---------------- LÓGICA DE TIEMPOS Y PREVIEW ----------------
       document.getElementById("proceso").addEventListener("change", () => {
+        const p = procesoValido();
+        if (p) document.getElementById("proceso").value = p.nombre;
         actualizarTasaHint();
         actualizarPreview();
       });
@@ -1560,7 +4492,9 @@
         (id) =>
           document.getElementById(id).addEventListener("input", () => {
             actualizarPreview();
-            const pedidoActual = document.getElementById("pedido").value.trim();
+            const pedidoActual = pedidoCanonico(
+              document.getElementById("pedido").value,
+            );
             if (pedidoActual) cargarResumenPedido(pedidoActual);
             if (id === "totalUnidades") ejecutarValidacionCantidades();
           }),
@@ -1612,7 +4546,16 @@
         const inputActual =
           Number(document.getElementById("totalUnidades").value) || 0;
         const proyectado = resumenPedidoActual.procesadoPedido + inputActual;
-        cont.innerHTML = `Unidades Pedido: ${proyectado} / ${resumenPedidoActual.totalPedido} unidades`;
+        const tieneSinLimite = (resumenPedidoActual.detalleEanes || []).some(
+          (e) => e.sinLimite,
+        );
+        if (!tieneSinLimite) {
+          cont.innerHTML = `Unidades Pedido: ${proyectado} / ${resumenPedidoActual.totalPedido} unidades`;
+        } else if (resumenPedidoActual.totalPedido > 0) {
+          cont.innerHTML = `Unidades Pedido: ${proyectado} / ${resumenPedidoActual.totalPedido} unidades + EAN sin límite`;
+        } else {
+          cont.innerHTML = `Unidades Pedido: ${proyectado} unidades (sin límite)`;
+        }
       }
 
       function obtenerCodigosSobrantesValidados(inputId) {
@@ -1671,15 +4614,9 @@
       }
 
       function procesoValido() {
-        const nombre = document.getElementById("proceso").value.trim();
-        const pedidoActual = document.getElementById("pedido").value.trim();
-        if (!nombre) return null;
-        return (
-          procesos.find(
-            (p) =>
-              p.nombre.toLowerCase() === nombre.toLowerCase() &&
-              p.pedido === pedidoActual,
-          ) || null
+        return procesoDe(
+          document.getElementById("proceso").value.trim(),
+          pedidoCanonico(document.getElementById("pedido").value),
         );
       }
 
@@ -1756,8 +4693,13 @@
         if (envioRegistroEnCurso) return; // evita doble envío (doble Enter/tap en móvil)
         const codSobrantesResult =
           obtenerCodigosSobrantesValidados("codigosSobrantes");
+
+        const totalUnidadesTexto = document
+          .getElementById("totalUnidades")
+          .value.trim();
+
         const payload = {
-          pedido: document.getElementById("pedido").value.trim(),
+          pedido: pedidoCanonico(document.getElementById("pedido").value),
           codigoEan: codigoEan,
           coordinador: document.getElementById("coordinador").value.trim(),
           supernumerario: document
@@ -1777,7 +4719,6 @@
           observaciones: document.getElementById("observaciones").value.trim(),
           totalUnidades: Number(document.getElementById("totalUnidades").value),
           operarios: operarios,
-          estadoPaquete: estadoPaquete,
         };
 
         if (!codSobrantesResult.ok)
@@ -1803,7 +4744,11 @@
           return mostrarMsg("Falta el nombre del supernumerario.", false);
         if (!payload.horaInicio || !payload.horaFin)
           return mostrarMsg("Faltan las horas.", false);
-        if (!payload.totalUnidades)
+        if (
+          totalUnidadesTexto === "" ||
+          !Number.isFinite(payload.totalUnidades) ||
+          payload.totalUnidades < 0
+        )
           return mostrarMsg("Falta el total de unidades.", false);
         if (payload.operarios.length === 0)
           return mostrarMsg("Agrega al menos un operario o un equipo.", false);
@@ -1816,6 +4761,7 @@
         llamarAPI("submitRegistro", payload)
           .then(function (res) {
             if (res.success) {
+              localStorage.removeItem("rp_borrador_supervisor");
               mostrarMsg("Registro guardado correctamente", true);
               mostrarModalAviso(
                 "Pedido: " +
@@ -1838,15 +4784,14 @@
               document.getElementById("codigosSobrantes").value = "";
               document.getElementById("observaciones").value = "";
               document.getElementById("suplementoMin").value = "0";
-              document.getElementById("fecha").valueAsDate = new Date();
+              _resetFechaAdmin();
               document.getElementById("horaInicio").value = "";
               document.getElementById("horaFin").value = "";
-              estadoPaquete = "";
               document.getElementById("alertaCantidad").innerHTML = "";
               document.getElementById("previewCard").style.display = "none";
-              const pedidoActual = document
-                .getElementById("pedido")
-                .value.trim();
+              const pedidoActual = pedidoCanonico(
+                document.getElementById("pedido").value,
+              );
               if (pedidoActual) cargarResumenPedido(pedidoActual);
             } else {
               mostrarMsg("Error: " + res.message, false);
@@ -1866,7 +4811,7 @@
 
       function mostrarMsg(texto, ok) {
         document.getElementById("resultado").innerHTML =
-          `<div class="msg ${ok ? "ok" : "err"}">${texto}</div>`;
+          `<div class="msg ${ok ? "ok" : "err"}">${escapeHtml(texto)}</div>`;
       }
 
       let justEanSeleccionado = "";
@@ -2017,7 +4962,10 @@
               "EAN: " + res.ean + " — Estado: " + res.estado;
             confirmado.style.display = "block";
 
-            if (res.restanteNeto <= 0) {
+            if (res.sinLimite) {
+              alertaCant.innerHTML = `<div class="msg err">Este EAN no tiene límite de unidades; no aplica justificación de faltante.</div>`;
+              btnJC.disabled = true;
+            } else if (res.restanteNeto <= 0) {
               alertaCant.innerHTML = `<div class="msg err">Este EAN ya no tiene faltante pendiente por justificar. Estado actual: ${res.estado}.</div>`;
               btnJC.disabled = true;
             } else {
@@ -2197,7 +5145,9 @@
       document
         .getElementById("btnCerrarPedido")
         .addEventListener("click", function () {
-          const pedidoActual = document.getElementById("pedido").value.trim();
+          const pedidoActual = pedidoCanonico(
+            document.getElementById("pedido").value,
+          );
           if (!pedidoActual) {
             document.getElementById("modalSinEan").classList.add("visible");
             return;
@@ -2211,6 +5161,204 @@
       let opPedidoValidado = "";
       let cedulaEnvioEnCurso = false;
       let opEnvioRegistroEnCurso = false;
+
+      // ---------------- HORAS ENCADENADAS (vista operario) ----------------
+      // Los dos campos son de solo lectura: la hora de inicio la calcula el
+      // servidor (fin del último registro del día, o el turno) y la hora fin es
+      // el momento del envío. Lo que se pinta antes de enviar es previsualización.
+      // Único umbral de "registro corto" del sistema: el backend ya no tiene
+      // piso de duración (DURACION_MINIMA_MIN quedó sin consumidor). Aquí solo
+      // decide si se muestra el modal de confirmación, no si se rechaza.
+      const DURACION_CORTA_MIN = 5;
+      let opHoraInicioCadena = "";
+      let opRelojHoraFin = null;
+      let opIdEnvioActual = null;
+      let opPayloadPendiente = null;
+
+      function _nuevoIdEnvio() {
+        if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+        return (
+          Date.now().toString(36) +
+          "-" +
+          Math.random().toString(36).slice(2, 10)
+        );
+      }
+
+      // El idEnvio vive fuera de CAMPOS_BORRADOR_OPERARIO a propósito: ese
+      // mecanismo solo maneja valores de inputs. Vigencia igual a la del
+      // borrador, para que uno viejo no bloquee un envío legítimo idéntico
+      // al día siguiente.
+      const CLAVE_ID_ENVIO = "rp_idenvio_operario";
+
+      function _guardarIdEnvio(id) {
+        try {
+          localStorage.setItem(
+            CLAVE_ID_ENVIO,
+            JSON.stringify({ id: id, guardado: Date.now() }),
+          );
+        } catch (e) {}
+      }
+
+      function _restaurarIdEnvio() {
+        let guardado = null;
+        try {
+          guardado = JSON.parse(localStorage.getItem(CLAVE_ID_ENVIO));
+        } catch (e) {}
+        if (
+          !guardado ||
+          !guardado.id ||
+          Date.now() - guardado.guardado > BORRADOR_VIGENCIA_MS
+        ) {
+          _limpiarIdEnvio();
+          return null;
+        }
+        return guardado.id;
+      }
+
+      function _limpiarIdEnvio() {
+        try {
+          localStorage.removeItem(CLAVE_ID_ENVIO);
+        } catch (e) {}
+      }
+
+      // Dos causas distintas con el mismo síntoma. Un desfase de pocos minutos
+      // es el reloj de la terminal; uno grande es la cadena adelantada por un
+      // registro del administrador con la hora fin mal digitada, y ahí el
+      // operario no tiene salida desde su vista.
+      const DESFASE_RELOJ_MAX_MIN = 3;
+
+      function _mensajeHorasInvalidas(bruta) {
+        if (bruta === null)
+          return "No se pudo calcular tu hora de inicio. Vuelve a confirmar tu cédula.";
+        if (bruta >= -DESFASE_RELOJ_MAX_MIN)
+          return (
+            "La hora de este dispositivo va atrasada respecto a tu hora de inicio (" +
+            opHoraInicioCadena +
+            "). Espera un momento y vuelve a intentar; si sigue igual, avisa a tu supernumerario."
+          );
+        return (
+          "Tu hora de inicio quedó en " +
+          opHoraInicioCadena +
+          ", más tarde que la hora actual. Pide a tu supernumerario que corrija tu último registro del día en Editar registros."
+        );
+      }
+
+      function _horaBogotaAhora() {
+        const partes = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Bogota",
+          hour: "2-digit",
+          minute: "2-digit",
+          hourCycle: "h23",
+        }).formatToParts(new Date());
+        const obtener = (tipo) => partes.find((p) => p.type === tipo).value;
+        return obtener("hour") + ":" + obtener("minute");
+      }
+
+      function _minutosDeHHMM(valor) {
+        const p = String(valor || "").split(":");
+        if (p.length !== 2) return NaN;
+        const min = Number(p[0]) * 60 + Number(p[1]);
+        return Number.isFinite(min) ? min : NaN;
+      }
+
+      function _duracionPrevistaOperario() {
+        const ini = _minutosDeHHMM(opHoraInicioCadena);
+        const fin = _minutosDeHHMM(_horaBogotaAhora());
+        if (!Number.isFinite(ini) || !Number.isFinite(fin)) return null;
+        return fin - ini;
+      }
+
+      function _pintarHorasOperario() {
+        document.getElementById("opHoraInicio").textContent =
+          opHoraInicioCadena || "—";
+        document.getElementById("opHoraFin").textContent = opHoraInicioCadena
+          ? _horaBogotaAhora()
+          : "—";
+        _validarHorasOperario();
+      }
+
+      // Con 15 s el aviso de "espera al minuto" seguía en pantalla hasta 15 s
+      // después de que ya se podía enviar. Ahora se mira seguido, pero solo se
+      // repinta cuando el minuto realmente cambió.
+      let opUltimoMinutoPintado = "";
+
+      function _tickRelojHoraFin() {
+        const ahora = _horaBogotaAhora();
+        if (ahora === opUltimoMinutoPintado) return;
+        opUltimoMinutoPintado = ahora;
+        _pintarHorasOperario();
+      }
+
+      function _iniciarRelojHoraFin() {
+        _detenerRelojHoraFin();
+        opUltimoMinutoPintado = _horaBogotaAhora();
+        _pintarHorasOperario();
+        opRelojHoraFin = setInterval(_tickRelojHoraFin, 3000);
+      }
+
+      function _detenerRelojHoraFin() {
+        if (opRelojHoraFin) clearInterval(opRelojHoraFin);
+        opRelojHoraFin = null;
+      }
+
+      // La cadena avanza en D1 si el administrador registra por el operario.
+      function _refrescarHoraInicioCadena() {
+        if (opEnvioRegistroEnCurso) return;
+        llamarAPI("buscarOperarioPorCedula", { cedula: opCedulaConfirmada })
+          .then(function (res) {
+            if (res.success && res.horaInicioPrevista) {
+              opHoraInicioCadena = res.horaInicioPrevista;
+              _pintarHorasOperario();
+            }
+          })
+          .catch(function () {});
+      }
+
+      function _validarHorasOperario() {
+        if (opEnvioRegistroEnCurso) return;
+        const alerta = document.getElementById("opAlertaHoras");
+        const btn = document.getElementById("opBtnSubmit");
+        if (!opHoraInicioCadena) {
+          alerta.innerHTML = "";
+          // Sin esto, un botón que quedó deshabilitado por una validación
+          // anterior se queda muerto y sin explicación si la cédula falla.
+          btn.disabled = false;
+          return;
+        }
+        const bruta = _duracionPrevistaOperario();
+        const suplemento =
+          Number(document.getElementById("opSuplementoMin").value) || 0;
+        if (bruta === null || bruta < 0) {
+          // Un desfase de pocos minutos se resuelve solo con el paso del
+          // tiempo (pasa tras cada envío correcto si el reloj del servidor va
+          // adelantado): es una espera, no un error. El rojo queda para la
+          // cadena adelantada, que sí necesita que alguien intervenga.
+          const esEspera = bruta !== null && bruta >= -DESFASE_RELOJ_MAX_MIN;
+          alerta.innerHTML =
+            '<div class="msg ' +
+            (esEspera ? "warn" : "err") +
+            '">' +
+            escapeHtml(_mensajeHorasInvalidas(bruta)) +
+            "</div>";
+          btn.disabled = true;
+        } else if (bruta === 0) {
+          // Sale también justo después de un envío correcto: es una espera
+          // normal de menos de un minuto, no un error.
+          alerta.innerHTML =
+            '<div class="msg warn">Espera a que cambie el minuto para enviar el siguiente registro.</div>';
+          btn.disabled = true;
+        } else if (suplemento > bruta) {
+          alerta.innerHTML = `<div class="msg err">El suplemento (${suplemento} min) no puede ser mayor al tiempo trabajado (${bruta} min).</div>`;
+          btn.disabled = true;
+        } else {
+          const detalle =
+            suplemento > 0
+              ? ` − ${suplemento} min de suplemento = ${bruta - suplemento} min`
+              : "";
+          alerta.innerHTML = `<div class="hint" style="margin-top:0;">Tiempo de este registro: ${bruta} min${detalle}.</div>`;
+          btn.disabled = false;
+        }
+      }
 
       function confirmarCedula() {
         const valor = document.getElementById("opCedula").value.trim();
@@ -2226,11 +5374,22 @@
               const confirmado = document.getElementById("opNombreConfirmado");
               confirmado.textContent = res.nombre;
               confirmado.style.display = "block";
-              alertaDiv.innerHTML = "";
+              alertaDiv.innerHTML = res.turnoConfigurado
+                ? ""
+                : '<div class="msg warn">No tienes turno configurado: tu hora de inicio arranca en 06:00. Avisa a tu supernumerario.</div>';
               document.getElementById("opFecha").valueAsDate = new Date();
+              opHoraInicioCadena = res.horaInicioPrevista || "";
+              // Tras una recarga, el reintento debe llevar la MISMA huella; si
+              // se genera un idEnvio nuevo, D1 lo toma como registro distinto
+              // y lo duplica en vez de devolver la respuesta guardada.
+              opIdEnvioActual = _restaurarIdEnvio();
+              _iniciarRelojHoraFin();
             } else {
               opNombreOperario = "";
               opCedulaConfirmada = "";
+              opHoraInicioCadena = "";
+              _detenerRelojHoraFin();
+              _pintarHorasOperario();
               document.getElementById("opNombreConfirmado").style.display =
                 "none";
               alertaDiv.innerHTML = `<div class="msg err">${res.message}</div>`;
@@ -2254,24 +5413,16 @@
         });
 
       function filtrarProcesosOperarioPorPedido() {
-        const pedidoVal = document.getElementById("opPedido").value.trim();
-        const sel = document.getElementById("opProceso");
-        const filtrados = procesos.filter((p) => p.pedido === pedidoVal);
-        sel.innerHTML =
-          '<option value="">' +
-          (pedidoVal
-            ? "Selecciona un proceso..."
-            : "Ingresa un pedido primero...") +
-          "</option>" +
-          filtrados
-            .map((p) => `<option value="${p.nombre}">${p.nombre}</option>`)
-            .join("");
+        const pedidoVal = pedidoCanonico(
+          document.getElementById("opPedido").value,
+        );
+        return _sincronizarInputProceso("opProceso", pedidoVal);
       }
       document
         .getElementById("opPedido")
         .addEventListener("input", function () {
           filtrarProcesosOperarioPorPedido();
-          if (opCodigoEan && this.value.trim() !== opPedidoValidado) {
+          if (opCodigoEan && pedidoCanonico(this.value) !== opPedidoValidado) {
             opCodigoEan = "";
             const confirmado = document.getElementById("opEanConfirmado");
             confirmado.textContent = "";
@@ -2280,11 +5431,21 @@
               '<div class="msg warn">AVISO: Cambiaste el número de pedido. Vuelve a escanear el EAN.</div>';
           }
         });
+      document
+        .getElementById("opPedido")
+        .addEventListener("change", function () {
+          const canonico = pedidoCanonico(this.value);
+          if (canonico && canonico !== this.value) {
+            this.value = canonico;
+          }
+        });
 
       function confirmarEanOperario() {
         const input = document.getElementById("opEanInput");
         const valor = input.value.trim();
-        const pedidoVal = document.getElementById("opPedido").value.trim();
+        const pedidoVal = pedidoCanonico(
+          document.getElementById("opPedido").value,
+        );
         if (!valor) return;
         if (!pedidoVal) {
           document.getElementById("opAlertaEan").innerHTML =
@@ -2307,12 +5468,14 @@
           .then(function (res) {
             const alertaDiv = document.getElementById("opAlertaEan");
             if (res.success) {
-              alertaDiv.innerHTML = "";
+              alertaDiv.innerHTML = res.sinLimite
+                ? '<div class="msg" style="background:#e0f2fe; color:#0369a1;">EAN sin límite de unidades: este registro no tiene tope.</div>'
+                : "";
             } else {
               opCodigoEan = "";
               opPedidoValidado = "";
               confirmado.style.display = "none";
-              alertaDiv.innerHTML = `<div class="msg err">AVISO: ${res.message}</div>`;
+              alertaDiv.innerHTML = `<div class="msg err">AVISO: ${escapeHtml(res.message)}</div>`;
             }
           })
           .catch(function (err) {
@@ -2332,32 +5495,33 @@
         .getElementById("opEanInput")
         .addEventListener("search", confirmarEanOperario);
 
+      function procesoValidoOperario() {
+        return procesoDe(
+          document.getElementById("opProceso").value.trim(),
+          pedidoCanonico(document.getElementById("opPedido").value),
+        );
+      }
+
       document
         .getElementById("opProceso")
         .addEventListener("change", function () {
           const hint = document.getElementById("opTasaHint");
           const btnLink = document.getElementById("opBtnLinkProceso");
-          const nombre = this.value.trim();
-          const pedidoActual = document.getElementById("opPedido").value.trim();
-          const p = procesos.find(
-            (pr) =>
-              pr.nombre.toLowerCase() === nombre.toLowerCase() &&
-              pr.pedido === pedidoActual,
-          );
-          hint.textContent = p
-            ? `Tasa Estándar: ${p.unidadesHora} unidades/hora`
-            : "";
+          const p = procesoValidoOperario();
+          if (p) this.value = p.nombre;
+          if (!this.value.trim()) {
+            hint.textContent = "";
+          } else if (p) {
+            hint.textContent = `Tasa Estándar: ${p.unidadesHora} unidades/hora`;
+          } else {
+            hint.innerHTML =
+              '<span style="color:#991b1b;">⚠ Ese proceso no existe para el pedido ingresado.</span>';
+          }
           btnLink.style.display = p && p.link ? "block" : "none";
         });
 
       function abrirLinkProcesoOperario() {
-        const nombre = document.getElementById("opProceso").value.trim();
-        const pedidoActual = document.getElementById("opPedido").value.trim();
-        const p = procesos.find(
-          (pr) =>
-            pr.nombre.toLowerCase() === nombre.toLowerCase() &&
-            pr.pedido === pedidoActual,
-        );
+        const p = procesoValidoOperario();
         if (p && p.link) window.open(p.link, "_blank");
       }
 
@@ -2370,6 +5534,11 @@
         if (opEnvioRegistroEnCurso) return; // evita doble envío (doble Enter/tap en móvil)
         if (!opCedulaConfirmada)
           return mostrarMsgOperario("Confirma tu cédula primero.", false);
+        if (!opHoraInicioCadena)
+          return mostrarMsgOperario(
+            "No se pudo calcular tu hora de inicio. Vuelve a confirmar tu cédula.",
+            false,
+          );
         const opCodSobrantesResult =
           obtenerCodigosSobrantesValidados("opCodigosSobrantes");
         if (!opCodSobrantesResult.ok)
@@ -2377,20 +5546,54 @@
             "Los códigos sobrantes deben ser un número entero (sin letras ni decimales).",
             false,
           );
+
+        // Las horas ya no vienen del formulario: el servidor las fija. Aquí solo
+        // se previene el envío que el Worker rechazaría de todos modos.
+        const bruta = _duracionPrevistaOperario();
+        const suplemento = Number(
+          document.getElementById("opSuplementoMin").value,
+        );
+        if (bruta === null || bruta < 0)
+          return mostrarMsgOperario(_mensajeHorasInvalidas(bruta), false);
+        if (bruta === 0)
+          return mostrarMsgOperario(
+            "Ya enviaste un registro en este minuto. Espera a que cambie el minuto para enviar el siguiente.",
+            false,
+          );
+        if (suplemento > bruta)
+          return mostrarMsgOperario(
+            "El suplemento (" +
+              suplemento +
+              " min) no puede ser mayor al tiempo trabajado (" +
+              bruta +
+              " min).",
+            false,
+          );
+
+        const unidadesProcesadasTexto = document
+          .getElementById("opUnidades")
+          .value.trim();
+
+        // Se conserva entre reintentos: es lo que diferencia dos envíos
+        // legítimos iguales ahora que las horas salieron del payload.
+        if (!opIdEnvioActual) {
+          opIdEnvioActual = _nuevoIdEnvio();
+          _guardarIdEnvio(opIdEnvioActual);
+        }
+
         const payload = {
+          idEnvio: opIdEnvioActual,
           cedula: opCedulaConfirmada,
           coordinador: document.getElementById("opCoordinador").value.trim(),
           supernumerario: document
             .getElementById("opSupernumerario")
             .value.trim(),
-          pedido: document.getElementById("opPedido").value.trim(),
+          pedido: pedidoCanonico(document.getElementById("opPedido").value),
           codigoEan: opCodigoEan,
-          proceso: document.getElementById("opProceso").value.trim(),
-          horaInicio: document.getElementById("opHoraInicio").value,
-          horaFin: document.getElementById("opHoraFin").value,
-          suplementoMin: Number(
-            document.getElementById("opSuplementoMin").value,
-          ),
+          proceso: procesoValidoOperario()
+            ? procesoValidoOperario().nombre
+            : document.getElementById("opProceso").value.trim(),
+          suplementoMin: suplemento,
           unidadesProcesadas: Number(
             document.getElementById("opUnidades").value,
           ),
@@ -2409,14 +5612,48 @@
           return mostrarMsgOperario("Falta el coordinador.", false);
         if (!payload.supernumerario)
           return mostrarMsgOperario("Falta el supernumerario.", false);
-        if (!payload.horaInicio || !payload.horaFin)
-          return mostrarMsgOperario("Faltan las horas.", false);
-        if (!payload.unidadesProcesadas)
+        if (
+          unidadesProcesadasTexto === "" ||
+          !Number.isFinite(payload.unidadesProcesadas) ||
+          payload.unidadesProcesadas < 0
+        )
           return mostrarMsgOperario(
             "Falta la cantidad de unidades procesadas.",
             false,
           );
 
+        if (bruta < DURACION_CORTA_MIN) {
+          opPayloadPendiente = payload;
+          document.getElementById("modalTiempoCortoTexto").textContent =
+            "Se va a enviar el registro con " +
+            bruta +
+            " minutos (" +
+            opHoraInicioCadena +
+            " a " +
+            _horaBogotaAhora() +
+            ").";
+          document.getElementById("modalTiempoCorto").classList.add("visible");
+          return;
+        }
+
+        _enviarOperarioAlServidor(payload);
+      }
+
+      function cerrarModalTiempoCorto() {
+        document.getElementById("modalTiempoCorto").classList.remove("visible");
+        opPayloadPendiente = null;
+      }
+
+      function confirmarTiempoCortoOperario() {
+        document.getElementById("modalTiempoCorto").classList.remove("visible");
+        if (opPayloadPendiente) {
+          const pendiente = opPayloadPendiente;
+          opPayloadPendiente = null;
+          _enviarOperarioAlServidor(pendiente);
+        }
+      }
+
+      function _enviarOperarioAlServidor(payload) {
         const btn = document.getElementById("opBtnSubmit");
         opEnvioRegistroEnCurso = true;
         btn.disabled = true;
@@ -2427,6 +5664,10 @@
             btn.disabled = false;
             btn.textContent = "Enviar registro";
             if (res.success) {
+              // El fin real que devolvió el servidor es el siguiente eslabón.
+              opIdEnvioActual = null;
+              _limpiarIdEnvio();
+              if (res.horaFin) opHoraInicioCadena = res.horaFin;
               mostrarMsgOperario("Registro guardado correctamente", true);
               mostrarModalAviso(
                 "Pedido: " +
@@ -2435,8 +5676,14 @@
                   payload.codigoEan +
                   "\nProceso: " +
                   payload.proceso +
+                  "\nHoras: " +
+                  res.horaInicio +
+                  " a " +
+                  res.horaFin +
                   "\nUnidades: " +
                   payload.unidadesProcesadas +
+                  "\nEficiencia: " +
+                  (res.eficiencia === null ? "N/A" : res.eficiencia + "%") +
                   "\nOperario: " +
                   opNombreOperario +
                   "\nID de lote: " +
@@ -2444,6 +5691,8 @@
                 "Registro guardado correctamente",
               );
               resetFormularioOperario();
+              _pintarHorasOperario();
+              localStorage.removeItem("rp_borrador_operario");
             } else if (
               res.message &&
               res.message.indexOf("no corresponde con lo disponible") !== -1
@@ -2460,18 +5709,22 @@
           })
           .finally(function () {
             opEnvioRegistroEnCurso = false;
+            // Después de bajar la bandera: _validarHorasOperario sale temprano
+            // mientras está en true, así que pintar antes no hace nada.
+            _pintarHorasOperario();
           });
       }
 
       function mostrarMsgOperario(texto, ok) {
         document.getElementById("opResultado").innerHTML =
-          `<div class="msg ${ok ? "ok" : "err"}">${texto}</div>`;
+          `<div class="msg ${ok ? "ok" : "err"}">${escapeHtml(texto)}</div>`;
       }
 
       function resetFormularioOperario() {
         document.getElementById("opPedido").value = "";
-        document.getElementById("opProceso").innerHTML =
-          '<option value="">Ingresa un pedido primero...</option>';
+        document.getElementById("opProceso").value = "";
+        document.getElementById("opProceso").placeholder =
+          "Ingresa un pedido primero...";
         document.getElementById("opTasaHint").textContent = "";
         opCodigoEan = "";
         opPedidoValidado = "";
@@ -2483,8 +5736,7 @@
         document.getElementById("opCodigosSobrantes").value = "";
         document.getElementById("opObservaciones").value = "";
         document.getElementById("opFecha").valueAsDate = new Date();
-        document.getElementById("opHoraInicio").value = "";
-        document.getElementById("opHoraFin").value = "";
+        document.getElementById("opAlertaHoras").innerHTML = "";
         // Cédula, coordinador y supernumerario se mantienen.
       }
     </script>
