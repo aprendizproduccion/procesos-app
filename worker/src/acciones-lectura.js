@@ -3,7 +3,10 @@
 import {
   _localizarValidacionEan,
   _fechaHoyBogota,
+  _ahoraBogota,
+  TURNO_POR_DEFECTO,
   _resolverPedido,
+  _formasEan,
 } from "./d1-negocio.js";
 
 export const accionesLectura = {
@@ -29,8 +32,10 @@ export const accionesLectura = {
   },
 
   async getOperariosData(datos, env) {
+    // Sin cédula: el catálogo se descarga en cada carga y en cada
+    // visibilitychange, y el frontend solo usa nombre y equipo.
     const { results } = await env.DB.prepare(
-      "SELECT nombre_operario AS nombre, equipo, cedula FROM operarios WHERE activo = 1",
+      "SELECT nombre_operario AS nombre, equipo FROM operarios WHERE activo = 1",
     ).all();
     return { success: true, data: results };
   },
@@ -39,10 +44,14 @@ export const accionesLectura = {
     const cedula = String(datos.cedula || "").trim();
     if (!cedula) return { success: false, message: "Falta la cédula." };
 
+    const { fecha } = _ahoraBogota();
     const row = await env.DB.prepare(
-      "SELECT nombre_operario AS nombre, equipo FROM operarios WHERE cedula = ? AND activo = 1",
+      "SELECT o.nombre_operario AS nombre, o.equipo, o.turno, " +
+        "(SELECT MAX(hora_final) FROM registros " +
+        "WHERE cedula_operario = ? AND fecha = ? AND anulado = 0) AS ultimoFin " +
+        "FROM operarios o WHERE o.cedula = ? AND o.activo = 1",
     )
-      .bind(cedula)
+      .bind(cedula, fecha, cedula)
       .first();
 
     if (!row) {
@@ -51,7 +60,17 @@ export const accionesLectura = {
         message: "Cédula no encontrada en el catálogo de Operarios.",
       };
     }
-    return { success: true, nombre: row.nombre, equipo: row.equipo };
+
+    // Solo vista previa: la hora real la vuelve a fijar el servidor al enviar.
+    const ultimoFin = String(row.ultimoFin || "").trim();
+    const turno = String(row.turno || "").trim();
+    return {
+      success: true,
+      nombre: row.nombre,
+      equipo: row.equipo,
+      horaInicioPrevista: ultimoFin || turno || TURNO_POR_DEFECTO,
+      turnoConfigurado: Boolean(ultimoFin || turno),
+    };
   },
 
   async obtenerDatosValidacion(datos, env) {
@@ -161,8 +180,10 @@ export const accionesLectura = {
 
     const ean = String(datos.ean || "").trim();
 
+    // Sin cedula_operario: el frontend nunca la lee y el filtro por operario
+    // es por nombre, así que no hace falta exponerla en el response.
     let sql =
-      "SELECT id, numero_pedido AS pedido, fecha, coordinador, cedula_operario AS cedulaOperario, operario, " +
+      "SELECT id, numero_pedido AS pedido, fecha, coordinador, operario, " +
       "supernumerario, proceso, ean, hora_inicio AS horaInicio, hora_final AS horaFinal, " +
       "suplemento, observacion, unidades_procesadas_operario AS unidadesProcesadas, " +
       "codigos_sobrantes AS codigosSobrantes, anulado, anulado_por AS anuladoPor, " +
@@ -256,8 +277,11 @@ export const accionesLectura = {
   },
 
   async obtenerControlTiempos(datos, env) {
+    const esAdmin = datos.admin === true;
     const cedula = String(datos.cedula || "").trim();
-    if (!cedula) return { success: false, message: "Falta la cédula." };
+    if (!cedula && !esAdmin)
+      return { success: false, message: "Falta la cédula." };
+
     const filtro = datos.filtro === "historico" ? "historico" : "fecha";
     const hoy = _fechaHoyBogota();
     let fechaFiltro = hoy;
@@ -282,11 +306,16 @@ export const accionesLectura = {
 
     let sql =
       "SELECT fecha, coordinador, operario, supernumerario, numero_pedido AS pedido, " +
-      "proceso, unidades_procesadas_operario AS unidadesProcesadas, eficiencia, " +
+      "cliente, proceso, ean, unidades_procesadas_operario AS unidadesProcesadas, eficiencia, " +
       "unidades_hora_estandar AS unidadesHoraEstandar, hora_inicio AS horaInicio, " +
       "hora_final AS horaFinal, anulado " +
-      "FROM registros WHERE cedula_operario = ?";
-    const binds = [cedula];
+      "FROM registros WHERE 1 = 1";
+    const binds = [];
+
+    if (cedula) {
+      sql += " AND cedula_operario = ?";
+      binds.push(cedula);
+    }
     if (filtro === "fecha") {
       sql += " AND fecha = ?";
       binds.push(fechaFiltro);
@@ -295,7 +324,47 @@ export const accionesLectura = {
       sql += " AND numero_pedido = ?";
       binds.push(pedido);
     }
-    sql += " ORDER BY fecha DESC, hora_inicio DESC, id DESC LIMIT 100";
+
+    // Filtros exclusivos de la vista administrador.
+    if (esAdmin) {
+      const coordinador = String(datos.coordinador || "").trim();
+      if (coordinador) {
+        sql += " AND lower(coordinador) = lower(?)";
+        binds.push(coordinador);
+      }
+      const supernumerario = String(datos.supernumerario || "").trim();
+      if (supernumerario) {
+        sql += " AND lower(supernumerario) = lower(?)";
+        binds.push(supernumerario);
+      }
+      const operario = String(datos.operario || "").trim();
+      if (operario) {
+        sql += " AND " + _sqlSinTildes("operario") + " LIKE ?";
+        binds.push("%" + _normalizarTexto(operario) + "%");
+      }
+      const cliente = String(datos.cliente || "").trim();
+      if (cliente) {
+        sql += " AND " + _sqlSinTildes("cliente") + " LIKE ?";
+        binds.push("%" + _normalizarTexto(cliente) + "%");
+      }
+      const proceso = String(datos.proceso || "").trim();
+      if (proceso) {
+        sql += " AND " + _sqlSinTildes("proceso") + " LIKE ?";
+        binds.push("%" + _normalizarTexto(proceso) + "%");
+      }
+      // Las dos formas del EAN: el preamble UPC-A del escáner Zebra antepone
+      // un "0", y en D1 puede estar guardada cualquiera de las dos.
+      const eanTexto = String(datos.ean || "").trim();
+      if (eanTexto) {
+        const [eanA, eanB] = _formasEan(eanTexto);
+        sql += " AND ean IN (?, ?)";
+        binds.push(eanA, eanB);
+      }
+    }
+
+    sql += " ORDER BY fecha DESC, hora_inicio DESC, id DESC";
+    // Sin tope en administrador: la vista del operario conserva el LIMIT 100.
+    if (!esAdmin) sql += " LIMIT 100";
 
     const { results } = await env.DB.prepare(sql)
       .bind(...binds)
@@ -307,7 +376,9 @@ export const accionesLectura = {
       operario: r.operario,
       supernumerario: r.supernumerario,
       pedido: r.pedido,
+      cliente: r.cliente,
       proceso: r.proceso,
+      ean: r.ean,
       unidadesProcesadas: r.unidadesProcesadas,
       eficiencia: r.unidadesHoraEstandar > 0 ? r.eficiencia : null,
       horaInicio: r.horaInicio,
