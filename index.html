@@ -7,6 +7,10 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
     />
     <base target="_top" />
+    <link rel="icon" type="image/svg+xml" href="glovanze1_logo.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="glovanze-iso-32.png" />
+    <link rel="apple-touch-icon" href="glovanze-iso-180.png" />
+    <meta name="theme-color" content="#3DEAA9" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -44,6 +48,11 @@
         --gv-cuerpo-sm: 12px;
         --gv-boton: 14px;
         --gv-alto-boton: 48px;
+
+        /* Derivados del aquamarine para gráficas y texto pequeño sobre claro.
+           El #3DEAA9 puro no alcanza contraste AA como texto ni como barra. */
+        --gv-aqua-profundo: #0f7a56;
+        --gv-aqua-medio: #8fe8c6;
       }
 
       /* Escala de tablet/escritorio del manual (títulos 30-25) */
@@ -77,16 +86,17 @@
 
       .logo-login {
         display: block;
-        width: 96px;
-        height: 96px;
-        margin: 0 auto 14px;
-        border-radius: 50%;
-        object-fit: cover;
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+        width: 88px;
+        height: 88px;
+        /* El manual exige área de reserva alrededor de la marca; el recorte
+           circular anterior la invadía. "contain" la respeta. */
+        object-fit: contain;
+        margin: 0 auto 18px;
+        padding: 10px 16px;
       }
 
       .card {
-        background: #fff;
+        background: var(--gv-superficie);
         border-radius: 10px;
         padding: 18px;
         margin-bottom: 16px;
@@ -105,20 +115,22 @@
         align-items: center;
         justify-content: center;
         gap: 8px;
-        background: #f9fafb;
-        border: 1px solid #e5e7eb;
+        background: var(--gv-superficie-alt);
+        border: 1px solid var(--gv-borde);
         border-radius: 10px;
         padding: 22px 10px;
         cursor: pointer;
-        font-size: 14px;
+        font-size: var(--gv-cuerpo);
         font-weight: 600;
-        color: #374151;
+        color: var(--gv-texto);
         transition:
           background 0.15s,
           transform 0.1s;
       }
       .tarjetaApp:active {
         transform: scale(0.97);
+        background: var(--gv-celeste);
+        border-color: var(--gv-aquamarine);
       }
       .tarjetaApp-icono {
         font-size: 28px;
@@ -129,18 +141,18 @@
         gap: 14px;
       }
       .calc-valor-fijo {
-        background: #f3f4f6;
-        border: 1px solid #e5e7eb;
+        background: var(--gv-superficie-alt);
+        border: 1px solid var(--gv-borde);
         border-radius: 8px;
         padding: 10px 12px;
         font-weight: 700;
-        color: #111827;
+        color: var(--gv-texto);
         text-align: center;
       }
       .calc-resultado .calc-valor-fijo {
-        background: #ecfdf5;
-        border-color: #6ee7b7;
-        color: #065f46;
+        background: var(--gv-celeste);
+        border-color: var(--gv-aquamarine);
+        color: var(--gv-jet);
       }
 
       label {
@@ -178,18 +190,18 @@
       .chip {
         display: inline-flex;
         align-items: center;
-        background: #e8eefc;
-        color: #2452c9;
+        background: var(--gv-celeste);
+        color: var(--gv-jet);
         padding: 6px 10px;
         border-radius: 16px;
-        font-size: 13px;
+        font-size: var(--gv-cuerpo-sm);
         margin: 0 6px 6px 0;
       }
 
       .chip button {
         background: none;
         border: none;
-        color: #2452c9;
+        color: var(--gv-jet);
         margin-left: 6px;
         cursor: pointer;
         font-weight: bold;
@@ -242,17 +254,17 @@
       td {
         text-align: left;
         padding: 6px 4px;
-        border-bottom: 1px solid #eee;
+        border-bottom: 1px solid var(--gv-borde);
       }
 
       th {
-        color: #666;
+        color: var(--gv-texto-suave);
         font-weight: 600;
       }
 
       #vistaSeguimientoPaquetes th,
       #vistaSeguimientoPaquetes td {
-        border-right: 1px solid #d1d5db;
+        border-right: 1px solid var(--gv-borde);
       }
 
       #vistaSeguimientoPaquetes th:last-child,
@@ -261,9 +273,9 @@
       }
 
       #vistaSeguimientoPaquetes th {
-        color: #3730a3;
-        background: #eef2ff;
-        border-bottom: 2px solid #c7d2fe;
+        color: var(--gv-jet);
+        background: var(--gv-celeste);
+        border-bottom: 2px solid var(--gv-aquamarine);
       }
 
       .seguimiento-kpi-grid {
@@ -273,8 +285,8 @@
         margin-bottom: 16px;
       }
       .seguimiento-kpi {
-        background: #f3f4f6;
-        border: 1px solid #e5e7eb;
+        background: var(--gv-superficie-alt);
+        border: 1px solid var(--gv-borde);
         border-radius: 8px;
         padding: 10px 6px;
         text-align: center;
@@ -283,27 +295,27 @@
         display: block;
         font-size: 20px;
         font-weight: 700;
-        color: #111827;
+        color: var(--gv-texto);
       }
       .seguimiento-kpi-label {
         display: block;
-        font-size: 11px;
-        color: #6b7280;
+        font-size: var(--gv-cuerpo-sm);
+        color: var(--gv-texto-suave);
         margin-top: 2px;
       }
       .seguimiento-kpi-completado {
-        background: #ecfdf5;
-        border-color: #6ee7b7;
+        background: var(--gv-celeste);
+        border-color: var(--gv-aquamarine);
       }
       .seguimiento-kpi-completado .seguimiento-kpi-valor {
-        color: #065f46;
+        color: var(--gv-aqua-profundo);
       }
       .seguimiento-kpi-proceso {
-        background: #eef2ff;
-        border-color: #c7d2fe;
+        background: var(--gv-platinum);
+        border-color: var(--gv-borde);
       }
       .seguimiento-kpi-proceso .seguimiento-kpi-valor {
-        color: #3730a3;
+        color: var(--gv-jet);
       }
       .seguimiento-kpi-pendiente {
         background: #fffbeb;
@@ -471,6 +483,12 @@
         color: #92400e;
       }
 
+      /* Informativo (verificaciones en curso) — sí pasa a marca */
+      .msg.info {
+        background: var(--gv-celeste);
+        color: var(--gv-jet);
+      }
+
       #alertaCantidadJustificar .msg,
       #alertaCantidadJustificar .hint {
         font-size: 16px;
@@ -480,18 +498,18 @@
       }
 
       .hint {
-        font-size: 12px;
-        color: #000;
+        font-size: var(--gv-cuerpo-sm);
+        color: var(--gv-texto-suave);
         margin-top: -8px;
         margin-bottom: 14px;
       }
 
       .tasa-hint {
-        font-size: 15px;
+        font-size: var(--gv-cuerpo);
         font-weight: 600;
-        color: #1e40af;
-        background: #eff6ff;
-        border-left: 3px solid #2563eb;
+        color: var(--gv-jet);
+        background: var(--gv-celeste);
+        border-left: 3px solid var(--gv-aquamarine);
         padding: 8px 10px;
         border-radius: 4px;
         margin-top: -8px;
@@ -501,9 +519,9 @@
       .ean-confirmado {
         font-size: 20px;
         font-weight: 700;
-        color: #166534;
-        background: #dcfce7;
-        border: 2px solid #16a34a;
+        color: var(--gv-jet);
+        background: var(--gv-celeste);
+        border: 2px solid var(--gv-aquamarine);
         border-radius: 8px;
         padding: 12px 14px;
         margin-bottom: 14px;
@@ -539,13 +557,13 @@
 
       .modal-box h3 {
         margin: 0 0 10px;
-        font-size: 16px;
-        color: #991b1b;
+        font-size: var(--gv-subtitulo);
+        color: var(--gv-jet);
       }
 
       .modal-box p {
-        font-size: 14px;
-        color: #444;
+        font-size: var(--gv-cuerpo);
+        color: var(--gv-texto);
         margin-bottom: 18px;
         line-height: 1.4;
       }
@@ -696,8 +714,8 @@
         z-index: 50;
         max-height: 220px;
         overflow-y: auto;
-        background: #fff;
-        border: 1px solid #d7dade;
+        background: var(--gv-superficie);
+        border: 1px solid var(--gv-borde);
         border-radius: 6px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
       }
@@ -707,7 +725,7 @@
       .sugerencia-item {
         padding: 12px 10px;
         font-size: 14px;
-        border-bottom: 1px solid #f0f1f3;
+        border-bottom: 1px solid var(--gv-platinum);
         cursor: pointer;
       }
       .add-row .campo-sugerencias {
@@ -730,7 +748,7 @@
         border-bottom: none;
       }
       .sugerencia-item:active {
-        background: #eef2ff;
+        background: var(--gv-celeste);
       }
 
       /* ===== Filtros compactos (barra + chips + panel) ===== */
@@ -782,7 +800,7 @@
         background: none;
         border: 0;
         padding: 4px;
-        color: #6b7280;
+        color: var(--gv-texto-suave);
         font-family: inherit;
         font-size: 12px;
         text-decoration: underline;
@@ -802,12 +820,12 @@
         align-items: center;
         gap: 6px;
         max-width: 100%;
-        background: #eef1f6;
-        border: 1px solid #dfe3ea;
+        background: var(--gv-platinum);
+        border: 1px solid var(--gv-borde);
         border-radius: 999px;
         padding: 4px 6px 4px 10px;
-        font-size: 12px;
-        color: #33383f;
+        font-size: var(--gv-cuerpo-sm);
+        color: var(--gv-jet);
       }
       .chip > span {
         overflow: hidden;
@@ -815,7 +833,7 @@
         white-space: nowrap;
       }
       .chip b {
-        color: #5b6168;
+        color: var(--gv-texto-suave);
         font-weight: 600;
       }
       .chip button {
@@ -825,17 +843,17 @@
         padding: 0;
         border: 0;
         border-radius: 50%;
-        background: #d9dee7;
-        color: #454a52;
-        font-size: 12px;
+        background: var(--gv-borde);
+        color: var(--gv-jet);
+        font-size: var(--gv-cuerpo-sm);
         line-height: 15px;
         cursor: pointer;
       }
       .panel-filtros {
         margin-top: 10px;
-        border: 1px solid #dfe3ea;
+        border: 1px solid var(--gv-borde);
         border-radius: 8px;
-        background: #fafbfc;
+        background: var(--gv-superficie-alt);
         padding: 12px;
       }
       .panel-grid {
@@ -2907,6 +2925,24 @@
           });
       }
 
+      // Chart.js no resuelve var(--...): hay que leer los tokens del :root.
+      function _tokenMarca(nombre) {
+        return getComputedStyle(document.documentElement)
+          .getPropertyValue(nombre)
+          .trim();
+      }
+      const GV = {
+        aqua: _tokenMarca("--gv-aquamarine"),
+        aquaMedio: _tokenMarca("--gv-aqua-medio"),
+        aquaProfundo: _tokenMarca("--gv-aqua-profundo"),
+        celeste: _tokenMarca("--gv-celeste"),
+        platinum: _tokenMarca("--gv-platinum"),
+        jet: _tokenMarca("--gv-jet"),
+        fuente: _tokenMarca("--gv-fuente"),
+      };
+      Chart.defaults.font.family = GV.fuente;
+      Chart.defaults.color = GV.jet;
+
       let chartEstadoPaquetes = null;
       let chartEficienciaPaquetes = null;
 
@@ -2951,7 +2987,7 @@
               datasets: [
                 {
                   data: [enProceso, pendientes],
-                  backgroundColor: ["#c7d2fe", "#fde68a"],
+                  backgroundColor: [GV.aqua, "#fde68a"],
                 },
               ],
             },
@@ -2974,7 +3010,7 @@
                 {
                   label: "Eficiencia (%)",
                   data: conEficiencia.map((p) => p.eficiencia),
-                  backgroundColor: "#3730a3",
+                  backgroundColor: GV.aquaProfundo,
                 },
               ],
             },
@@ -3109,8 +3145,8 @@
           {
             label: "Procesadas",
             data: [procesadas],
-            backgroundColor: "#6ee7b7",
-            borderColor: "#065f46",
+            backgroundColor: GV.aquaMedio,
+            borderColor: GV.aquaProfundo,
             borderWidth: 1,
           },
           {
@@ -3171,11 +3207,11 @@
         if (chartGaugeEficiencia) chartGaugeEficiencia.destroy();
 
         const ef = p.eficiencia;
-        let colorRelleno = "#e5e7eb";
-        let colorTexto = "#6b7280";
+        let colorRelleno = GV.platinum;
+        let colorTexto = GV.jet;
         if (ef !== null && ef >= 75) {
-          colorRelleno = "#6ee7b7";
-          colorTexto = "#065f46";
+          colorRelleno = GV.aquaMedio;
+          colorTexto = GV.aquaProfundo;
         } else if (ef !== null && ef >= 50) {
           colorRelleno = "#fde68a";
           colorTexto = "#92400e";
@@ -3194,7 +3230,7 @@
             if (!arco) return;
             const c = chart.ctx;
             c.save();
-            c.font = "700 22px sans-serif";
+            c.font = "700 22px " + GV.fuente;
             c.fillStyle = colorTexto;
             c.textAlign = "center";
             c.textBaseline = "bottom";
@@ -3209,7 +3245,7 @@
             datasets: [
               {
                 data: [relleno, 100 - relleno],
-                backgroundColor: [colorRelleno, "#e5e7eb"],
+                backgroundColor: [colorRelleno, GV.platinum],
                 borderWidth: 0,
               },
             ],
@@ -3321,8 +3357,8 @@
           .map(function (r) {
             const anulado = r.anulado === 1;
             const estiloCard = anulado
-              ? "opacity:0.55; background:#f3f4f6;"
-              : "background:#f9fafb; cursor:pointer;";
+              ? "opacity:0.55; background:var(--gv-platinum);"
+              : "background:var(--gv-superficie-alt); cursor:pointer;";
             const etiquetaAnulado = anulado
               ? '<span style="color:#b91c1c; font-weight:700; font-size:12px;">ANULADO</span> '
               : "";
@@ -3346,10 +3382,10 @@
                 `</div>`
               : `<div style="margin-top:8px; text-align:right;"><button type="button" class="btn-gv-mini btn-gv-peligro" onclick="event.stopPropagation(); abrirModalAnular(${r.id})">Anular</button></div>`;
             return (
-              `<div data-id="${r.id}" style="border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin-bottom:10px; ${estiloCard}"${clickAttr}>` +
-              `<div style="font-size:13px; color:#6b7280; margin-bottom:4px;">${etiquetaAnulado}Pedido ${escapeHtml(r.pedido)} · ${escapeHtml(r.fecha)} · ${escapeHtml(r.horaInicio)}–${escapeHtml(r.horaFinal)}</div>` +
-              `<div style="font-weight:600; margin-bottom:2px; display:flex; align-items:center; gap:8px;">${escapeHtml(r.operario)} <span style="background:#e0e7ff; color:#3730a3; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; white-space:nowrap;">EAN ${escapeHtml(r.ean)}</span></div>` +
-              `<div style="font-size:13px; color:#374151; margin-bottom:6px;">${escapeHtml(r.proceso)}</div>` +
+              `<div data-id="${r.id}" style="border:1px solid var(--gv-borde); border-radius:10px; padding:12px; margin-bottom:10px; ${estiloCard}"${clickAttr}>` +
+              `<div style="font-size:13px; color:var(--gv-texto-suave); margin-bottom:4px;">${etiquetaAnulado}Pedido ${escapeHtml(r.pedido)} · ${escapeHtml(r.fecha)} · ${escapeHtml(r.horaInicio)}–${escapeHtml(r.horaFinal)}</div>` +
+              `<div style="font-weight:600; margin-bottom:2px; display:flex; align-items:center; gap:8px;">${escapeHtml(r.operario)} <span style="background:var(--gv-celeste); color:var(--gv-jet); font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; white-space:nowrap;">EAN ${escapeHtml(r.ean)}</span></div>` +
+              `<div style="font-size:13px; color:var(--gv-texto); margin-bottom:6px;">${escapeHtml(r.proceso)}</div>` +
               observacionesTexto +
               suplementoTexto +
               `<div style="font-size:13px;"><strong>${r.unidadesProcesadas}</strong> unidades${sobrantesTexto}</div>` +
@@ -4534,7 +4570,7 @@
         eanInput.value = "";
 
         document.getElementById("alertaEan").innerHTML =
-          '<div class="msg" style="background:#e0f2fe; color:#0369a1;">Verificando pedido en la base de datos...</div>';
+          '<div class="msg info">Verificando pedido en la base de datos...</div>';
 
         llamarAPI("obtenerDatosValidacion", {
           pedido: pedidoVal,
@@ -4546,7 +4582,7 @@
               unidadesEsperadas = res.unidadesEsperadas;
               unidadesRestantes = res.restantes;
               alertaEanDiv.innerHTML = res.sinLimite
-                ? '<div class="msg" style="background:#e0f2fe; color:#0369a1;">EAN sin límite de unidades: este registro no tiene tope.</div>'
+                ? '<div class="msg info">EAN sin límite de unidades: este registro no tiene tope.</div>'
                 : "";
               ejecutarValidacionCantidades();
               cargarResumenPedido(pedidoVal);
@@ -5086,7 +5122,7 @@
         }
         justEanEnvioEnCurso = true;
         alertaDiv.innerHTML =
-          '<div class="msg" style="background:#e0f2fe; color:#0369a1;">Verificando EAN...</div>';
+          '<div class="msg info">Verificando EAN...</div>';
 
         llamarAPI("obtenerEstadoEanJustificar", { pedido: pedido, ean: valor })
           .then(function (res) {
@@ -5620,7 +5656,7 @@
         confirmado.style.display = "block";
         input.value = "";
         document.getElementById("opAlertaEan").innerHTML =
-          '<div class="msg" style="background:#e0f2fe; color:#0369a1;">Verificando pedido en la base de datos...</div>';
+          '<div class="msg info">Verificando pedido en la base de datos...</div>';
 
         llamarAPI("obtenerDatosValidacion", {
           pedido: pedidoVal,
@@ -5630,7 +5666,7 @@
             const alertaDiv = document.getElementById("opAlertaEan");
             if (res.success) {
               alertaDiv.innerHTML = res.sinLimite
-                ? '<div class="msg" style="background:#e0f2fe; color:#0369a1;">EAN sin límite de unidades: este registro no tiene tope.</div>'
+                ? '<div class="msg info">EAN sin límite de unidades: este registro no tiene tope.</div>'
                 : "";
             } else {
               opCodigoEan = "";
