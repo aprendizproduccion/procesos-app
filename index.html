@@ -7,26 +7,70 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
     />
     <base target="_top" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:ital,wght@0,300..900;1,300..900&display=swap"
+      rel="stylesheet"
+    />
     <style>
+      /* ===== Tokens de marca — Manual de marca Glovanze v01/2025 ===== */
+      :root {
+        /* Paleta oficial */
+        --gv-aquamarine: #3deaa9;
+        --gv-celeste: #bff2df;
+        --gv-platinum: #eaeaea;
+        --gv-jet: #313131;
+        --gv-black: #000000;
+        --gv-white: #ffffff;
+
+        /* Neutros derivados del eje Jet→Platinum (no están en el manual;
+           se usan para bordes y texto secundario) */
+        --gv-texto-suave: #6b6b6b;
+        --gv-borde: #d6d6d6;
+        --gv-superficie-alt: #f5f5f5;
+
+        /* Roles */
+        --gv-fondo: var(--gv-platinum);
+        --gv-superficie: var(--gv-white);
+        --gv-texto: var(--gv-jet);
+
+        /* Tipografía */
+        --gv-fuente:
+          "Red Hat Display", -apple-system, "Segoe UI", Roboto, sans-serif;
+        --gv-titulo: 25px;
+        --gv-subtitulo: 18px;
+        --gv-cuerpo: 14px;
+        --gv-cuerpo-sm: 12px;
+        --gv-boton: 14px;
+        --gv-alto-boton: 48px;
+      }
+
+      /* Escala de tablet/escritorio del manual (títulos 30-25) */
+      @media (min-width: 768px) {
+        :root {
+          --gv-titulo: 30px;
+        }
+      }
+
       * {
         box-sizing: border-box;
       }
 
       body {
-        font-family:
-          -apple-system,
-          Segoe UI,
-          Roboto,
-          sans-serif;
+        font-family: var(--gv-fuente);
+        font-size: var(--gv-cuerpo);
         max-width: 560px;
         margin: 0 auto;
         padding: 24px 16px 60px;
-        background: #f5f6f8;
-        color: #1c1e21;
+        background: var(--gv-fondo);
+        color: var(--gv-texto);
       }
 
       h1 {
-        font-size: 20px;
+        font-size: var(--gv-titulo);
+        font-weight: 700;
+        line-height: 1.2;
         margin-bottom: 4px;
         text-align: center;
       }
@@ -101,10 +145,10 @@
 
       label {
         display: block;
-        font-size: 13px;
+        font-size: var(--gv-cuerpo);
         font-weight: 600;
         margin-bottom: 6px;
-        color: #444;
+        color: var(--gv-texto);
       }
 
       input,
@@ -112,9 +156,9 @@
       textarea {
         width: 100%;
         padding: 10px;
-        border: 1px solid #d7dade;
+        border: 1px solid var(--gv-borde);
         border-radius: 6px;
-        font-size: 14px;
+        font-size: var(--gv-cuerpo);
         margin-bottom: 14px;
         font-family: inherit;
         resize: vertical;
@@ -449,7 +493,7 @@
         }
 
         h1 {
-          font-size: 18px;
+          font-size: var(--gv-titulo);
         }
 
         .card {
