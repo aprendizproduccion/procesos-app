@@ -7,7 +7,6 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
     />
     <base target="_top" />
-    <link rel="icon" type="image/svg+xml" href="glovanze1_logo.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="glovanze-iso-32.png" />
     <link rel="apple-touch-icon" href="glovanze-iso-180.png" />
     <meta name="theme-color" content="#3DEAA9" />
@@ -86,13 +85,11 @@
 
       .logo-login {
         display: block;
-        width: 88px;
-        height: 88px;
+        width: auto;
+        height: 80px;
         /* El manual exige área de reserva alrededor de la marca; el recorte
-           circular anterior la invadía. "contain" la respeta. */
-        object-fit: contain;
+           circular anterior la invadía. El margen inferior la respeta. */
         margin: 0 auto 18px;
-        padding: 10px 16px;
       }
 
       .card {
