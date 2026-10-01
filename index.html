@@ -4847,8 +4847,8 @@
                   payload.totalUnidades +
                   "\nOperarios: " +
                   payload.operarios.join(", ") +
-                  "\nID de lote: " +
-                  res.loteId,
+                  "\nFecha de envío: " +
+                  _textoFechaChip(_hoyBogotaCT()),
                 "Registro guardado correctamente",
               );
               operarios = [];
@@ -5759,8 +5759,8 @@
                   (res.eficiencia === null ? "N/A" : res.eficiencia + "%") +
                   "\nOperario: " +
                   opNombreOperario +
-                  "\nID de lote: " +
-                  res.loteId,
+                  "\nFecha de envío: " +
+                  _textoFechaChip(_hoyBogotaCT()),
                 "Registro guardado correctamente",
               );
               resetFormularioOperario();
