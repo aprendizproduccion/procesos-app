@@ -1942,6 +1942,36 @@
         <h3 style="color: #2452c9">Editar registro</h3>
         <div id="editAlerta"></div>
         <div style="max-height: 60vh; overflow-y: auto; padding-right: 4px">
+          <div class="row2 row2-campos">
+            <div>
+              <label>Número de pedido</label>
+              <div class="campo-sugerencias">
+                <input
+                  id="editPedido"
+                  placeholder="Ej: 3200"
+                  autocomplete="off"
+                />
+                <div
+                  id="sugEditPedido"
+                  class="lista-sugerencias"
+                  role="listbox"
+                ></div>
+              </div>
+            </div>
+            <div>
+              <label>EAN</label>
+              <input
+                id="editEan"
+                placeholder="Escanea o escribe el EAN"
+                autocomplete="off"
+              />
+            </div>
+          </div>
+          <div
+            id="editMovimientoHint"
+            class="msg warn"
+            style="display: none; margin-top: 0; margin-bottom: 14px"
+          ></div>
           <label>Fecha</label>
           <input id="editFecha" type="date" />
           <div class="row2 row2-campos">
@@ -3351,6 +3381,8 @@
       let registrosEditarActuales = [];
       let idRegistroEnEdicion = null;
       let pedidoRegistroEnEdicion = "";
+      let pedidoOriginalEnEdicion = "";
+      let eanOriginalEnEdicion = "";
       let snapshotFormularioEdicion = "";
 
       function buscarRegistrosParaEditar() {
@@ -3474,6 +3506,11 @@
           document.getElementById("supernumerario").innerHTML;
 
         pedidoRegistroEnEdicion = registro.pedido;
+        pedidoOriginalEnEdicion = registro.pedido;
+        eanOriginalEnEdicion = registro.ean || "";
+        document.getElementById("editPedido").value = registro.pedido || "";
+        document.getElementById("editEan").value = registro.ean || "";
+        document.getElementById("editMovimientoHint").style.display = "none";
 
         document.getElementById("editSuplementoMin").innerHTML =
           _generarOpcionesSuplemento();
@@ -3513,6 +3550,8 @@
 
       function _capturarSnapshotEdicion() {
         return JSON.stringify({
+          pedido: document.getElementById("editPedido").value,
+          ean: document.getElementById("editEan").value,
           coordinador: document.getElementById("editCoordinador").value,
           supernumerario: document.getElementById("editSupernumerario").value,
           proceso: document.getElementById("editProceso").value,
@@ -3610,6 +3649,21 @@
           return;
         }
 
+        const pedidoEdit = pedidoCanonico(
+          document.getElementById("editPedido").value,
+        );
+        if (!pedidoEdit) {
+          alertaDiv.innerHTML =
+            '<div class="msg err">Indica el número de pedido.</div>';
+          return;
+        }
+        const eanEdit = document.getElementById("editEan").value.trim();
+        if (!eanEdit) {
+          alertaDiv.innerHTML =
+            '<div class="msg err">Indica el código EAN.</div>';
+          return;
+        }
+
         const procesoEdit = procesoValidoEdicion();
         if (!procesoEdit) {
           alertaDiv.innerHTML = document
@@ -3629,6 +3683,8 @@
         const payload = {
           id: idRegistroEnEdicion,
           fecha: fechaEdit,
+          pedido: pedidoEdit,
+          ean: eanEdit,
           coordinador: document.getElementById("editCoordinador").value.trim(),
           supernumerario: document
             .getElementById("editSupernumerario")
@@ -3652,6 +3708,16 @@
           .then(function (res) {
             if (res.success) {
               cerrarModalEditarDefinitivo();
+              if (res.movido) {
+                mostrarModalAviso(
+                  "El registro quedó en el pedido " +
+                    res.pedido +
+                    " con el EAN " +
+                    res.ean +
+                    ".\nLas unidades se descontaron del pedido y EAN anteriores.",
+                  "Registro movido",
+                );
+              }
               buscarRegistrosParaEditar();
             } else {
               alertaDiv.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
@@ -4342,6 +4408,60 @@
         () => listaProcesosDePedido(pedidoRegistroEnEdicion),
         true,
       );
+
+      // ---------------- PEDIDO Y EAN EDITABLES EN EL MODAL ----------------
+      // El pedido del modal manda sobre el catálogo de procesos: si cambia,
+      // el proceso escrito deja de ser válido y se limpia.
+      function _sincronizarPedidoEdicion() {
+        const input = document.getElementById("editPedido");
+        const canonico = pedidoCanonico(input.value);
+        if (canonico && canonico !== input.value) input.value = canonico;
+        pedidoRegistroEnEdicion = canonico;
+        _sincronizarInputProceso("editProceso", canonico);
+        document
+          .getElementById("editProceso")
+          .dispatchEvent(new Event("change"));
+        _actualizarAvisoMovimiento();
+      }
+
+      function _actualizarAvisoMovimiento() {
+        const hint = document.getElementById("editMovimientoHint");
+        const pedidoAhora = pedidoCanonico(
+          document.getElementById("editPedido").value,
+        );
+        const eanAhora = document.getElementById("editEan").value.trim();
+        const mueve =
+          (!!pedidoAhora && pedidoAhora !== pedidoOriginalEnEdicion) ||
+          (!!eanAhora && eanAhora !== eanOriginalEnEdicion);
+        if (!mueve) {
+          hint.style.display = "none";
+          hint.textContent = "";
+          return;
+        }
+        hint.textContent =
+          "Las unidades de este registro saldrán de " +
+          pedidoOriginalEnEdicion +
+          " / " +
+          eanOriginalEnEdicion +
+          " y se sumarán a " +
+          (pedidoAhora || "—") +
+          " / " +
+          (eanAhora || "—") +
+          ". Si el EAN destino no tiene cupo, el guardado se bloquea.";
+        hint.style.display = "block";
+      }
+
+      activarSugerenciasPedido(
+        "editPedido",
+        "sugEditPedido",
+        _sincronizarPedidoEdicion,
+      );
+      document
+        .getElementById("editPedido")
+        .addEventListener("change", _sincronizarPedidoEdicion);
+      document
+        .getElementById("editEan")
+        .addEventListener("input", _actualizarAvisoMovimiento);
 
       // Filtro de Control tiempos: a diferencia de los campos de registro, no
       // exige pedido. Con un pedido válido escrito acota a sus procesos; si no
