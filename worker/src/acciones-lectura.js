@@ -196,8 +196,11 @@ export const accionesLectura = {
       binds.push(pedido);
     }
     if (ean) {
-      sql += " AND ean = ?";
-      binds.push(ean);
+      // Las dos formas del EAN: el preamble UPC-A del escáner Zebra antepone
+      // un "0", y en D1 puede estar guardada cualquiera de las dos.
+      const [eanA, eanB] = _formasEan(ean);
+      sql += " AND ean IN (?, ?)";
+      binds.push(eanA, eanB);
     }
     if (operarioTexto) {
       sql += " AND " + _sqlSinTildes("operario") + " LIKE ?";
@@ -206,6 +209,21 @@ export const accionesLectura = {
     if (fecha) {
       sql += " AND fecha = ?";
       binds.push(fecha);
+    }
+    const coordinador = String(datos.coordinador || "").trim();
+    if (coordinador) {
+      sql += " AND lower(coordinador) = lower(?)";
+      binds.push(coordinador);
+    }
+    const supernumerario = String(datos.supernumerario || "").trim();
+    if (supernumerario) {
+      sql += " AND lower(supernumerario) = lower(?)";
+      binds.push(supernumerario);
+    }
+    const proceso = String(datos.proceso || "").trim();
+    if (proceso) {
+      sql += " AND " + _sqlSinTildes("proceso") + " LIKE ?";
+      binds.push("%" + _normalizarTexto(proceso) + "%");
     }
     sql += " ORDER BY fecha DESC, hora_inicio ASC, id DESC";
     if (!pedido) sql += " LIMIT 100";
