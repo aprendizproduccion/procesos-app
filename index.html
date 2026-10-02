@@ -2601,10 +2601,7 @@
             buscarRegistrosParaEditar();
           },
           puedeBuscar: function () {
-            return !!(
-              _valorFiltro("edicionPedidoInput") ||
-              _valorFiltro("edicionOperarioInput")
-            );
+            return hayFiltrosEdicion();
           },
           campos: [
             { id: "edicionOperarioInput", etiqueta: "Operario" },
@@ -2688,6 +2685,24 @@
       function _valorFiltro(id) {
         const el = document.getElementById(id);
         return el ? String(el.value || "").trim() : "";
+      }
+
+      // En "Editar registros" cualquier filtro basta por sí solo y ninguno
+      // depende de otro: el pedido dejó de ser requisito.
+      const CAMPOS_FILTRO_EDICION = [
+        "edicionPedidoInput",
+        "edicionOperarioInput",
+        "edicionFechaInput",
+        "edicionCoordinador",
+        "edicionSupernumerario",
+        "edicionProcesoInput",
+        "edicionEanInput",
+      ];
+
+      function hayFiltrosEdicion() {
+        return CAMPOS_FILTRO_EDICION.some(function (id) {
+          return !!_valorFiltro(id);
+        });
       }
 
       function _textoFechaChip(v) {
@@ -3351,9 +3366,9 @@
         const alertaDiv = document.getElementById("edicionAlerta");
         const listaDiv = document.getElementById("listaRegistrosEditar");
         alertaDiv.innerHTML = "";
-        if (!pedido && !operario) {
+        if (!hayFiltrosEdicion()) {
           alertaDiv.innerHTML =
-            '<div class="msg err">Escribe un número de pedido o un nombre de operario.</div>';
+            '<div class="msg err">Usa al menos un filtro para buscar: pedido, operario, fecha, coordinador, supernumerario, proceso o EAN.</div>';
           return;
         }
         if (buscarRegistrosEditarEnCurso) return;
@@ -3399,7 +3414,7 @@
         const listaDiv = document.getElementById("listaRegistrosEditar");
         if (!registros || registros.length === 0) {
           listaDiv.innerHTML =
-            '<p class="hint">Este pedido no tiene registros.</p>';
+            '<p class="hint">No hay registros con esos filtros.</p>';
           return;
         }
         listaDiv.innerHTML = registros
