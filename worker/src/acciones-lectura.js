@@ -172,13 +172,27 @@ export const accionesLectura = {
     const pedido = String(datos.pedido || "").trim();
     const operarioTexto = String(datos.operario || "").trim();
     const fecha = String(datos.fecha || "").trim();
-    if (!pedido && !operarioTexto)
+    const ean = String(datos.ean || "").trim();
+    const coordinador = String(datos.coordinador || "").trim();
+    const supernumerario = String(datos.supernumerario || "").trim();
+    const proceso = String(datos.proceso || "").trim();
+
+    // Cualquier filtro basta por sí solo y ninguno depende de otro; lo único
+    // que se rechaza es pedir la tabla entera sin ningún criterio.
+    if (
+      !pedido &&
+      !operarioTexto &&
+      !fecha &&
+      !ean &&
+      !coordinador &&
+      !supernumerario &&
+      !proceso
+    )
       return {
         success: false,
-        message: "Escribe un número de pedido o un nombre de operario.",
+        message:
+          "Usa al menos un filtro para buscar: pedido, operario, fecha, coordinador, supernumerario, proceso o EAN.",
       };
-
-    const ean = String(datos.ean || "").trim();
 
     // Sin cedula_operario: el frontend nunca la lee y el filtro por operario
     // es por nombre, así que no hace falta exponerla en el response.
@@ -210,17 +224,14 @@ export const accionesLectura = {
       sql += " AND fecha = ?";
       binds.push(fecha);
     }
-    const coordinador = String(datos.coordinador || "").trim();
     if (coordinador) {
       sql += " AND lower(coordinador) = lower(?)";
       binds.push(coordinador);
     }
-    const supernumerario = String(datos.supernumerario || "").trim();
     if (supernumerario) {
       sql += " AND lower(supernumerario) = lower(?)";
       binds.push(supernumerario);
     }
-    const proceso = String(datos.proceso || "").trim();
     if (proceso) {
       sql += " AND " + _sqlSinTildes("proceso") + " LIKE ?";
       binds.push("%" + _normalizarTexto(proceso) + "%");
