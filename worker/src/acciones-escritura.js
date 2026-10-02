@@ -789,8 +789,30 @@ export const accionesEscritura = {
         "El registro no existe o ya fue anulado. Actualiza la lista e intenta de nuevo.",
       );
 
-    const pedido = actual.numero_pedido;
-    const ean = actual.ean;
+    const pedidoOrigen = actual.numero_pedido;
+    const eanOrigen = actual.ean;
+
+    // Pedido y EAN DESTINO: si el payload no los trae, se conserva el par
+    // actual. El EAN se canoniza contra Validación, así que el preámbulo
+    // UPC-A del escáner no abre un par distinto.
+    const pedido = payload.pedido
+      ? await _resolverPedido(env, payload.pedido)
+      : pedidoOrigen;
+    if (!pedido) throw new Error("Falta el número de pedido.");
+    const validacionDestino = await _localizarValidacionEan(
+      env,
+      pedido,
+      String(payload.ean || "").trim() || eanOrigen,
+    );
+    const ean = validacionDestino.ean_producto;
+    const seMueve = pedido !== pedidoOrigen || ean !== eanOrigen;
+    // Cliente, sublínea, evento y clasificación se derivan del pedido/EAN:
+    // si el registro se mueve, tienen que moverse con él.
+    const datosPedido = await _obtenerDatosPedido(
+      env,
+      pedido,
+      validacionDestino.sublinea,
+    );
 
     const { coordinador, supernumerario } =
       await _validarSupervisorYSupernumerario(
@@ -857,7 +879,11 @@ export const accionesEscritura = {
           (codigosSobrantesNuevos > 0
             ? " unidades + " + codigosSobrantesNuevos + " códigos sobrantes"
             : " unidades") +
-          ") supera lo que el pedido tiene disponible (" +
+          ") supera lo disponible " +
+          (seMueve
+            ? "del EAN destino " + ean + " del pedido " + pedido
+            : "del pedido") +
+          " (" +
           restante +
           " de " +
           disponible.totales +
@@ -874,6 +900,8 @@ export const accionesEscritura = {
     const ahora = _ahoraISO();
     const resultado = await env.DB.prepare(
       "UPDATE registros SET fecha = ?, coordinador = ?, supernumerario = ?, proceso = ?, " +
+        "numero_pedido = ?, ean = ?, cliente = ?, sublinea = ?, evento = ?, " +
+        "clasificacion_proceso = ?, " +
         "unidades_hora_estandar = ?, hora_inicio = ?, hora_final = ?, suplemento = ?, " +
         "observacion = ?, duracion_bruta_min = ?, tiempo_total = ?, " +
         "unidades_procesadas_operario = ?, codigos_sobrantes = ?, unidades_hora_real = ?, " +
@@ -890,6 +918,12 @@ export const accionesEscritura = {
         coordinador,
         supernumerario,
         procesoValidado.nombre,
+        pedido,
+        ean,
+        datosPedido.cliente,
+        validacionDestino.sublinea,
+        datosPedido.evento,
+        datosPedido.clasificacionProceso,
         tasaEstandar,
         horaInicio,
         horaFin,
@@ -915,12 +949,20 @@ export const accionesEscritura = {
       );
     }
 
+    // Mover unidades = recalcular LOS DOS pares desde la fuente, nunca llevar
+    // un delta a mano: el destino las recibe y el origen las suelta.
     await _recalcularContadorValidacion(env, pedido, ean);
+    if (seMueve) {
+      await _recalcularContadorValidacion(env, pedidoOrigen, eanOrigen);
+    }
     const pedidoCompleto = await _sincronizarEstadoPedido(env, pedido);
+    if (pedidoOrigen !== pedido) {
+      await _sincronizarEstadoPedido(env, pedidoOrigen);
+    }
 
     ctx.waitUntil(_pushFilaRegistroYMarcar(env, id));
 
-    return { success: true, id, pedidoCompleto };
+    return { success: true, id, pedido, ean, movido: seMueve, pedidoCompleto };
   },
 
   async anularRegistro(payload, env, ctx) {
