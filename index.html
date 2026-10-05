@@ -1469,6 +1469,7 @@
                 <th>Proceso</th>
                 <th>EAN</th>
                 <th>Uni. procesadas</th>
+                <th>Suplemento</th>
                 <th>Eficiencia</th>
                 <th>Hora inicio</th>
                 <th>Hora fin</th>
@@ -2951,6 +2952,9 @@
           .map(function (r) {
             const eficienciaTxt =
               r.eficiencia === null ? "N/A" : r.eficiencia + "%";
+            const suplementoTxt = r.suplemento
+              ? r.suplemento + " min"
+              : "—";
             const filaEstilo = r.anulado
               ? ' style="opacity:0.55;text-decoration:line-through"'
               : "";
@@ -2968,6 +2972,7 @@
               `<td>${escapeHtml(r.proceso)}</td>` +
               `<td>${escapeHtml(r.ean || "")}</td>` +
               `<td>${r.unidadesProcesadas}</td>` +
+              `<td>${suplementoTxt}</td>` +
               `<td>${eficienciaTxt}</td>` +
               `<td>${escapeHtml(r.horaInicio)}</td>` +
               `<td>${escapeHtml(r.horaFinal)}</td>` +
