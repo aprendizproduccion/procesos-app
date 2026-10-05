@@ -1118,8 +1118,19 @@ export const accionesEscritura = {
     // de que este recálculo existiera, que quedaron con datos obsoletos.
     await _recalcularContadorValidacion(env, actual.numero_pedido, actual.ean);
 
-    // Best-effort, sin tabla de pendientes: si falla, la fila huérfana se
-    // resuelve sola con la próxima purga periódica de la hoja.
+    // Se encola ANTES de disparar el push y de forma síncrona: si el push
+    // falla, o el Worker muere, la fila queda registrada y la reconciliación
+    // de 10 min la recoge. Va después del DELETE a propósito — encolar antes
+    // dejaría una orden de borrado viva si el DELETE no llegara a aplicarse.
+    await env.DB.prepare(
+      "INSERT INTO eliminaciones_pendientes (id_registro, lote_id, creado_en) " +
+        "VALUES (?, ?, ?) ON CONFLICT(id_registro) DO UPDATE SET " +
+        "lote_id = excluded.lote_id, creado_en = excluded.creado_en, " +
+        "intentos = 0, ultimo_error = NULL",
+    )
+      .bind(id, actual.lote_id || "", _ahoraISO())
+      .run();
+
     ctx.waitUntil(_eliminarFilaRegistroSheets(env, id, actual.lote_id));
 
     return { success: true, id };
