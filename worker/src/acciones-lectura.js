@@ -336,6 +336,7 @@ export const accionesLectura = {
     let sql =
       "SELECT fecha, coordinador, operario, supernumerario, numero_pedido AS pedido, " +
       "cliente, proceso, ean, unidades_procesadas_operario AS unidadesProcesadas, eficiencia, " +
+      "suplemento, " +
       "unidades_hora_estandar AS unidadesHoraEstandar, hora_inicio AS horaInicio, " +
       "hora_final AS horaFinal, anulado " +
       "FROM registros WHERE 1 = 1";
@@ -410,6 +411,7 @@ export const accionesLectura = {
       proceso: r.proceso,
       ean: r.ean,
       unidadesProcesadas: r.unidadesProcesadas,
+      suplemento: r.suplemento || 0,
       eficiencia: r.unidadesHoraEstandar > 0 ? r.eficiencia : null,
       horaInicio: r.horaInicio,
       horaFinal: r.horaFinal,
