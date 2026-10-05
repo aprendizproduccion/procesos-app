@@ -141,12 +141,14 @@ export async function _pushFilaRegistroYMarcar(env, idRegistro) {
   }
 }
 
-// Best-effort a propósito, sin red de seguridad: si falla, la fila queda
-// huérfana en Sheets hasta la próxima purga periódica de la hoja (1-3 meses)
-// — aceptado, no hay tabla de pendientes para esto.
+// Ya no es best-effort ciego: eliminarRegistro deja la fila en
+// eliminaciones_pendientes antes de llamar aquí. Esta función la saca de la
+// cola solo si la hoja confirmó el borrado; si no, deja el motivo escrito
+// para que la reconciliación reintente y el fallo sea visible en D1.
 export async function _eliminarFilaRegistroSheets(env, idRegistro, loteId) {
+  let motivo = "";
   try {
-    await fetch(env.APPS_SCRIPT_URL, {
+    const res = await fetch(env.APPS_SCRIPT_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({
@@ -155,7 +157,32 @@ export async function _eliminarFilaRegistroSheets(env, idRegistro, loteId) {
         datos: { idRegistro, loteId },
       }),
     });
+    const body = await res.json();
+
+    // "ID D1 no encontrado" = la fila ya no está en la hoja (purga previa, o
+    // un borrado anterior que sí funcionó): el objetivo ya se cumplió.
+    if (body.success || body.message === "ID D1 no encontrado en la hoja.") {
+      await env.DB.prepare(
+        "DELETE FROM eliminaciones_pendientes WHERE id_registro = ?",
+      )
+        .bind(idRegistro)
+        .run();
+      return;
+    }
+    motivo = String(body.message || "respuesta sin success");
   } catch (err) {
-    // best-effort a propósito: sin reintento, ver comentario arriba.
+    motivo = "push: " + (err && err.message ? err.message : String(err));
+  }
+
+  try {
+    await env.DB.prepare(
+      "UPDATE eliminaciones_pendientes SET intentos = intentos + 1, " +
+        "ultimo_error = ? WHERE id_registro = ?",
+    )
+      .bind(motivo.slice(0, 300), idRegistro)
+      .run();
+  } catch (err) {
+    // La fila ya quedó encolada por eliminarRegistro; guardar el motivo es
+    // deseable pero no crítico — la reconciliación la recoge igual.
   }
 }
