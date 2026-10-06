@@ -310,7 +310,8 @@ export async function _revertirReserva(
       "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) <= 0 THEN 'Pendiente' " +
       "WHEN sin_limite = 0 AND ((unidades_procesadas - ?) + (codigos_sobrantes - ?) + " +
       "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones WHERE pedido = ? AND ean = ?)) >= unidades_totales THEN 'Completado' " +
-      "ELSE 'En proceso' END " +
+      "ELSE 'En proceso' END, " +
+      "actualizado_en = ? " +
       "WHERE numero_pedido = ? AND ean_producto = ?",
   )
     .bind(
@@ -324,6 +325,7 @@ export async function _revertirReserva(
       codigosSobrantes,
       pedido,
       ean,
+      _ahoraISO(),
       pedido,
       ean,
     )
@@ -334,9 +336,9 @@ export async function _revertirReserva(
 // justificación falla DESPUÉS de que el cierre ya comprometió cambios en D1.
 export async function _revertirCierre(env, pedido, ean) {
   await env.DB.prepare(
-    "UPDATE validacion_eanes SET estado = 'En proceso' WHERE numero_pedido = ? AND ean_producto = ?",
+    "UPDATE validacion_eanes SET estado = 'En proceso', actualizado_en = ? WHERE numero_pedido = ? AND ean_producto = ?",
   )
-    .bind(pedido, ean)
+    .bind(_ahoraISO(), pedido, ean)
     .run();
 }
 
