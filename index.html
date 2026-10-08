@@ -1074,6 +1074,34 @@
           <span class="tarjetaApp-icono">⏰</span>
           <span>Control tiempos</span>
         </button>
+        <button
+          type="button"
+          class="tarjetaApp"
+          onclick="abrirAppExterna('programaciones')"
+        >
+          <span class="tarjetaApp-icono">📅</span>
+          <span>Programaciones</span>
+        </button>
+        <button
+          type="button"
+          class="tarjetaApp"
+          id="btnProgramacionesAdminDashboard"
+          style="display: none"
+          onclick="abrirAppExterna('programacionesAdmin')"
+        >
+          <span class="tarjetaApp-icono">🗂️</span>
+          <span>Programaciones admin</span>
+        </button>
+        <button
+          type="button"
+          class="tarjetaApp"
+          id="btnAlimentacionDashboard"
+          style="display: none"
+          onclick="abrirAppExterna('alimentacion')"
+        >
+          <span class="tarjetaApp-icono">🍽️</span>
+          <span>Confirmación de alimentación</span>
+        </button>
       </div>
       <button
         type="button"
@@ -2330,6 +2358,11 @@
           rolActual === "supervisor" ? "" : "none";
         document.getElementById("btnSeguimientoDashboard").style.display =
           rolActual === "supervisor" ? "" : "none";
+        document.getElementById(
+          "btnProgramacionesAdminDashboard",
+        ).style.display = rolActual === "supervisor" ? "" : "none";
+        document.getElementById("btnAlimentacionDashboard").style.display =
+          rolActual === "supervisor" ? "" : "none";
       }
 
       const _rolRestaurado = _restaurarSesionGuardada();
@@ -2515,6 +2548,22 @@
       function abrirCalculadoraDesdeDashboard() {
         document.getElementById("vistaDashboard").style.display = "none";
         document.getElementById("vistaCalculadora").style.display = "block";
+      }
+
+      // Apps externas (Vercel): se abren en pestaña nueva y el dashboard
+      // queda intacto detrás, sin tocar la sesión de esta app.
+      // Las URLs viven aquí, no en los onclick, para tenerlas en un solo sitio.
+      const APPS_EXTERNAS = {
+        programaciones: "https://extiblu-horas-extra.vercel.app/registro",
+        programacionesAdmin:
+          "https://extiblu-horas-extra.vercel.app/administrador",
+        alimentacion:
+          "https://extiblu-horas-extra.vercel.app/checklist-comidas",
+      };
+
+      function abrirAppExterna(clave) {
+        const url = APPS_EXTERNAS[clave];
+        if (url) window.open(url, "_blank", "noopener");
       }
 
       function abrirEdicionDesdeDashboard() {
@@ -2952,9 +3001,7 @@
           .map(function (r) {
             const eficienciaTxt =
               r.eficiencia === null ? "N/A" : r.eficiencia + "%";
-            const suplementoTxt = r.suplemento
-              ? r.suplemento + " min"
-              : "—";
+            const suplementoTxt = r.suplemento ? r.suplemento + " min" : "—";
             const filaEstilo = r.anulado
               ? ' style="opacity:0.55;text-decoration:line-through"'
               : "";
