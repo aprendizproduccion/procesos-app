@@ -1,14 +1,13 @@
 // api.js — wrapper de comunicación con el backend (Registro de Producción)
 
-var USAR_WORKER_NUEVO = true; // true = Worker + D1 | false = Apps Script (histórico). Único punto de corte.
-
-var API_URL = USAR_WORKER_NUEVO
-  ? "/api"
-  : "https://script.google.com/macros/s/AKfycbwWu28Gji-rjknzhVNsdqqNHUtZiSPqFfe3TLFZo7BGVQqWDNBIt9TX0YOhfMYb_N4/exec";
-
-var API_TOKEN = USAR_WORKER_NUEVO
-  ? null
-  : "937dc94c-cdb2-428e-8b04-b1dfb3b52280";
+// Único destino: el proxy del Worker de frontend (procesos-app), que intercepta
+// POST /api, inyecta env.TOKEN_API y reenvía al backend por service binding.
+// El token NO viaja desde aquí: el navegador nunca lo ve. El camino legado de
+// Apps Script (/exec + token en texto plano) se eliminó el 09-10 — con él
+// desaparece USAR_WORKER_NUEVO = false como vía de rollback, que de todos modos
+// ya estaba roto (code.js submitRegistroOperario espera horas que el frontend
+// nuevo no envía).
+var API_URL = "/api";
 
 function llamarAPI(action, datos, intento) {
   intento = intento || 1;
@@ -18,7 +17,6 @@ function llamarAPI(action, datos, intento) {
     headers: { "Content-Type": "text/plain;charset=utf-8" },
     body: JSON.stringify({
       action: action,
-      token: API_TOKEN,
       datos: datos || {},
     }),
     cache: "no-store",
