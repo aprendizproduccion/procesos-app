@@ -270,7 +270,10 @@ export async function _marcarPedidoIniciado(env, pedido, ahora) {
 
 export async function _pedidoEstaCompleto(env, pedido) {
   const row = await env.DB.prepare(
-    "SELECT COUNT(*) AS total, SUM(CASE WHEN estado != 'Completado' THEN 1 ELSE 0 END) AS pendientes " +
+    // COALESCE: con estado NULL, \"NULL != 'Completado'\" da NULL y el EAN no se
+    // contaba como pendiente. Los EANes nuevos entran desde el pull sin estado,
+    // así que un pedido podía darse por completo con EANes sin tocar.
+    "SELECT COUNT(*) AS total, SUM(CASE WHEN COALESCE(estado, '') != 'Completado' THEN 1 ELSE 0 END) AS pendientes " +
       "FROM validacion_eanes WHERE numero_pedido = ?",
   )
     .bind(pedido)
@@ -293,6 +296,104 @@ export async function _sincronizarEstadoPedido(env, pedido) {
     .bind(pedido, completo ? "Completado" : "En proceso", ahora)
     .run();
   return completo;
+}
+
+// Fila de "Seguimiento paquetes" calculada desde la fuente en una sola
+// sentencia (D1 ejecuta una por vez). ?1 se repite en todas las subconsultas.
+// - Unds procesadas: sin códigos sobrantes, igual que Seguimiento de paquetes.
+// - Unds pendientes: lo justificado; null si cerró sin faltante.
+// - Eficiencia: misma fórmula que obtenerSeguimientoPaquetes.
+// - Supernumerario: los de los registros activos + quien justificó.
+// GROUP_CONCAT(DISTINCT x, sep) no existe en SQLite: se deduplica en subconsulta.
+export async function _datosSeguimientoPedido(env, pedido) {
+  const r = await env.DB.prepare(
+    "SELECT " +
+      "(SELECT MIN(fecha) FROM pedidos WHERE numero_pedido = ?1 AND fecha <> '') AS fecha, " +
+      "(SELECT GROUP_CONCAT(par, ' | ') FROM (SELECT DISTINCT p.sublinea || ' - ' || p.cliente AS par " +
+      "FROM pedidos p WHERE p.numero_pedido = ?1 AND p.sublinea IN " +
+      "(SELECT sublinea FROM validacion_eanes WHERE numero_pedido = ?1) ORDER BY par)) AS sublineaCliente, " +
+      "(SELECT COALESCE(SUM(unidades_procesadas), 0) FROM validacion_eanes WHERE numero_pedido = ?1) AS procesadas, " +
+      "(SELECT COALESCE(SUM(faltante), 0) FROM justificaciones WHERE pedido = ?1) AS justificado, " +
+      "(SELECT COALESCE(SUM(tiempo_total * unidades_hora_estandar), 0) FROM registros " +
+      "WHERE numero_pedido = ?1 AND anulado = 0) AS estandar, " +
+      "(SELECT GROUP_CONCAT(nombre, ' - ') FROM (" +
+      "SELECT supernumerario AS nombre FROM registros WHERE numero_pedido = ?1 AND anulado = 0 AND supernumerario <> '' " +
+      "UNION SELECT supernumerario FROM justificaciones WHERE pedido = ?1 AND supernumerario <> '')) AS supernumerarios, " +
+      "(SELECT GROUP_CONCAT(nombre, ' - ') FROM (SELECT DISTINCT coordinador AS nombre FROM registros " +
+      "WHERE numero_pedido = ?1 AND anulado = 0 AND coordinador <> '' ORDER BY nombre)) AS supervisores, " +
+      "(SELECT GROUP_CONCAT(motivo, ' | ') FROM (SELECT DISTINCT motivo FROM justificaciones " +
+      "WHERE pedido = ?1 AND motivo <> '')) AS justificacion",
+  )
+    .bind(pedido)
+    .first();
+
+  const procesadas = Number(r.procesadas) || 0;
+  const justificado = Number(r.justificado) || 0;
+  const estandar = Number(r.estandar) || 0;
+  return {
+    fecha: r.fecha || "",
+    sublineaCliente: r.sublineaCliente || "",
+    undsProcesadas: procesadas,
+    undsPendientes: justificado > 0 ? justificado : null,
+    eficiencia: estandar > 0 ? Math.round((procesadas / estandar) * 100) : null,
+    supernumerarios: r.supernumerarios || "",
+    supervisores: r.supervisores || "",
+    estado: justificado > 0 ? "No cumple" : "Cumple",
+    justificacion: r.justificacion || "",
+  };
+}
+
+// Refleja en seguimiento_paquetes si el pedido está cerrado.
+// - completo: escribe la fila fresca y la deja vigente. cerrado_en solo se fija
+//   en la transición abierto → cerrado; una edición sobre un pedido que sigue
+//   cerrado refresca los datos sin mover esa fecha.
+// - no completo: si la fila estaba vigente, pasa a no vigente (F3 la borra de
+//   la hoja hasta que el pedido vuelva a cerrar).
+// Todo cambio deja sincronizado_sheets = 0 para que el push aplique el estado
+// actual. Devuelve true si cambió algo.
+export async function _actualizarSeguimientoPedido(env, pedido, completo) {
+  const ahora = _ahoraISO();
+  if (!completo) {
+    const res = await env.DB.prepare(
+      "UPDATE seguimiento_paquetes SET vigente = 0, sincronizado_sheets = 0, actualizado_en = ? " +
+        "WHERE numero_pedido = ? AND vigente = 1",
+    )
+      .bind(ahora, pedido)
+      .run();
+    return res.meta.changes > 0;
+  }
+
+  const d = await _datosSeguimientoPedido(env, pedido);
+  await env.DB.prepare(
+    "INSERT INTO seguimiento_paquetes (numero_pedido, fecha, sublinea_cliente, unds_procesadas, " +
+      "unds_pendientes, eficiencia, supernumerarios, supervisores, estado, justificacion, " +
+      "vigente, sincronizado_sheets, cerrado_en, actualizado_en) " +
+      "VALUES (?,?,?,?,?,?,?,?,?,?,1,0,?,?) " +
+      "ON CONFLICT(numero_pedido) DO UPDATE SET fecha = excluded.fecha, " +
+      "sublinea_cliente = excluded.sublinea_cliente, unds_procesadas = excluded.unds_procesadas, " +
+      "unds_pendientes = excluded.unds_pendientes, eficiencia = excluded.eficiencia, " +
+      "supernumerarios = excluded.supernumerarios, supervisores = excluded.supervisores, " +
+      "estado = excluded.estado, justificacion = excluded.justificacion, " +
+      "cerrado_en = CASE WHEN seguimiento_paquetes.vigente = 1 " +
+      "THEN seguimiento_paquetes.cerrado_en ELSE excluded.cerrado_en END, " +
+      "vigente = 1, sincronizado_sheets = 0, actualizado_en = excluded.actualizado_en",
+  )
+    .bind(
+      pedido,
+      d.fecha,
+      d.sublineaCliente,
+      d.undsProcesadas,
+      d.undsPendientes,
+      d.eficiencia,
+      d.supernumerarios,
+      d.supervisores,
+      d.estado,
+      d.justificacion,
+      ahora,
+      ahora,
+    )
+    .run();
+  return true;
 }
 
 // Revierte una reserva de unidades ya aplicada, para cuando el INSERT de
