@@ -23,6 +23,7 @@ import {
   _revertirCierre,
   _recalcularContadorValidacion,
   _sincronizarEstadoPedido,
+  _actualizarSeguimientoPedido,
   _resolverPedido,
 } from "./d1-negocio.js";
 
@@ -31,6 +32,7 @@ import {
   _pushJustificacionYMarcar,
   _pushFilaRegistroYMarcar,
   _eliminarFilaRegistroSheets,
+  _pushSeguimientoYMarcar,
 } from "./push-sheets.js";
 
 export const accionesEscritura = {
@@ -244,7 +246,8 @@ export const accionesEscritura = {
         ),
       );
 
-      if (await _pedidoEstaCompleto(env, pedido)) {
+      const pedidoCompleto = await _pedidoEstaCompleto(env, pedido);
+      if (pedidoCompleto) {
         statements.push(
           env.DB.prepare(
             "INSERT INTO control_produccion (numero_pedido, estado, actualizado_en) VALUES (?, 'Completado', ?) " +
@@ -282,6 +285,16 @@ export const accionesEscritura = {
 
       const resultadosBatch = await env.DB.batch(statements);
       const respuestaFinal = { success: true, loteId };
+
+      // Igual que en el flujo del operario: después del batch y aislado.
+      if (pedidoCompleto) {
+        try {
+          await _actualizarSeguimientoPedido(env, pedido, true);
+          ctx.waitUntil(_pushSeguimientoYMarcar(env, pedido));
+        } catch (errSeguimiento) {
+          // No relanzamos: el registro ya es válido en D1.
+        }
+      }
 
       // A partir de aquí D1 ya tiene el estado correcto — cualquier fallo de acá
       // en adelante NO debe liberar la idempotencia ni fallarle al usuario.
@@ -567,7 +580,8 @@ export const accionesEscritura = {
 
       // Fuera del lote a propósito: si el INSERT se rechaza por la guarda de
       // arriba, este estado no debe quedar escrito de más.
-      if (await _pedidoEstaCompleto(env, pedido)) {
+      const pedidoCompleto = await _pedidoEstaCompleto(env, pedido);
+      if (pedidoCompleto) {
         await env.DB.prepare(
           "INSERT INTO control_produccion (numero_pedido, estado, actualizado_en) VALUES (?, 'Completado', ?) " +
             "ON CONFLICT(numero_pedido) DO UPDATE SET estado = 'Completado', actualizado_en = excluded.actualizado_en",
@@ -611,6 +625,18 @@ export const accionesEscritura = {
         eficiencia,
         turnoConfigurado,
       };
+
+      // La fila se calcula DESPUÉS del INSERT: eficiencia, supernumerarios y
+      // coordinadores salen de los registros, este incluido. Aislado en su
+      // propio try para que un fallo aquí no se lleve el push de registros.
+      if (pedidoCompleto) {
+        try {
+          await _actualizarSeguimientoPedido(env, pedido, true);
+          ctx.waitUntil(_pushSeguimientoYMarcar(env, pedido));
+        } catch (errSeguimiento) {
+          // No relanzamos: el registro ya es válido en D1.
+        }
+      }
 
       try {
         await _confirmarIdempotencia(env, huella, respuestaFinal);
@@ -741,6 +767,18 @@ export const accionesEscritura = {
 
       const resultadosBatch = await env.DB.batch(statements);
       const respuestaFinal = { success: true, pedidoCompleto };
+
+      // Provisional hasta F5, donde esta acción se reemplaza por una
+      // justificación por pedido. Sin esto quedaría una ventana en la que un
+      // pedido cerrado por justificación no llega a la hoja.
+      if (pedidoCompleto) {
+        try {
+          await _actualizarSeguimientoPedido(env, pedido, true);
+          ctx.waitUntil(_pushSeguimientoYMarcar(env, pedido));
+        } catch (errSeguimiento) {
+          // No relanzamos: la justificación ya quedó registrada en D1.
+        }
+      }
 
       try {
         await _confirmarIdempotencia(env, huella, respuestaFinal);
@@ -956,11 +994,17 @@ export const accionesEscritura = {
       await _recalcularContadorValidacion(env, pedidoOrigen, eanOrigen);
     }
     const pedidoCompleto = await _sincronizarEstadoPedido(env, pedido);
+    await _actualizarSeguimientoPedido(env, pedido, pedidoCompleto);
+    // Mover un registro toca DOS pedidos: el destino puede quedar cerrado y el
+    // origen puede reabrirse. Cada uno necesita su propia fila actualizada.
     if (pedidoOrigen !== pedido) {
-      await _sincronizarEstadoPedido(env, pedidoOrigen);
+      const origenCompleto = await _sincronizarEstadoPedido(env, pedidoOrigen);
+      await _actualizarSeguimientoPedido(env, pedidoOrigen, origenCompleto);
+      ctx.waitUntil(_pushSeguimientoYMarcar(env, pedidoOrigen));
     }
 
     ctx.waitUntil(_pushFilaRegistroYMarcar(env, id));
+    ctx.waitUntil(_pushSeguimientoYMarcar(env, pedido));
 
     return { success: true, id, pedido, ean, movido: seMueve, pedidoCompleto };
   },
@@ -1005,8 +1049,12 @@ export const accionesEscritura = {
 
     await _recalcularContadorValidacion(env, pedido, ean);
     const pedidoCompleto = await _sincronizarEstadoPedido(env, pedido);
+    // Si la anulación reabrió el pedido, esto deja la fila como no vigente y
+    // el push la borra de la hoja.
+    await _actualizarSeguimientoPedido(env, pedido, pedidoCompleto);
 
     ctx.waitUntil(_pushFilaRegistroYMarcar(env, id));
+    ctx.waitUntil(_pushSeguimientoYMarcar(env, pedido));
 
     return { success: true, id, pedidoCompleto };
   },
@@ -1079,8 +1127,10 @@ export const accionesEscritura = {
 
     await _recalcularContadorValidacion(env, pedido, ean);
     const pedidoCompleto = await _sincronizarEstadoPedido(env, pedido);
+    await _actualizarSeguimientoPedido(env, pedido, pedidoCompleto);
 
     ctx.waitUntil(_pushFilaRegistroYMarcar(env, id));
+    ctx.waitUntil(_pushSeguimientoYMarcar(env, pedido));
 
     return { success: true, id, pedidoCompleto };
   },
