@@ -186,3 +186,55 @@ export async function _eliminarFilaRegistroSheets(env, idRegistro, loteId) {
     // deseable pero no crítico — la reconciliación la recoge igual.
   }
 }
+
+// Relee la fila fresca de D1 y la manda a la hoja. El estado manda: vigente = 1
+// escribe, vigente = 0 borra. La marca de sincronizado va condicionada a
+// actualizado_en, así que si el pedido cambió entre el SELECT y el UPDATE la
+// bandera se queda en 0 y la reconciliación de 10 min lo recoge.
+export async function _pushSeguimientoYMarcar(env, pedido) {
+  try {
+    const f = await env.DB.prepare(
+      "SELECT fecha, sublinea_cliente, unds_procesadas, unds_pendientes, eficiencia, " +
+        "supernumerarios, supervisores, estado, justificacion, vigente, actualizado_en " +
+        "FROM seguimiento_paquetes WHERE numero_pedido = ?",
+    )
+      .bind(pedido)
+      .first();
+    if (!f) return;
+
+    // El orden debe coincidir con HEADERS_SEGUIMIENTO_PAQUETES de code.js.
+    const fila = [
+      f.fecha || "", // ISO; code.js lo pasa a dd/mm/aaaa
+      f.sublinea_cliente || "",
+      pedido,
+      f.unds_procesadas,
+      f.unds_pendientes === null ? "" : f.unds_pendientes,
+      f.eficiencia === null ? "" : f.eficiencia,
+      f.supernumerarios || "",
+      f.supervisores || "",
+      f.estado,
+      f.justificacion || "",
+    ];
+
+    const res = await fetch(env.APPS_SCRIPT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        action: "_pushSeguimientoPaquete",
+        token: env.APPS_SCRIPT_TOKEN,
+        datos: { fila, vigente: f.vigente === 1 },
+      }),
+    });
+    const body = await res.json();
+    if (!body.success) return;
+
+    await env.DB.prepare(
+      "UPDATE seguimiento_paquetes SET sincronizado_sheets = 1 " +
+        "WHERE numero_pedido = ? AND actualizado_en = ?",
+    )
+      .bind(pedido, f.actualizado_en)
+      .run();
+  } catch (err) {
+    // best-effort: se queda con sincronizado_sheets = 0.
+  }
+}
