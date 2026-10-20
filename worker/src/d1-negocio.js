@@ -396,6 +396,57 @@ export async function _actualizarSeguimientoPedido(env, pedido, completo) {
   return true;
 }
 
+// Red de seguridad de seguimiento_paquetes, la llama el cron del Worker.
+// 1) Pedidos cerrados (todos sus EANes Completado, ninguno sin límite) que no
+//    tienen fila vigente → se les escribe. También hace el backfill.
+// 2) Filas vigentes cuyo pedido sigue en validacion_eanes pero ya no está
+//    cerrado → pasan a no vigentes. Si el pedido desapareció de
+//    validacion_eanes (depuración), la fila NO se toca: la hoja es histórico.
+// Topes por corrida: D1 limita las consultas por invocación (50 en el plan
+// gratuito). 2 detecciones + 15 cierres × 2 + 10 reaperturas × 1 = 42. Lo que
+// quede pendiente lo toma la siguiente corrida.
+// El push a la hoja lo hace la reconciliación de Apps Script, porque todo lo
+// que se toca aquí queda con sincronizado_sheets = 0.
+export async function _reconciliarSeguimientoD1(env) {
+  const { results: sinFila } = await env.DB.prepare(
+    "SELECT v.numero_pedido FROM validacion_eanes v GROUP BY v.numero_pedido " +
+      "HAVING SUM(CASE WHEN COALESCE(v.estado, '') <> 'Completado' THEN 1 ELSE 0 END) = 0 " +
+      "AND MAX(v.sin_limite) = 0 " +
+      "AND NOT EXISTS (SELECT 1 FROM seguimiento_paquetes s " +
+      "WHERE s.numero_pedido = v.numero_pedido AND s.vigente = 1) " +
+      "LIMIT 15",
+  ).all();
+
+  const { results: reabiertos } = await env.DB.prepare(
+    "SELECT s.numero_pedido FROM seguimiento_paquetes s WHERE s.vigente = 1 " +
+      "AND EXISTS (SELECT 1 FROM validacion_eanes v WHERE v.numero_pedido = s.numero_pedido " +
+      "AND (COALESCE(v.estado, '') <> 'Completado' OR v.sin_limite = 1)) " +
+      "LIMIT 10",
+  ).all();
+
+  for (const r of sinFila) {
+    await _actualizarSeguimientoPedido(env, r.numero_pedido, true);
+  }
+  for (const r of reabiertos) {
+    await _actualizarSeguimientoPedido(env, r.numero_pedido, false);
+  }
+
+  console.log(
+    "Reconciliación seguimiento: " +
+      sinFila.length +
+      " cerrados sin fila" +
+      (sinFila.length
+        ? " (" + sinFila.map((r) => r.numero_pedido).join(", ") + ")"
+        : "") +
+      ", " +
+      reabiertos.length +
+      " reabiertos" +
+      (reabiertos.length
+        ? " (" + reabiertos.map((r) => r.numero_pedido).join(", ") + ")"
+        : ""),
+  );
+}
+
 // Revierte una reserva de unidades ya aplicada, para cuando el INSERT de
 // registros falla DESPUÉS de que la reserva ya comprometió cambios en D1.
 export async function _revertirReserva(
