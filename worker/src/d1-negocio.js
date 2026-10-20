@@ -8,6 +8,10 @@ const TTL_IDEMPOTENCIA_SEG = 21600; // 6 horas — igual al tope que ya usaba Ca
 export const HORA_LIMITE_ENVIO = "21:00";
 export const TURNO_POR_DEFECTO = "06:00";
 
+// Días hacia atrás que acepta submitRegistro. Debe coincidir con
+// DIAS_MAX_ATRAS_REGISTRO en index.html (_resetFechaAdmin).
+const DIAS_MAX_ATRAS_REGISTRO = 15;
+
 // Sin uso desde 2026-09-28: se quitaron el piso del registro del operario y el
 // tope del flujo administrativo. El umbral de "registro corto" NO vive aquí:
 // es DURACION_CORTA_MIN en index.html, y solo decide si se muestra el modal de
@@ -711,13 +715,15 @@ export function _validarFechaRegistro(fechaPayload) {
     throw new Error("La fecha del registro no puede ser posterior a hoy.");
   }
   const limite = new Date(hoy + "T00:00:00Z");
-  limite.setUTCDate(limite.getUTCDate() - 7);
+  limite.setUTCDate(limite.getUTCDate() - DIAS_MAX_ATRAS_REGISTRO);
   const limiteStr = limite.toISOString().slice(0, 10);
   if (valor < limiteStr) {
     throw new Error(
       "La fecha del registro no puede ser anterior a " +
         limiteStr +
-        " (máximo 7 días atrás).",
+        " (máximo " +
+        DIAS_MAX_ATRAS_REGISTRO +
+        " días atrás).",
     );
   }
   return valor;
