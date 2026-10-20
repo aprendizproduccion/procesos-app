@@ -1,8 +1,16 @@
 import { accionesLectura } from "./acciones-lectura.js";
 import { accionesAuth } from "./acciones-auth.js";
 import { accionesEscritura } from "./acciones-escritura.js";
+import { _reconciliarSeguimientoD1 } from "./d1-negocio.js";
 
 export default {
+  // Cron del Worker (ver "triggers" en wrangler.jsonc). Solo corre la red de
+  // seguridad de "Seguimiento paquetes"; no pasa por el token ni por ACCIONES
+  // porque no lo invoca nadie desde fuera.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(_reconciliarSeguimientoD1(env));
+  },
+
   async fetch(request, env, ctx) {
     if (request.method !== "POST") {
       return json({
