@@ -4582,14 +4582,21 @@
           }
         });
 
+      // Debe coincidir con DIAS_MAX_ATRAS_REGISTRO en d1-negocio.js.
+      const DIAS_MAX_ATRAS_REGISTRO = 15;
+
+      // Fecha de Bogotá, no UTC: después de las 19:00 el UTC ya es el día
+      // siguiente y el calendario ofrecía "mañana", que el Worker rechaza.
       function _resetFechaAdmin() {
         const campo = document.getElementById("fecha");
-        const hoy = new Date();
-        const limiteAtras = new Date(hoy);
-        limiteAtras.setUTCDate(limiteAtras.getUTCDate() - 7);
-        campo.max = hoy.toISOString().slice(0, 10);
+        const hoy = _hoyBogotaCT();
+        const limiteAtras = new Date(hoy + "T00:00:00Z");
+        limiteAtras.setUTCDate(
+          limiteAtras.getUTCDate() - DIAS_MAX_ATRAS_REGISTRO,
+        );
+        campo.max = hoy;
         campo.min = limiteAtras.toISOString().slice(0, 10);
-        campo.valueAsDate = hoy;
+        campo.value = hoy;
       }
 
       _resetFechaAdmin();
