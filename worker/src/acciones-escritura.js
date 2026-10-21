@@ -421,7 +421,9 @@ export const accionesEscritura = {
 
       if (hora > HORA_LIMITE_ENVIO) {
         throw new Error(
-          "Fuera del horario de registro (6:00 a 19:00, con margen hasta las 21:00). Pide a tu supernumerario que registre por ti.",
+          "Fuera del horario de registro (el límite para enviar es las " +
+            HORA_LIMITE_ENVIO +
+            "). Pide a tu supernumerario que registre por ti.",
         );
       }
       // La cadena puede venir adelantada por un registro del administrador con
