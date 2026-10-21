@@ -5,7 +5,7 @@ const TTL_EN_PROCESO_SEG = 120;
 const TTL_IDEMPOTENCIA_SEG = 21600; // 6 horas — igual al tope que ya usaba CacheService
 
 // Horas encadenadas del operario
-export const HORA_LIMITE_ENVIO = "21:00";
+export const HORA_LIMITE_ENVIO = "23:30";
 export const TURNO_POR_DEFECTO = "06:00";
 
 // Días hacia atrás que acepta submitRegistro. Debe coincidir con
@@ -553,7 +553,7 @@ function _minutosDeHora(valor, etiqueta) {
   return Number(m[1]) * 60 + Number(m[2]);
 }
 
-// Sin wrap de medianoche: la jornada va de 6:00 a 19:00, así que una hora fin
+// Sin wrap de medianoche: el último envío es a las 23:30, así que una hora fin
 // anterior a la de inicio es captura invertida, no un turno que cruza el día.
 // El "+= 24 * 60" anterior convertía un bloque real de 15:00–18:00 mal digitado
 // en un registro de 21 horas, silenciosamente.
