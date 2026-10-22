@@ -808,6 +808,162 @@ export const accionesEscritura = {
     }
   },
 
+  // Justificación por pedido completo: un solo motivo cierra todos los EAN
+  // con faltante. Todo va en un solo batch (D1 lo ejecuta como transacción):
+  // si el faltante de algún EAN cambió, su INSERT lleva faltante NULL, choca
+  // con el NOT NULL y D1 deshace el batch completo. Cierran todos o ninguno.
+  // justificaciones.supernumerario guarda a quien justificó ("Justificado por").
+  async justificarPedido(payload, env, ctx) {
+    const huella = await _huellaPayload("justificarPedido", payload);
+    const chequeo = await _chequearIdempotencia(env, huella);
+    if (chequeo.duplicado) return chequeo.respuesta;
+    if (chequeo.enProceso) {
+      return {
+        success: false,
+        message:
+          "Esta justificación ya se está procesando (posible doble envío). Espera unos segundos y verifica antes de reintentar.",
+      };
+    }
+
+    try {
+      const pedido = await _resolverPedido(env, payload.pedido);
+      const motivo = String(payload.motivo || "").trim();
+      const justificadoPor = String(payload.justificadoPor || "").trim();
+      const faltanteEsperado =
+        Math.round(Number(payload.faltanteEsperado) * 100) / 100;
+
+      if (!pedido) throw new Error("Falta el número de pedido.");
+      if (!motivo)
+        throw new Error("Debes escribir el motivo de la justificación.");
+      if (!justificadoPor)
+        throw new Error("Escribe el nombre de quien hace la justificación.");
+      if (!Number.isFinite(faltanteEsperado) || faltanteEsperado <= 0)
+        throw new Error("Falta el faltante del pedido que se va a justificar.");
+
+      // Lectura previa: da los mensajes claros y arma el batch. La autoridad
+      // real es la guarda de cada INSERT, que vuelve a leer dentro del batch.
+      const { results: eanes } = await env.DB.prepare(
+        "SELECT v.ean_producto AS ean, v.sin_limite AS sinLimite, " +
+          "(v.unidades_totales - v.unidades_procesadas - v.codigos_sobrantes - " +
+          "(SELECT COALESCE(SUM(j.faltante), 0) FROM justificaciones j " +
+          "WHERE j.pedido = v.numero_pedido AND j.ean = v.ean_producto)) AS faltante " +
+          "FROM validacion_eanes v WHERE v.numero_pedido = ?",
+      )
+        .bind(pedido)
+        .all();
+
+      if (eanes.length === 0)
+        throw new Error(
+          "El pedido " + pedido + " no existe en Validación eanes.",
+        );
+      if (eanes.some((e) => e.sinLimite === 1))
+        throw new Error(
+          "Este pedido tiene EANes sin límite de unidades; no se puede cerrar por justificación.",
+        );
+
+      const conFaltante = eanes.filter((e) => e.faltante > 0);
+      if (conFaltante.length === 0)
+        throw new Error(
+          "Este pedido ya no tiene faltante pendiente por justificar.",
+        );
+
+      const faltanteActual =
+        Math.round(conFaltante.reduce((s, e) => s + e.faltante, 0) * 100) / 100;
+      if (faltanteActual !== faltanteEsperado) {
+        throw new Error(
+          "El faltante del pedido cambió: ahora es " +
+            faltanteActual +
+            " unidades y se mostraron " +
+            faltanteEsperado +
+            ". Vuelve a buscar el pedido y revisa antes de cerrar.",
+        );
+      }
+
+      const ahora = _ahoraISO();
+      const hoy = _fechaHoyBogota();
+
+      // sincronizado_sheets = 1: la hoja vieja "Justificaciones" no recibe
+      // nada; el dato llega a Sheets por "Seguimiento paquetes".
+      const statements = conFaltante.map((e) =>
+        env.DB.prepare(
+          "INSERT INTO justificaciones (fecha, supernumerario, pedido, ean, faltante, motivo, " +
+            "creado_en, sincronizado_sheets, sincronizado_en) VALUES (?, ?, ?, ?, " +
+            "(SELECT CASE WHEN (v.unidades_totales - v.unidades_procesadas - v.codigos_sobrantes - " +
+            "(SELECT COALESCE(SUM(j.faltante), 0) FROM justificaciones j " +
+            "WHERE j.pedido = v.numero_pedido AND j.ean = v.ean_producto)) = ? THEN ? END " +
+            "FROM validacion_eanes v WHERE v.numero_pedido = ? AND v.ean_producto = ? AND v.sin_limite = 0), " +
+            "?, ?, 1, ?)",
+        ).bind(
+          hoy,
+          justificadoPor,
+          pedido,
+          e.ean,
+          e.faltante,
+          e.faltante,
+          pedido,
+          e.ean,
+          motivo,
+          ahora,
+          ahora,
+        ),
+      );
+
+      // Un solo UPDATE para todo el pedido, después de los INSERT: cierra
+      // cada EAN cuyo faltante quedó en 0 (incluye los que ya estaban en 0
+      // sin marcar Completado).
+      statements.push(
+        env.DB.prepare(
+          "UPDATE validacion_eanes SET estado = 'Completado', actualizado_en = ? " +
+            "WHERE numero_pedido = ? AND sin_limite = 0 AND COALESCE(estado, '') <> 'Completado' " +
+            "AND (unidades_totales - unidades_procesadas - codigos_sobrantes - " +
+            "(SELECT COALESCE(SUM(j.faltante), 0) FROM justificaciones j " +
+            "WHERE j.pedido = validacion_eanes.numero_pedido " +
+            "AND j.ean = validacion_eanes.ean_producto)) <= 0",
+        ).bind(ahora, pedido),
+      );
+
+      try {
+        await env.DB.batch(statements);
+      } catch (errBatch) {
+        if (String(errBatch.message || "").includes("NOT NULL")) {
+          throw new Error(
+            "El pedido cambió justo antes de confirmar (alguien registró unidades). No se cerró nada. Vuelve a buscar el pedido y revisa el faltante.",
+          );
+        }
+        throw errBatch;
+      }
+
+      // De aquí en adelante D1 ya quedó bien: nada debe fallarle al usuario.
+      let pedidoCompleto = true;
+      try {
+        pedidoCompleto = await _sincronizarEstadoPedido(env, pedido);
+        await _actualizarSeguimientoPedido(env, pedido, pedidoCompleto);
+        ctx.waitUntil(_pushSeguimientoYMarcar(env, pedido));
+      } catch (errSeguimiento) {
+        // No relanzamos: el cron de seguimiento recoge la fila.
+      }
+
+      const respuestaFinal = {
+        success: true,
+        pedido,
+        unidadesJustificadas: faltanteActual,
+        eanesCerrados: conFaltante.length,
+        pedidoCompleto,
+      };
+
+      try {
+        await _confirmarIdempotencia(env, huella, respuestaFinal);
+      } catch (errPostCommit) {
+        // No relanzamos: la justificación ya quedó en D1.
+      }
+
+      return respuestaFinal;
+    } catch (err) {
+      await _liberarIdempotencia(env, huella);
+      throw err;
+    }
+  },
+
   async editarRegistro(payload, env, ctx) {
     const id = Number(payload.id);
     if (!Number.isInteger(id) || id <= 0)
