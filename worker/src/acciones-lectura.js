@@ -251,16 +251,21 @@ export const accionesLectura = {
       "SELECT ve.numero_pedido AS pedido, ve.subLinea AS subLinea, " +
         "ve.unidadesTotales AS unidadesTotales, ve.unidadesProcesadas AS unidadesProcesadas, " +
         "ve.codigosSobrantes AS codigosSobrantes, ve.sinLimite AS sinLimite, " +
-        "ve.soloSinLimite AS soloSinLimite, " +
+        "ve.soloSinLimite AS soloSinLimite, ve.eanesAbiertos AS eanesAbiertos, " +
+        "COALESCE(js.justificado, 0) AS justificado, " +
         "COALESCE(rg.horasTotales,0) AS horasTotales, " +
         "COALESCE(rg.sumaUnidadesPorTiempo,0) AS sumaUnidadesPorTiempo " +
         "FROM (" +
         "SELECT numero_pedido, GROUP_CONCAT(DISTINCT sublinea) AS subLinea, " +
         "SUM(unidades_totales) AS unidadesTotales, SUM(unidades_procesadas) AS unidadesProcesadas, " +
         "SUM(codigos_sobrantes) AS codigosSobrantes, MAX(sin_limite) AS sinLimite, " +
-        "MIN(sin_limite) AS soloSinLimite " +
+        "MIN(sin_limite) AS soloSinLimite, " +
+        "SUM(CASE WHEN COALESCE(estado, '') <> 'Completado' THEN 1 ELSE 0 END) AS eanesAbiertos " +
         "FROM validacion_eanes GROUP BY numero_pedido" +
         ") ve " +
+        "LEFT JOIN (" +
+        "SELECT pedido, SUM(faltante) AS justificado FROM justificaciones GROUP BY pedido" +
+        ") js ON js.pedido = ve.numero_pedido " +
         "LEFT JOIN (" +
         "SELECT numero_pedido, SUM(tiempo_total) AS horasTotales, " +
         "SUM(tiempo_total * unidades_hora_estandar) AS sumaUnidadesPorTiempo " +
@@ -271,10 +276,11 @@ export const accionesLectura = {
 
     const paquetes = results.map((r) => {
       const unidadesConSobrantes = r.unidadesProcesadas + r.codigosSobrantes;
+      // Cerrado = mismo criterio que _pedidoEstaCompleto: todos los EAN en
+      // Completado y ninguno sin límite. Etiquetas iguales a las de la hoja.
+      const cerrado = !r.sinLimite && r.eanesAbiertos === 0;
       let estado;
-      if (r.sinLimite)
-        estado = unidadesConSobrantes > 0 ? "En proceso" : "Pendiente";
-      else if (unidadesConSobrantes >= r.unidadesTotales) estado = "Completado";
+      if (cerrado) estado = r.justificado > 0 ? "No cumple" : "Cumple";
       else if (unidadesConSobrantes > 0) estado = "En proceso";
       else estado = "Pendiente";
 
@@ -284,9 +290,13 @@ export const accionesLectura = {
         subLinea: r.subLinea,
         unidadesTotales: r.unidadesTotales,
         unidadesProcesadas: r.unidadesProcesadas,
+        // Cerrado por justificación: lo que faltó, igual que en la hoja.
         unidadesPendientes: r.sinLimite
           ? null
-          : r.unidadesTotales - r.unidadesProcesadas,
+          : estado === "No cumple"
+            ? r.justificado
+            : r.unidadesTotales - r.unidadesProcesadas,
+        cerrado,
         sinLimite: r.sinLimite === 1,
         soloSinLimite: r.soloSinLimite === 1,
         estado,
