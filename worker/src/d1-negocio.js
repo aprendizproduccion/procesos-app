@@ -307,7 +307,9 @@ export async function _sincronizarEstadoPedido(env, pedido) {
 // - Unds procesadas: sin códigos sobrantes, igual que Seguimiento de paquetes.
 // - Unds pendientes: lo justificado; null si cerró sin faltante.
 // - Eficiencia: misma fórmula que obtenerSeguimientoPaquetes.
-// - Supernumerario: los de los registros activos + quien justificó.
+// - Supernumerario: los de los registros activos.
+// - Justificación: "quien justificó - motivo" (quien justificó se guarda en
+//   justificaciones.supernumerario).
 // GROUP_CONCAT(DISTINCT x, sep) no existe en SQLite: se deduplica en subconsulta.
 export async function _datosSeguimientoPedido(env, pedido) {
   const r = await env.DB.prepare(
@@ -320,12 +322,12 @@ export async function _datosSeguimientoPedido(env, pedido) {
       "(SELECT COALESCE(SUM(faltante), 0) FROM justificaciones WHERE pedido = ?1) AS justificado, " +
       "(SELECT COALESCE(SUM(tiempo_total * unidades_hora_estandar), 0) FROM registros " +
       "WHERE numero_pedido = ?1 AND anulado = 0) AS estandar, " +
-      "(SELECT GROUP_CONCAT(nombre, ' - ') FROM (" +
-      "SELECT supernumerario AS nombre FROM registros WHERE numero_pedido = ?1 AND anulado = 0 AND supernumerario <> '' " +
-      "UNION SELECT supernumerario FROM justificaciones WHERE pedido = ?1 AND supernumerario <> '')) AS supernumerarios, " +
+      "(SELECT GROUP_CONCAT(nombre, ' - ') FROM (SELECT DISTINCT supernumerario AS nombre FROM registros " +
+      "WHERE numero_pedido = ?1 AND anulado = 0 AND supernumerario <> '' ORDER BY nombre)) AS supernumerarios, " +
       "(SELECT GROUP_CONCAT(nombre, ' - ') FROM (SELECT DISTINCT coordinador AS nombre FROM registros " +
       "WHERE numero_pedido = ?1 AND anulado = 0 AND coordinador <> '' ORDER BY nombre)) AS supervisores, " +
-      "(SELECT GROUP_CONCAT(motivo, ' | ') FROM (SELECT DISTINCT motivo FROM justificaciones " +
+      "(SELECT GROUP_CONCAT(texto, ' | ') FROM (SELECT DISTINCT CASE WHEN supernumerario <> '' " +
+      "THEN supernumerario || ' - ' || motivo ELSE motivo END AS texto FROM justificaciones " +
       "WHERE pedido = ?1 AND motivo <> '')) AS justificacion",
   )
     .bind(pedido)
