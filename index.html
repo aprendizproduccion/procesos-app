@@ -1316,6 +1316,52 @@
             >
             <span class="seguimiento-kpi-label">Eficiencia</span>
           </div>
+          <div
+            id="bloqueSegJustificar"
+            style="
+              display: none;
+              margin-bottom: 18px;
+              padding: 12px;
+              border: 1px solid var(--gv-borde);
+              border-radius: 8px;
+              background: var(--gv-superficie-alt);
+            "
+          >
+            <label style="font-size: 15px">Justificar / Cerrar pedido</label>
+            <p class="hint" style="margin-top: 0">
+              Cierra el pedido completo justificando todo lo que falta. Quedará
+              como "No cumple".
+            </p>
+            <label>Faltante del pedido</label>
+            <div
+              id="segJustFaltante"
+              class="calc-valor-fijo"
+              style="margin-bottom: 14px"
+            >
+              —
+            </div>
+            <label>Justificado por (obligatorio)</label>
+            <input
+              id="segJustPor"
+              placeholder="Quién hace la justificación"
+              autocomplete="off"
+            />
+            <label>Motivo (obligatorio)</label>
+            <textarea
+              id="segJustMotivo"
+              rows="2"
+              placeholder="Ej: material dañado, unidades faltantes, etc."
+            ></textarea>
+            <div id="segJustAlerta"></div>
+            <button
+              type="button"
+              id="btnSegJustificar"
+              class="btn-submit btn-gv-oscuro"
+              onclick="abrirConfirmarSegJustificar()"
+            >
+              Justificar/Cerrar
+            </button>
+          </div>
         </div>
 
         <div style="overflow-x: auto">
@@ -1869,6 +1915,25 @@
         <p id="modalAvisoTexto"></p>
         <div class="row2">
           <button type="button" onclick="cerrarModalAviso()">Entendido</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="modalConfirmarSegJustificar" class="modal-overlay">
+      <div class="modal-box">
+        <h3>¿Cerrar el pedido?</h3>
+        <p id="modalConfirmarSegJustificarTexto"></p>
+        <div class="row2">
+          <button
+            type="button"
+            class="btn-gv-contorno"
+            onclick="cerrarModalConfirmarSegJustificar()"
+          >
+            Cancelar
+          </button>
+          <button type="button" onclick="confirmarSegJustificar()">
+            Sí, cerrar
+          </button>
         </div>
       </div>
     </div>
@@ -3038,12 +3103,15 @@
           }
         });
 
-      function cargarSeguimientoPaquetes() {
+      // pedidoAMostrar: tras cerrar un pedido, la vista vuelve a su detalle
+      // en vez de saltar a la vista general.
+      function cargarSeguimientoPaquetes(pedidoAMostrar) {
         const alertaDiv = document.getElementById("seguimientoAlerta");
         const bodyEl = document.getElementById("seguimientoPaquetesBody");
         alertaDiv.innerHTML = '<p class="hint">Cargando...</p>';
         bodyEl.innerHTML = "";
-        document.getElementById("seguimientoPedidoInput").value = "";
+        document.getElementById("seguimientoPedidoInput").value =
+          pedidoAMostrar || "";
 
         llamarAPI("obtenerSeguimientoPaquetes", {})
           .then(function (res) {
@@ -3060,7 +3128,8 @@
               return;
             }
             alertaDiv.innerHTML = "";
-            mostrarVistaGeneral();
+            if (pedidoAMostrar) filtrarPedidoBuscado();
+            else mostrarVistaGeneral();
           })
           .catch(function (err) {
             alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
@@ -3234,6 +3303,7 @@
         renderGraficaDetallePedido(p);
         renderGaugeEficienciaDetalle(p);
         actualizarKpiEficienciaDetalle(p);
+        prepararBloqueSegJustificar(p);
       }
 
       function filtrarPedidoBuscado() {
@@ -3427,6 +3497,149 @@
           card.classList.add("seguimiento-kpi-bajo");
           valorEl.textContent = p.eficiencia + "%";
         }
+      }
+
+      // ---------------- JUSTIFICAR / CERRAR PEDIDO (Seguimiento) ----------------
+      let segJustConsulta = 0;
+      let segJustPedido = "";
+      let segJustFaltante = 0;
+      let segJustPayloadPendiente = null;
+      let segJustEnCurso = false;
+
+      // Mismo criterio que justificarPedido en el Worker: solo suman los EAN
+      // con faltante. restantePedido no sirve: los EAN con exceso lo restan.
+      function _faltanteJustificable(detalleEanes) {
+        const suma = (detalleEanes || []).reduce(function (s, e) {
+          return e.restantes > 0 ? s + e.restantes : s;
+        }, 0);
+        return Math.round(suma * 100) / 100;
+      }
+
+      function _errorBloqueSegJustificar(mensaje) {
+        document.getElementById("segJustFaltante").textContent = "—";
+        document.getElementById("segJustAlerta").innerHTML =
+          `<div class="msg err">${escapeHtml(mensaje)}</div>`;
+        document.getElementById("btnSegJustificar").disabled = true;
+        document.getElementById("bloqueSegJustificar").style.display = "block";
+      }
+
+      function prepararBloqueSegJustificar(p) {
+        const bloque = document.getElementById("bloqueSegJustificar");
+        const consulta = ++segJustConsulta;
+        segJustPedido = "";
+        segJustFaltante = 0;
+        bloque.style.display = "none";
+        document.getElementById("segJustPor").value = "";
+        document.getElementById("segJustMotivo").value = "";
+        document.getElementById("segJustAlerta").innerHTML = "";
+        document.getElementById("btnSegJustificar").disabled = false;
+        if (p.cerrado || p.sinLimite) return;
+
+        llamarAPI("obtenerResumenPedido", { pedido: p.pedido })
+          .then(function (res) {
+            // El buscador dispara en cada tecla: una respuesta vieja no pinta.
+            if (consulta !== segJustConsulta) return;
+            if (!res.success) {
+              _errorBloqueSegJustificar(
+                res.message || "No se pudo calcular el faltante del pedido.",
+              );
+              return;
+            }
+            const faltante = _faltanteJustificable(res.detalleEanes);
+            if (faltante <= 0) return;
+            segJustPedido = p.pedido;
+            segJustFaltante = faltante;
+            document.getElementById("segJustFaltante").textContent =
+              faltante + " unidades";
+            bloque.style.display = "block";
+          })
+          .catch(function (err) {
+            if (consulta !== segJustConsulta) return;
+            _errorBloqueSegJustificar("Error de conexión: " + err.message);
+          });
+      }
+
+      function abrirConfirmarSegJustificar() {
+        if (segJustEnCurso || !segJustPedido || segJustFaltante <= 0) return;
+        const alerta = document.getElementById("segJustAlerta");
+        alerta.innerHTML = "";
+        const justificadoPor = document
+          .getElementById("segJustPor")
+          .value.trim();
+        const motivo = document.getElementById("segJustMotivo").value.trim();
+        if (!justificadoPor) {
+          alerta.innerHTML =
+            '<div class="msg err">Escribe quién hace la justificación.</div>';
+          return;
+        }
+        if (!motivo) {
+          alerta.innerHTML =
+            '<div class="msg err">Escribe el motivo de la justificación.</div>';
+          return;
+        }
+        segJustPayloadPendiente = {
+          pedido: segJustPedido,
+          motivo: motivo,
+          justificadoPor: justificadoPor,
+          faltanteEsperado: segJustFaltante,
+        };
+        document.getElementById(
+          "modalConfirmarSegJustificarTexto",
+        ).textContent =
+          "Vas a cerrar el pedido " +
+          segJustPedido +
+          " justificando " +
+          segJustFaltante +
+          ' unidades faltantes. Quedará como "No cumple". ¿Confirmas?';
+        document
+          .getElementById("modalConfirmarSegJustificar")
+          .classList.add("visible");
+      }
+
+      function cerrarModalConfirmarSegJustificar() {
+        document
+          .getElementById("modalConfirmarSegJustificar")
+          .classList.remove("visible");
+        segJustPayloadPendiente = null;
+      }
+
+      function confirmarSegJustificar() {
+        const payload = segJustPayloadPendiente;
+        cerrarModalConfirmarSegJustificar();
+        if (!payload || segJustEnCurso) return;
+        segJustEnCurso = true;
+        const alerta = document.getElementById("segJustAlerta");
+        const btn = document.getElementById("btnSegJustificar");
+        const textoOriginal = btn.textContent;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>';
+
+        llamarAPI("justificarPedido", payload)
+          .then(function (res) {
+            if (!res.success) {
+              alerta.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
+              return;
+            }
+            mostrarModalAviso(
+              "Pedido: " +
+                res.pedido +
+                "\nUnidades justificadas: " +
+                res.unidadesJustificadas +
+                "\nEANes cerrados: " +
+                res.eanesCerrados +
+                (res.pedidoCompleto ? "\nEstado: No cumple" : ""),
+              "Pedido cerrado",
+            );
+            cargarSeguimientoPaquetes(res.pedido);
+          })
+          .catch(function (err) {
+            alerta.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
+          })
+          .finally(function () {
+            segJustEnCurso = false;
+            btn.disabled = false;
+            btn.textContent = textoOriginal;
+          });
       }
 
       let buscarRegistrosEditarEnCurso = false;
