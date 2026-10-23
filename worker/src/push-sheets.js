@@ -32,30 +32,6 @@ export async function _pushRegistrosYMarcar(env, ids, filas) {
   }
 }
 
-export async function _pushJustificacionYMarcar(env, id, fila) {
-  try {
-    const res = await fetch(env.APPS_SCRIPT_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({
-        action: "_pushJustificacion",
-        token: env.APPS_SCRIPT_TOKEN,
-        datos: { fila },
-      }),
-    });
-    const body = await res.json();
-    if (!body.success) return;
-
-    await env.DB.prepare(
-      "UPDATE justificaciones SET sincronizado_sheets = 1, sincronizado_en = ? WHERE id = ?",
-    )
-      .bind(new Date().toISOString(), id)
-      .run();
-  } catch (err) {
-    // best-effort
-  }
-}
-
 // Relee la fila completa y fresca de D1 (ya con los cambios de editar/anular/
 // reactivar aplicados), calcula "Última acción" según el estado actual, y
 // sobreescribe la fila entera en Sheets.
