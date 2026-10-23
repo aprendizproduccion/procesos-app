@@ -127,47 +127,6 @@ export const accionesLectura = {
     };
   },
 
-  async obtenerEanesParaJustificar(datos, env) {
-    const pedido = String(datos.pedido || "").trim();
-    const detalle = await _detalleEanesPedido(env, pedido);
-    const eanes = detalle
-      .map((e) => ({
-        ean: e.ean,
-        esperadas: e.esperadas,
-        restanteNeto: e.restanteNeto,
-        estado: e.estado,
-        sinLimite: e.sinLimite,
-      }))
-      .filter((e) => !e.sinLimite);
-    return { success: true, eanes };
-  },
-
-  async obtenerEstadoEanJustificar(datos, env) {
-    const pedido = String(datos.pedido || "").trim();
-    const ean = String(datos.ean || "").trim();
-    const detalle = await _detalleEanesPedido(env, pedido);
-    const match = detalle.find((e) => e.ean === ean);
-    if (!match) {
-      return {
-        success: false,
-        message:
-          "El EAN " +
-          ean +
-          " no existe en el pedido " +
-          pedido +
-          " según Validación eanes.",
-      };
-    }
-    return {
-      success: true,
-      ean: match.ean,
-      esperadas: match.esperadas,
-      restanteNeto: match.restanteNeto,
-      estado: match.estado,
-      sinLimite: match.sinLimite,
-    };
-  },
-
   async obtenerRegistrosParaEditar(datos, env) {
     const pedido = String(datos.pedido || "").trim();
     const operarioTexto = String(datos.operario || "").trim();
