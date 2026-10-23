@@ -437,21 +437,6 @@
         }
       }
 
-      #btnCerrarPedido {
-        width: 100%;
-        padding: 12px;
-        margin-top: 10px;
-        border: none;
-        border-radius: 6px;
-        background: var(--gv-black);
-        color: var(--gv-white);
-        min-height: var(--gv-alto-boton);
-        font-family: inherit;
-        font-size: var(--gv-boton);
-        font-weight: 600;
-        cursor: pointer;
-      }
-
       #contadorPedido {
         text-align: center;
         font-weight: 600;
@@ -483,14 +468,6 @@
       .msg.info {
         background: var(--gv-celeste);
         color: var(--gv-jet);
-      }
-
-      #alertaCantidadJustificar .msg,
-      #alertaCantidadJustificar .hint {
-        font-size: 16px;
-        font-weight: 700;
-        padding: 12px 14px;
-        line-height: 1.35;
       }
 
       .hint {
@@ -689,12 +666,6 @@
 
         .ean-confirmado {
           font-size: 17px;
-          padding: 10px 12px;
-        }
-
-        #alertaCantidadJustificar .msg,
-        #alertaCantidadJustificar .hint {
-          font-size: 14px;
           padding: 10px 12px;
         }
       }
@@ -1661,7 +1632,6 @@
           placeholder="Ej: 1000"
         />
         <div id="alertaCantidad"></div>
-        <button type="button" id="btnCerrarPedido">Justificar/Cerrar</button>
         <div id="contadorPedido" class="hint" style="margin-top: 6px"></div>
       </div>
 
@@ -1957,80 +1927,6 @@
       </div>
     </div>
 
-    <div id="modalConfirmarCierre" class="modal-overlay">
-      <div class="modal-box">
-        <h3 style="color: #166534">¿Confirmar cierre?</h3>
-        <p id="modalConfirmarCierreTexto">
-          Vas a justificar y cerrar este EAN. Esta acción lo marcará como
-          completado.
-        </p>
-        <div class="row2">
-          <button type="button" onclick="confirmarCierreDesdeModal()">
-            Sí, cerrar
-          </button>
-          <button
-            type="button"
-            class="btn-gv-contorno"
-            onclick="cerrarModalConfirmarCierre()"
-          >
-            Cancelar
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div id="modalSinEan" class="modal-overlay">
-      <div class="modal-box">
-        <h3>Falta el número de pedido</h3>
-        <p>Ingresa el número de pedido antes de justificar o cerrar.</p>
-        <div class="row2">
-          <button type="button" onclick="cerrarModalSinEan()">Entendido</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="modalEanInvalido" class="modal-overlay">
-      <div class="modal-box">
-        <h3>EAN no válido para este pedido</h3>
-        <p id="modalEanInvalidoTexto"></p>
-        <div class="row2">
-          <button
-            type="button"
-            style="background: #2452c9; color: #fff"
-            onclick="cerrarModalEanInvalido()"
-          >
-            Entendido
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div id="modalEanesPedido" class="modal-overlay">
-      <div class="modal-box" style="max-width: 480px">
-        <h3 style="color: #2452c9">EANes del pedido</h3>
-        <div style="max-height: 55vh; overflow-y: auto; margin-bottom: 14px">
-          <table>
-            <thead>
-              <tr>
-                <th>EAN</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody id="tbodyEanesPedido"></tbody>
-          </table>
-        </div>
-        <div class="row2">
-          <button
-            type="button"
-            class="btn-gv-contorno"
-            onclick="cerrarModalEanesPedido()"
-          >
-            Volver
-          </button>
-        </div>
-      </div>
-    </div>
-
     <div id="modalEditarRegistro" class="modal-overlay">
       <div class="modal-box" style="max-width: 480px">
         <h3 style="color: #2452c9">Editar registro</h3>
@@ -2301,93 +2197,6 @@
 
       <label style="margin-top: 10px">Tiempo con suplemento</label>
       <div id="calcResultadoConSuplemento" class="calc-valor-fijo">--</div>
-    </div>
-
-    <div id="vistaJustificacion" class="card" style="display: none">
-      <label
-        style="
-          font-size: 15px;
-          border-bottom: 1px solid #eee;
-          padding-bottom: 8px;
-          margin-bottom: 12px;
-        "
-        >Justificar / Cerrar</label
-      >
-      <p class="hint">
-        Escanea o escribe el EAN que quieres cerrar y confirma. Debes justificar
-        exactamente el faltante total de ese EAN (ni más ni menos) para poder
-        marcarlo como completado. El pedido se marca completo automáticamente
-        cuando todos sus EANes quedan cerrados.
-      </p>
-
-      <label>Pedido</label>
-      <input id="justPedido" disabled />
-      <button
-        type="button"
-        id="btnVerEanesPedido"
-        class="btn-submit"
-        style="margin-top: -8px; margin-bottom: 14px"
-        onclick="abrirModalEanesPedido()"
-      >
-        Ver EANes del pedido
-      </button>
-
-      <label>EAN</label>
-
-      <div class="add-row" style="margin-bottom: 14px">
-        <input
-          id="justEanBuscar"
-          placeholder="Apunta el escáner aquí y dispara"
-          autocomplete="off"
-          enterkeyhint="done"
-        />
-        <button type="button" onclick="confirmarEanJustificar()">
-          Confirmar
-        </button>
-      </div>
-
-      <div
-        id="justEanConfirmado"
-        class="ean-confirmado"
-        style="display: none"
-      ></div>
-
-      <div id="justAlertaEan"></div>
-
-      <label>Unidades totales</label>
-      <input id="justTotales" disabled />
-
-      <label>Unidades a justificar</label>
-      <input id="justUnidades" type="number" min="1" placeholder="Ej: 20" />
-      <div id="alertaCantidadJustificar"></div>
-
-      <label>Motivo de la novedad</label>
-      <input
-        id="justMotivo"
-        type="text"
-        placeholder="Ej: material dañado, unidades faltantes, etc."
-      />
-
-      <div id="alertaJustificacion"></div>
-
-      <div class="row2" style="margin-top: 10px">
-        <button
-          type="button"
-          class="btn-submit"
-          id="btnJustificarCerrar"
-          onclick="enviarJustificacion()"
-        >
-          Justificar y cerrar
-        </button>
-      </div>
-      <button
-        type="button"
-        class="btn-submit btn-gv-contorno"
-        style="margin-top: 8px"
-        onclick="cerrarVistaJustificacion()"
-      >
-        Cancelar
-      </button>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
@@ -4253,7 +4062,6 @@
         [
           "vistaPrincipal",
           "vistaOperario",
-          "vistaJustificacion",
           "vistaDashboard",
           "vistaCalculadora",
           "vistaEdicionRegistros",
@@ -4311,7 +4119,6 @@
           "opAlertaUnidades",
           "opResultado",
           "loginError",
-          "justAlertaEan",
         ];
         elementosACancelarText.forEach(
           (id) => (document.getElementById(id).innerHTML = ""),
@@ -4326,7 +4133,6 @@
           "loginPasswordBox",
           "btnLinkProceso",
           "opBtnLinkProceso",
-          "justEanConfirmado",
         ].forEach((id) => (document.getElementById(id).style.display = "none"));
 
         // 5. Valores por defecto específicos
@@ -4380,9 +4186,6 @@
         _pintarHorasOperario();
         localStorage.removeItem("rp_sesion");
         operarios = [];
-        justEanSeleccionado = "";
-        restanteNetoSeleccionado = null;
-        justificacionPendiente = null;
 
         renderChips();
         resetContadorPedido();
@@ -5490,208 +5293,6 @@
           `<div class="msg ${ok ? "ok" : "err"}">${escapeHtml(texto)}</div>`;
       }
 
-      let justEanSeleccionado = "";
-      let restanteNetoSeleccionado = null;
-      let justificacionPendiente = null;
-      let justEanEnvioEnCurso = false;
-
-      function abrirVistaJustificacion(pedido) {
-        document.getElementById("vistaPrincipal").style.display = "none";
-        document.getElementById("vistaJustificacion").style.display = "block";
-        document.getElementById("justPedido").value = pedido;
-        document.getElementById("justEanBuscar").value = "";
-        document.getElementById("justEanConfirmado").style.display = "none";
-        document.getElementById("justAlertaEan").innerHTML = "";
-        document.getElementById("justTotales").value = "";
-        document.getElementById("justUnidades").value = "";
-        document.getElementById("justMotivo").value = "";
-        document.getElementById("alertaJustificacion").innerHTML = "";
-        document.getElementById("alertaCantidadJustificar").innerHTML = "";
-        document.getElementById("btnJustificarCerrar").disabled = true;
-        justEanSeleccionado = "";
-        restanteNetoSeleccionado = null;
-        window.scrollTo(0, 0);
-      }
-
-      let verEanesPedidoEnCurso = false;
-
-      function abrirModalEanesPedido() {
-        const pedido = document.getElementById("justPedido").value.trim();
-        if (!pedido) return;
-        if (verEanesPedidoEnCurso) return; // evita doble tap
-        verEanesPedidoEnCurso = true;
-
-        const btn = document.getElementById("btnVerEanesPedido");
-        const textoOriginal = btn.textContent;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span>';
-
-        llamarAPI("obtenerEanesParaJustificar", { pedido: pedido })
-          .then(function (res) {
-            if (res.success) {
-              renderListaEanesPedido(res.eanes);
-              document
-                .getElementById("modalEanesPedido")
-                .classList.add("visible");
-            } else {
-              document.getElementById("justAlertaEan").innerHTML =
-                `<div class="msg err">${res.message}</div>`;
-            }
-          })
-          .catch(function (err) {
-            document.getElementById("justAlertaEan").innerHTML =
-              `<div class="msg err">Error de conexión: ${err.message}</div>`;
-          })
-          .finally(function () {
-            btn.disabled = false;
-            btn.textContent = textoOriginal;
-            verEanesPedidoEnCurso = false;
-          });
-      }
-
-      function renderListaEanesPedido(eanes) {
-        const tbody = document.getElementById("tbodyEanesPedido");
-        if (!eanes || eanes.length === 0) {
-          tbody.innerHTML =
-            '<tr><td colspan="2">Este pedido no tiene EANes en Validación.</td></tr>';
-          return;
-        }
-        tbody.innerHTML = eanes
-          .map(function (e) {
-            const color = e.estado === "Completado" ? "#166534" : "#92400e";
-            return (
-              `<tr data-ean="${e.ean}" style="cursor:pointer;">` +
-              `<td>${e.ean}</td>` +
-              `<td style="color:${color}; font-weight:600;">${e.estado}</td>` +
-              `</tr>`
-            );
-          })
-          .join("");
-      }
-
-      document
-        .getElementById("tbodyEanesPedido")
-        .addEventListener("click", function (e) {
-          const fila = e.target.closest("tr[data-ean]");
-          if (!fila) return;
-          seleccionarEanDesdeModal(fila.getAttribute("data-ean"));
-        });
-
-      function cerrarModalEanesPedido() {
-        document.getElementById("modalEanesPedido").classList.remove("visible");
-      }
-
-      function seleccionarEanDesdeModal(ean) {
-        cerrarModalEanesPedido();
-        document.getElementById("justEanBuscar").value = ean;
-        confirmarEanJustificar();
-      }
-
-      function confirmarEanJustificar() {
-        const input = document.getElementById("justEanBuscar");
-        const valor = input.value.trim();
-        const pedido = document.getElementById("justPedido").value.trim();
-        const alertaDiv = document.getElementById("justAlertaEan");
-        if (!valor) return;
-        if (justEanEnvioEnCurso) return; // evita doble envío (doble Enter/tap en móvil)
-        if (!pedido) {
-          alertaDiv.innerHTML =
-            '<div class="msg err">Falta el número de pedido.</div>';
-          return;
-        }
-        justEanEnvioEnCurso = true;
-        alertaDiv.innerHTML = '<div class="msg info">Verificando EAN...</div>';
-
-        llamarAPI("obtenerEstadoEanJustificar", { pedido: pedido, ean: valor })
-          .then(function (res) {
-            alertaDiv.innerHTML = "";
-            const alertaCant = document.getElementById(
-              "alertaCantidadJustificar",
-            );
-            const btnJC = document.getElementById("btnJustificarCerrar");
-            document.getElementById("justUnidades").value = "";
-
-            if (!res.success) {
-              justEanSeleccionado = "";
-              restanteNetoSeleccionado = null;
-              document.getElementById("justEanConfirmado").style.display =
-                "none";
-              document.getElementById("justTotales").value = "";
-              alertaCant.innerHTML = "";
-              btnJC.disabled = true;
-              document.getElementById("modalEanInvalidoTexto").textContent =
-                res.message;
-              document
-                .getElementById("modalEanInvalido")
-                .classList.add("visible");
-              return;
-            }
-
-            justEanSeleccionado = res.ean;
-            restanteNetoSeleccionado = res.restanteNeto;
-            document.getElementById("justTotales").value = res.esperadas;
-            input.value = "";
-
-            const confirmado = document.getElementById("justEanConfirmado");
-            confirmado.textContent =
-              "EAN: " + res.ean + " — Estado: " + res.estado;
-            confirmado.style.display = "block";
-
-            if (res.sinLimite) {
-              alertaCant.innerHTML = `<div class="msg err">Este EAN no tiene límite de unidades; no aplica justificación de faltante.</div>`;
-              btnJC.disabled = true;
-            } else if (res.restanteNeto <= 0) {
-              alertaCant.innerHTML = `<div class="msg err">Este EAN ya no tiene faltante pendiente por justificar. Estado actual: ${res.estado}.</div>`;
-              btnJC.disabled = true;
-            } else {
-              alertaCant.innerHTML = `<div class="hint" style="margin-top:0;">Debes justificar exactamente ${res.restanteNeto} unidades (el faltante total) para cerrar este EAN. Estado actual: ${res.estado}.</div>`;
-              btnJC.disabled = false;
-            }
-          })
-          .catch(function (err) {
-            alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${err.message}</div>`;
-          })
-          .finally(function () {
-            justEanEnvioEnCurso = false;
-          });
-      }
-
-      const justEanBuscarInput = document.getElementById("justEanBuscar");
-
-      justEanBuscarInput.addEventListener("keydown", function (e) {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          confirmarEanJustificar();
-        }
-      });
-
-      justEanBuscarInput.addEventListener("search", confirmarEanJustificar);
-
-      document
-        .getElementById("justUnidades")
-        .addEventListener("input", function () {
-          const alertaDiv = document.getElementById("alertaCantidadJustificar");
-          const btnJC = document.getElementById("btnJustificarCerrar");
-          if (
-            restanteNetoSeleccionado === null ||
-            restanteNetoSeleccionado <= 0
-          )
-            return;
-          if (this.value === "") {
-            alertaDiv.innerHTML = `<div class="hint" style="margin-top:0;">Debes justificar exactamente ${restanteNetoSeleccionado} unidades (el faltante total) para cerrar este EAN.</div>`;
-            btnJC.disabled = false;
-            return;
-          }
-          const val = Number(this.value);
-          if (val !== restanteNetoSeleccionado) {
-            alertaDiv.innerHTML = `<div class="msg err">Debes justificar exactamente ${restanteNetoSeleccionado} unidades, ni más ni menos, para cerrar este EAN.</div>`;
-            btnJC.disabled = true;
-          } else {
-            alertaDiv.innerHTML = `<div class="msg ok">Cantidad exacta. Puedes cerrar este EAN.</div>`;
-            btnJC.disabled = false;
-          }
-        });
-
       function mostrarModalAviso(texto, titulo) {
         document.getElementById("modalAvisoTitulo").textContent =
           titulo || "Aviso";
@@ -5702,133 +5303,6 @@
       function cerrarModalAviso() {
         document.getElementById("modalAviso").classList.remove("visible");
       }
-
-      function cerrarModalSinEan() {
-        document.getElementById("modalSinEan").classList.remove("visible");
-      }
-
-      function cerrarModalEanInvalido() {
-        document.getElementById("modalEanInvalido").classList.remove("visible");
-      }
-
-      function cerrarVistaJustificacion() {
-        document.getElementById("vistaJustificacion").style.display = "none";
-        document.getElementById("vistaPrincipal").style.display = "block";
-      }
-
-      function enviarJustificacion() {
-        const pedido = document.getElementById("justPedido").value;
-        const ean = justEanSeleccionado;
-        const unidades = Number(document.getElementById("justUnidades").value);
-        const motivo = document.getElementById("justMotivo").value.trim();
-        const supernumerario = document
-          .getElementById("supernumerario")
-          .value.trim();
-        const alertaDiv = document.getElementById("alertaJustificacion");
-
-        if (!ean) {
-          alertaDiv.innerHTML =
-            '<div class="msg err">Confirma un EAN primero.</div>';
-          return;
-        }
-        if (
-          restanteNetoSeleccionado === null ||
-          restanteNetoSeleccionado <= 0
-        ) {
-          alertaDiv.innerHTML =
-            '<div class="msg err">Este EAN ya no tiene faltante pendiente por justificar.</div>';
-          return;
-        }
-        if (!Number.isFinite(unidades) || unidades <= 0) {
-          alertaDiv.innerHTML =
-            '<div class="msg err">Ingresa las unidades a justificar.</div>';
-          return;
-        }
-        if (unidades !== restanteNetoSeleccionado) {
-          alertaDiv.innerHTML = `<div class="msg err">Debes justificar exactamente ${restanteNetoSeleccionado} unidades (el faltante total de este EAN) para cerrarlo.</div>`;
-          return;
-        }
-        if (!motivo) {
-          alertaDiv.innerHTML =
-            '<div class="msg err">Escribe el motivo de la novedad.</div>';
-          return;
-        }
-        if (!supernumerario) {
-          alertaDiv.innerHTML =
-            '<div class="msg err">Falta seleccionar el supernumerario en el formulario principal.</div>';
-          return;
-        }
-
-        const payload = {
-          pedido: pedido,
-          ean: ean,
-          unidadesAJustificar: unidades,
-          motivo: motivo,
-          supernumerario: supernumerario,
-        };
-
-        justificacionPendiente = payload;
-        document.getElementById("modalConfirmarCierreTexto").textContent =
-          `Vas a justificar ${unidades} unidades del EAN ${ean} (faltante total) y marcarlo como completado. ¿Confirmas?`;
-        document
-          .getElementById("modalConfirmarCierre")
-          .classList.add("visible");
-      }
-
-      function confirmarCierreDesdeModal() {
-        cerrarModalConfirmarCierre();
-        if (justificacionPendiente) {
-          _enviarJustificacionAlServidor(justificacionPendiente);
-          justificacionPendiente = null;
-        }
-      }
-
-      function cerrarModalConfirmarCierre() {
-        document
-          .getElementById("modalConfirmarCierre")
-          .classList.remove("visible");
-      }
-
-      function _enviarJustificacionAlServidor(payload) {
-        const alertaDiv = document.getElementById("alertaJustificacion");
-        const btnJC = document.getElementById("btnJustificarCerrar");
-        btnJC.disabled = true;
-        const textoJC = btnJC.textContent;
-        btnJC.textContent = "Enviando...";
-
-        llamarAPI("guardarJustificacion", payload)
-          .then(function (res) {
-            btnJC.disabled = false;
-            btnJC.textContent = textoJC;
-            if (res.success) {
-              const mensaje = res.pedidoCompleto
-                ? "Justificación guardada y pedido completado."
-                : "Justificación guardada y EAN cerrado.";
-              mostrarModalAviso(mensaje, "Justificación guardada");
-              abrirVistaJustificacion(payload.pedido);
-            } else {
-              alertaDiv.innerHTML = `<div class="msg err">Error: ${res.message}</div>`;
-            }
-          })
-          .catch(function (err) {
-            btnJC.disabled = false;
-            btnJC.textContent = textoJC;
-            alertaDiv.innerHTML = `<div class="msg err">Error de conexión: ${err.message}</div>`;
-          });
-      }
-
-      document
-        .getElementById("btnCerrarPedido")
-        .addEventListener("click", function () {
-          const pedidoActual = pedidoCanonico(
-            document.getElementById("pedido").value,
-          );
-          if (!pedidoActual) {
-            document.getElementById("modalSinEan").classList.add("visible");
-            return;
-          }
-          abrirVistaJustificacion(pedidoActual);
-        });
 
       let opNombreOperario = "";
       let opCedulaConfirmada = "";
