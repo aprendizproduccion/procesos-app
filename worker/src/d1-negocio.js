@@ -1,5 +1,5 @@
 // Helpers de negocio compartidos por las acciones de escritura (submitRegistro,
-// submitRegistroOperario, guardarJustificacion). Traducción fiel de code.js.
+// submitRegistroOperario, justificarPedido). Traducción fiel de code.js.
 
 const TTL_EN_PROCESO_SEG = 120;
 const TTL_IDEMPOTENCIA_SEG = 21600; // 6 horas — igual al tope que ya usaba CacheService
@@ -286,10 +286,10 @@ export async function _pedidoEstaCompleto(env, pedido) {
 }
 
 // Complementa _pedidoEstaCompleto: además de poder CERRAR un pedido (lo que ya
-// hacían submitRegistro/submitRegistroOperario/guardarJustificacion de forma
-// inline), esta función también puede REABRIRLO si una edición o anulación hizo
-// que ya no esté completo. Se usa solo desde edición/anulación de registros —
-// los tres flujos de envío normales siguen con su bloque inline, sin cambios.
+// hacen submitRegistro/submitRegistroOperario de forma inline), esta función
+// también puede REABRIRLO si una edición o anulación hizo que ya no esté
+// completo. La usan edición/anulación/reactivación de registros y
+// justificarPedido; los dos flujos de envío siguen con su bloque inline.
 export async function _sincronizarEstadoPedido(env, pedido) {
   const completo = await _pedidoEstaCompleto(env, pedido);
   const ahora = _ahoraISO();
@@ -490,21 +490,11 @@ export async function _revertirReserva(
     .run();
 }
 
-// Revierte un cierre de EAN ya aplicado, para cuando el INSERT de la
-// justificación falla DESPUÉS de que el cierre ya comprometió cambios en D1.
-export async function _revertirCierre(env, pedido, ean) {
-  await env.DB.prepare(
-    "UPDATE validacion_eanes SET estado = 'En proceso', actualizado_en = ? WHERE numero_pedido = ? AND ean_producto = ?",
-  )
-    .bind(_ahoraISO(), pedido, ean)
-    .run();
-}
-
 // Reconstruye el contador de validacion_eanes desde la fuente real (registros +
 // justificaciones) en una sola sentencia atómica, en vez de sumar/restar un
 // delta a mano. Excluye registros anulados. Se usa SOLO desde edición/anulación
-// de registros — submitRegistro, submitRegistroOperario y guardarJustificacion
-// NO se tocan ni usan esta función; su reserva atómica sigue exactamente igual.
+// de registros — submitRegistro y submitRegistroOperario NO usan esta función;
+// su reserva atómica sigue exactamente igual.
 export async function _recalcularContadorValidacion(env, pedido, ean) {
   const ahora = _ahoraISO();
   await env.DB.prepare(
