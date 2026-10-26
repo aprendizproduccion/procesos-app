@@ -4177,6 +4177,8 @@
             "";
         unidadesEsperadas = unidadesRestantes = rolActual = null;
         opHoraInicioCadena = "";
+        opHoraCaptura = "";
+        opHoraCapturaEn = 0;
         opIdEnvioActual = null;
         _limpiarIdEnvio();
         opPayloadPendiente = null;
@@ -5320,6 +5322,12 @@
       // decide si se muestra el modal de confirmación, no si se rechaza.
       const DURACION_CORTA_MIN = 5;
       let opHoraInicioCadena = "";
+      // Hora fin congelada: la da el servidor al confirmar la cédula y no
+      // avanza mientras el operario digita. opHoraCapturaEn mide la vigencia
+      // con Date.now(), que no depende de que el reloj del equipo esté en hora.
+      const VIGENCIA_CAPTURA_MIN = 30;
+      let opHoraCaptura = "";
+      let opHoraCapturaEn = 0;
       let opRelojHoraFin = null;
       let opIdEnvioActual = null;
       let opPayloadPendiente = null;
@@ -5381,9 +5389,11 @@
           return "No se pudo calcular tu hora de inicio. Vuelve a confirmar tu cédula.";
         if (bruta >= -DESFASE_RELOJ_MAX_MIN)
           return (
-            "La hora de este dispositivo va atrasada respecto a tu hora de inicio (" +
+            "Tu hora fin (" +
+            opHoraCaptura +
+            ") quedó antes de tu hora de inicio (" +
             opHoraInicioCadena +
-            "). Espera un momento y vuelve a intentar; si sigue igual, avisa a tu supernumerario."
+            "). Vuelve a confirmar tu cédula para tomar la hora de nuevo."
           );
         return (
           "Tu hora de inicio quedó en " +
@@ -5412,7 +5422,7 @@
 
       function _duracionPrevistaOperario() {
         const ini = _minutosDeHHMM(opHoraInicioCadena);
-        const fin = _minutosDeHHMM(_horaBogotaAhora());
+        const fin = _minutosDeHHMM(opHoraCaptura);
         if (!Number.isFinite(ini) || !Number.isFinite(fin)) return null;
         return fin - ini;
       }
@@ -5420,27 +5430,32 @@
       function _pintarHorasOperario() {
         document.getElementById("opHoraInicio").textContent =
           opHoraInicioCadena || "—";
-        document.getElementById("opHoraFin").textContent = opHoraInicioCadena
-          ? _horaBogotaAhora()
-          : "—";
+        document.getElementById("opHoraFin").textContent = opHoraCaptura || "—";
         _validarHorasOperario();
       }
 
-      // Con 15 s el aviso de "espera al minuto" seguía en pantalla hasta 15 s
-      // después de que ya se podía enviar. Ahora se mira seguido, pero solo se
-      // repinta cuando el minuto realmente cambió.
-      let opUltimoMinutoPintado = "";
+      // La hora fin ya no avanza: el reloj solo vigila la vigencia de la
+      // captura y repinta cuando pasa de vigente a vencida.
+      let opCapturaVencidaPintada = false;
+
+      function _capturaVencida() {
+        return (
+          !!opHoraCaptura &&
+          VIGENCIA_CAPTURA_MIN > 0 &&
+          Date.now() - opHoraCapturaEn > VIGENCIA_CAPTURA_MIN * 60 * 1000
+        );
+      }
 
       function _tickRelojHoraFin() {
-        const ahora = _horaBogotaAhora();
-        if (ahora === opUltimoMinutoPintado) return;
-        opUltimoMinutoPintado = ahora;
+        const vencida = _capturaVencida();
+        if (vencida === opCapturaVencidaPintada) return;
+        opCapturaVencidaPintada = vencida;
         _pintarHorasOperario();
       }
 
       function _iniciarRelojHoraFin() {
         _detenerRelojHoraFin();
-        opUltimoMinutoPintado = _horaBogotaAhora();
+        opCapturaVencidaPintada = _capturaVencida();
         _pintarHorasOperario();
         opRelojHoraFin = setInterval(_tickRelojHoraFin, 3000);
       }
@@ -5474,6 +5489,20 @@
           btn.disabled = false;
           return;
         }
+        if (!opHoraCaptura) {
+          alerta.innerHTML =
+            '<div class="msg info">Al terminar el trabajo, toca Confirmar en tu cédula para tomar la hora fin.</div>';
+          btn.disabled = true;
+          return;
+        }
+        if (_capturaVencida()) {
+          alerta.innerHTML =
+            '<div class="msg warn">Pasaron más de ' +
+            VIGENCIA_CAPTURA_MIN +
+            " minutos desde que confirmaste tu cédula. Vuelve a confirmarla para tomar la hora fin.</div>";
+          btn.disabled = true;
+          return;
+        }
         const bruta = _duracionPrevistaOperario();
         const suplemento =
           Number(document.getElementById("opSuplementoMin").value) || 0;
@@ -5494,7 +5523,7 @@
           // Sale también justo después de un envío correcto: es una espera
           // normal de menos de un minuto, no un error.
           alerta.innerHTML =
-            '<div class="msg warn">Espera a que cambie el minuto para enviar el siguiente registro.</div>';
+            '<div class="msg warn">Tu hora fin quedó igual a tu hora de inicio. Espera a que cambie el minuto y vuelve a confirmar tu cédula.</div>';
           btn.disabled = true;
         } else if (suplemento > bruta) {
           alerta.innerHTML = `<div class="msg err">El suplemento (${suplemento} min) no puede ser mayor al tiempo trabajado (${bruta} min).</div>`;
@@ -5528,6 +5557,10 @@
                 : '<div class="msg warn">No tienes turno configurado: tu hora de inicio arranca en 06:00. Avisa a tu supernumerario.</div>';
               document.getElementById("opFecha").valueAsDate = new Date();
               opHoraInicioCadena = res.horaInicioPrevista || "";
+              // Hora fin congelada en el momento de confirmar. El respaldo con
+              // la hora local solo cubre un Worker sin desplegar todavía.
+              opHoraCaptura = res.horaCaptura || _horaBogotaAhora();
+              opHoraCapturaEn = Date.now();
               // Tras una recarga, el reintento debe llevar la MISMA huella; si
               // se genera un idEnvio nuevo, D1 lo toma como registro distinto
               // y lo duplica en vez de devolver la respuesta guardada.
@@ -5537,6 +5570,8 @@
               opNombreOperario = "";
               opCedulaConfirmada = "";
               opHoraInicioCadena = "";
+              opHoraCaptura = "";
+              opHoraCapturaEn = 0;
               _detenerRelojHoraFin();
               _pintarHorasOperario();
               document.getElementById("opNombreConfirmado").style.display =
@@ -5688,6 +5723,18 @@
             "No se pudo calcular tu hora de inicio. Vuelve a confirmar tu cédula.",
             false,
           );
+        if (!opHoraCaptura)
+          return mostrarMsgOperario(
+            "Toca Confirmar en tu cédula para tomar la hora fin.",
+            false,
+          );
+        if (_capturaVencida())
+          return mostrarMsgOperario(
+            "Pasaron más de " +
+              VIGENCIA_CAPTURA_MIN +
+              " minutos desde que confirmaste tu cédula. Vuelve a confirmarla.",
+            false,
+          );
         const opCodSobrantesResult =
           obtenerCodigosSobrantesValidados("opCodigosSobrantes");
         if (!opCodSobrantesResult.ok)
@@ -5706,7 +5753,7 @@
           return mostrarMsgOperario(_mensajeHorasInvalidas(bruta), false);
         if (bruta === 0)
           return mostrarMsgOperario(
-            "Ya enviaste un registro en este minuto. Espera a que cambie el minuto para enviar el siguiente.",
+            "Tu hora fin quedó igual a tu hora de inicio. Espera a que cambie el minuto y vuelve a confirmar tu cédula.",
             false,
           );
         if (suplemento > bruta)
@@ -5732,6 +5779,7 @@
 
         const payload = {
           idEnvio: opIdEnvioActual,
+          horaCaptura: opHoraCaptura,
           cedula: opCedulaConfirmada,
           coordinador: document.getElementById("opCoordinador").value.trim(),
           supernumerario: document
@@ -5779,7 +5827,7 @@
             " minutos (" +
             opHoraInicioCadena +
             " a " +
-            _horaBogotaAhora() +
+            opHoraCaptura +
             ").";
           document.getElementById("modalTiempoCorto").classList.add("visible");
           return;
@@ -5817,6 +5865,10 @@
               opIdEnvioActual = null;
               _limpiarIdEnvio();
               if (res.horaFin) opHoraInicioCadena = res.horaFin;
+              // La captura se gasta con el envío: el siguiente registro toma su
+              // hora fin al volver a tocar Confirmar en la cédula.
+              opHoraCaptura = "";
+              opHoraCapturaEn = 0;
               mostrarMsgOperario("Registro guardado correctamente", true);
               mostrarModalAviso(
                 "Pedido: " +
