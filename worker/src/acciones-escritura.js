@@ -329,8 +329,13 @@ export const accionesEscritura = {
     // legítimos iguales. Al salir de ahí, la huella necesita otro
     // diferenciador: el idEnvio del formulario, con la hora como respaldo
     // para un navegador con caché vieja.
+    // horaCaptura fuera de la huella: si un envío llegó a D1 pero la respuesta
+    // se perdió y el operario reconfirma la cédula, el reintento lleva otra
+    // captura con el mismo idEnvio y debe devolver la respuesta guardada, no
+    // crear un segundo registro.
     const huella = await _huellaPayload("submitRegistroOperario", {
       ...payload,
+      horaCaptura: undefined,
       _nonce: payload.idEnvio || hora,
     });
     const chequeo = await _chequearIdempotencia(env, huella);
@@ -408,16 +413,21 @@ export const accionesEscritura = {
       );
       const tasaEstandar = procesoValidado.unidadesHora;
       const suplementoMin = Number(payload.suplementoMin) || 0;
-      // El servidor fija las horas: payload.horaInicio y payload.horaFin se
-      // ignoran aunque lleguen. "fecha" y "hora" vienen del inicio de la acción.
-      const horaFin = hora;
+      // La hora fin es la que dio el servidor al confirmar la cédula
+      // (payload.horaCaptura): lo que el operario tarda digitando no cuenta.
+      // payload.horaInicio y payload.horaFin se siguen ignorando. Sin captura
+      // válida (navegador con caché vieja) se usa la hora actual, como antes.
+      const horaCaptura = String(payload.horaCaptura || "").trim();
+      const horaFin = /^([01]\d|2[0-3]):[0-5]\d$/.test(horaCaptura)
+        ? horaCaptura
+        : hora;
       const { inicio: horaInicio, turnoConfigurado } = await _inicioCadena(
         env,
         operarioMatch.cedula,
         fecha,
       );
 
-      if (hora > HORA_LIMITE_ENVIO) {
+      if (horaFin > HORA_LIMITE_ENVIO) {
         throw new Error(
           "Fuera del horario de registro (el límite para enviar es las " +
             HORA_LIMITE_ENVIO +
@@ -426,22 +436,22 @@ export const accionesEscritura = {
       }
       // La cadena puede venir adelantada por un registro del administrador con
       // la hora fin mal digitada: el mensaje tiene que decir qué hacer.
-      if (hora < horaInicio) {
+      if (horaFin < horaInicio) {
         throw new Error(
-          "Tu hora de inicio quedó en " +
+          "Tu hora fin (" +
+            horaFin +
+            ") quedó antes de tu hora de inicio (" +
             horaInicio +
-            ", posterior a la hora actual (" +
-            hora +
-            "). Pide a tu supernumerario que corrija tu último registro del día en Editar registros.",
+            "). Vuelve a confirmar tu cédula; si sigue igual, pide a tu supernumerario que corrija tu último registro del día en Editar registros.",
         );
       }
       // Mensaje propio: con horas encadenadas esto lo dispara un operario
       // haciendo lo correcto, no una captura invertida.
-      if (hora === horaInicio) {
+      if (horaFin === horaInicio) {
         throw new Error(
-          "Ya enviaste un registro en este minuto (" +
+          "Tu hora fin quedó igual a tu hora de inicio (" +
             horaInicio +
-            "). Espera a que cambie el minuto y vuelve a enviar.",
+            "). Espera a que cambie el minuto y vuelve a confirmar tu cédula.",
         );
       }
       // Sin piso de duración: con horas encadenadas el operario no elige la
