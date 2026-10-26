@@ -1879,9 +1879,7 @@
 
     <div id="modalAviso" class="modal-overlay">
       <div class="modal-box">
-        <h3 style="color: #166534" id="modalAvisoTitulo">
-          Aviso
-        </h3>
+        <h3 style="color: #166534" id="modalAvisoTitulo">Aviso</h3>
         <p id="modalAvisoTexto"></p>
         <div class="row2">
           <button type="button" onclick="cerrarModalAviso()">Entendido</button>
@@ -5146,7 +5144,9 @@
 
         const unidadesPorOperario = Math.round((total / n) * 100) / 100;
         const durHoras = durationMinutos() / 60;
-        const esperado = durHoras > 0 ? (tasaActual() / n) * durHoras : 0;
+        // El estándar del proceso es por persona: cada operario debe sacar
+        // la tasa completa, igual que en submitRegistro del Worker.
+        const esperado = durHoras > 0 ? tasaActual() * durHoras : 0;
         const ritmoReal =
           durHoras > 0
             ? Math.round((unidadesPorOperario / durHoras) * 100) / 100
