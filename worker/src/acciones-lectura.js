@@ -44,7 +44,7 @@ export const accionesLectura = {
     const cedula = String(datos.cedula || "").trim();
     if (!cedula) return { success: false, message: "Falta la cédula." };
 
-    const { fecha } = _ahoraBogota();
+    const { fecha, hora } = _ahoraBogota();
     const row = await env.DB.prepare(
       "SELECT o.nombre_operario AS nombre, o.equipo, o.turno, " +
         "(SELECT MAX(hora_final) FROM registros " +
@@ -61,7 +61,8 @@ export const accionesLectura = {
       };
     }
 
-    // Solo vista previa: la hora real la vuelve a fijar el servidor al enviar.
+    // horaInicioPrevista es vista previa (el servidor la recalcula al enviar);
+    // horaCaptura es la hora fin que se congela al confirmar la cédula.
     const ultimoFin = String(row.ultimoFin || "").trim();
     const turno = String(row.turno || "").trim();
     return {
@@ -70,6 +71,7 @@ export const accionesLectura = {
       equipo: row.equipo,
       horaInicioPrevista: ultimoFin || turno || TURNO_POR_DEFECTO,
       turnoConfigurado: Boolean(ultimoFin || turno),
+      horaCaptura: hora,
     };
   },
 
