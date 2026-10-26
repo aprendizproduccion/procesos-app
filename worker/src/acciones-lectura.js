@@ -176,8 +176,8 @@ export const accionesLectura = {
       binds.push(eanA, eanB);
     }
     if (operarioTexto) {
-      sql += " AND " + _sqlSinTildes("operario") + " LIKE ?";
-      binds.push("%" + _normalizarTexto(operarioTexto) + "%");
+      sql += " AND " + _sqlContiene("operario");
+      binds.push(_normalizarTexto(operarioTexto));
     }
     if (fecha) {
       sql += " AND fecha = ?";
@@ -192,8 +192,8 @@ export const accionesLectura = {
       binds.push(supernumerario);
     }
     if (proceso) {
-      sql += " AND " + _sqlSinTildes("proceso") + " LIKE ?";
-      binds.push("%" + _normalizarTexto(proceso) + "%");
+      sql += " AND " + _sqlContiene("proceso");
+      binds.push(_normalizarTexto(proceso));
     }
     sql += " ORDER BY fecha DESC, hora_inicio ASC, id DESC";
     if (!pedido) sql += " LIMIT 100";
@@ -326,8 +326,8 @@ export const accionesLectura = {
     // Pedido y proceso los usan las dos vistas; el resto es solo administrador.
     const proceso = String(datos.proceso || "").trim();
     if (proceso) {
-      sql += " AND " + _sqlSinTildes("proceso") + " LIKE ?";
-      binds.push("%" + _normalizarTexto(proceso) + "%");
+      sql += " AND " + _sqlContiene("proceso");
+      binds.push(_normalizarTexto(proceso));
     }
 
     // Filtros exclusivos de la vista administrador.
@@ -344,13 +344,13 @@ export const accionesLectura = {
       }
       const operario = String(datos.operario || "").trim();
       if (operario) {
-        sql += " AND " + _sqlSinTildes("operario") + " LIKE ?";
-        binds.push("%" + _normalizarTexto(operario) + "%");
+        sql += " AND " + _sqlContiene("operario");
+        binds.push(_normalizarTexto(operario));
       }
       const cliente = String(datos.cliente || "").trim();
       if (cliente) {
-        sql += " AND " + _sqlSinTildes("cliente") + " LIKE ?";
-        binds.push("%" + _normalizarTexto(cliente) + "%");
+        sql += " AND " + _sqlContiene("cliente");
+        binds.push(_normalizarTexto(cliente));
       }
       // Las dos formas del EAN: el preamble UPC-A del escáner Zebra antepone
       // un "0", y en D1 puede estar guardada cualquiera de las dos.
@@ -449,4 +449,11 @@ function _sqlSinTildes(columna) {
     expr = `REPLACE(${expr}, '${conTilde}', '${sinTilde}')`;
   }
   return `LOWER(${expr})`;
+}
+
+// D1 limita los patrones LIKE a 50 bytes: un nombre de proceso largo con
+// los dos "%" lo supera y la consulta falla. instr() no tiene ese tope y
+// tampoco interpreta "%" ni "_" dentro del texto buscado.
+function _sqlContiene(columna) {
+  return "instr(" + _sqlSinTildes(columna) + ", ?) > 0";
 }
