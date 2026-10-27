@@ -3175,6 +3175,14 @@
           : "Sin límite";
       }
 
+      // Unidades con decimales (reparto entre operarios): máximo 2 en pantalla.
+      // Solo presentación: los cálculos y D1 siguen con el valor completo.
+      function _fmtUnidades(n) {
+        if (n === null || n === undefined || n === "") return "—";
+        const num = Number(n);
+        return Number.isFinite(num) ? String(Math.round(num * 100) / 100) : "—";
+      }
+
       function renderFilasPaquetes(lista) {
         document.getElementById("seguimientoPaquetesBody").innerHTML = lista
           .map(function (p) {
@@ -3185,8 +3193,8 @@
               `<td>${escapeHtml(p.subLinea)}</td>` +
               `<td>${escapeHtml(p.estado)}</td>` +
               `<td>${textoTotalPaquete(p)}</td>` +
-              `<td>${p.unidadesProcesadas}</td>` +
-              `<td>${p.unidadesPendientes !== null ? p.unidadesPendientes : "—"}</td>` +
+              `<td>${_fmtUnidades(p.unidadesProcesadas)}</td>` +
+              `<td>${_fmtUnidades(p.unidadesPendientes)}</td>` +
               `<td>${p.horasTotales !== null ? p.horasTotales : "—"}</td>` +
               `<td>${p.eficiencia !== null ? p.eficiencia + "%" : "—"}</td>` +
               `</tr>`
@@ -3281,8 +3289,8 @@
             `<td>${escapeHtml(e.estado)}</td>` +
             `<td style="white-space:nowrap">${escapeHtml(e.ean)}</td>` +
             `<td>${e.sinLimite ? "Sin límite" : e.unidadesTotales}</td>` +
-            `<td>${e.unidadesProcesadas}</td>` +
-            `<td>${e.unidadesPendientes !== null ? e.unidadesPendientes : "—"}</td>` +
+            `<td>${_fmtUnidades(e.unidadesProcesadas)}</td>` +
+            `<td>${_fmtUnidades(e.unidadesPendientes)}</td>` +
             `<td>${e.horasTotales !== null ? e.horasTotales : "—"}</td>` +
             `<td>${e.eficiencia !== null ? e.eficiencia + "%" : "—"}</td>` +
             `</tr>`
@@ -3299,8 +3307,8 @@
             `<td>${escapeHtml(p.estado)}</td>` +
             `<td>—</td>` +
             `<td>${textoTotalPaquete(p)}</td>` +
-            `<td>${p.unidadesProcesadas}</td>` +
-            `<td>${p.unidadesPendientes !== null ? p.unidadesPendientes : "—"}</td>` +
+            `<td>${_fmtUnidades(p.unidadesProcesadas)}</td>` +
+            `<td>${_fmtUnidades(p.unidadesPendientes)}</td>` +
             `<td>${p.horasTotales !== null ? p.horasTotales : "—"}</td>` +
             `<td>${p.eficiencia !== null ? p.eficiencia + "%" : "—"}</td>` +
             `</tr>`,
@@ -3508,7 +3516,8 @@
               legend: { position: "bottom" },
               tooltip: {
                 callbacks: {
-                  label: (ctx) => `${ctx.dataset.label}: ${ctx.raw} uds`,
+                  label: (ctx) =>
+                    `${ctx.dataset.label}: ${_fmtUnidades(ctx.raw)} uds`,
                 },
               },
             },
