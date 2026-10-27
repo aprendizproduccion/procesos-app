@@ -1510,7 +1510,7 @@
                 ></div>
               </div>
             </div>
-            <div>
+            <div id="ctFiltroWrap">
               <label>Mostrar</label>
               <select id="ctFiltro" onchange="cambiarFiltroControlTiempos()">
                 <option value="fecha">Por fecha</option>
@@ -1549,12 +1549,19 @@
               </div>
               <div>
                 <label>Cliente</label>
-                <input
-                  id="ctClienteInput"
-                  placeholder="Ej: Falabella"
-                  autocomplete="off"
-                  enterkeyhint="search"
-                />
+                <div class="campo-sugerencias">
+                  <input
+                    id="ctClienteInput"
+                    placeholder="Ej: Falabella"
+                    autocomplete="off"
+                    enterkeyhint="search"
+                  />
+                  <div
+                    id="sugCtCliente"
+                    class="lista-sugerencias"
+                    role="listbox"
+                  ></div>
+                </div>
               </div>
               <div>
                 <label>EAN</label>
@@ -2596,6 +2603,10 @@
         document.getElementById("ctFiltrosAdmin").style.display = esAdmin
           ? "contents"
           : "none";
+        // Histórico (últimos 100) solo para el operario.
+        document.getElementById("ctFiltroWrap").style.display = esAdmin
+          ? "none"
+          : "";
 
         const campoCedula = document.getElementById("ctCedulaInput");
         campoCedula.value = "";
@@ -2614,6 +2625,7 @@
         });
 
         if (esAdmin) {
+          cargarClientesCT();
           _poblarSelectFiltroCT("ctCoordinador", "coordinador", "Todos");
           _poblarSelectFiltroCT("ctSupernumerario", "supernumerario", "Todos");
         }
@@ -2901,7 +2913,9 @@
           bodyEl.innerHTML = "";
           return;
         }
-        const filtro = document.getElementById("ctFiltro").value;
+        const filtro = esAdmin
+          ? "fecha"
+          : document.getElementById("ctFiltro").value;
         const fecha = document.getElementById("ctFecha").value;
         if (filtro === "fecha") {
           if (!fecha) {
@@ -2948,8 +2962,9 @@
                 ? `<p class="hint">${registros.length} registros.</p>`
                 : "";
             } else if (filtro === "fecha") {
-              alertaDiv.innerHTML =
-                '<p class="hint">No hay registros con esos filtros en esa fecha. Prueba cambiando "Mostrar" a Histórico dentro de Filtros.</p>';
+              alertaDiv.innerHTML = esAdmin
+                ? '<p class="hint">No hay registros con esos filtros en esa fecha.</p>'
+                : '<p class="hint">No hay registros con esos filtros en esa fecha. Prueba cambiando "Mostrar" a Histórico dentro de Filtros.</p>';
             } else {
               alertaDiv.innerHTML =
                 '<p class="hint">No hay registros con esos filtros.</p>';
@@ -4428,6 +4443,34 @@
       let operarios = [];
       let catalogoOperarios = [];
       let listaOperariosSugerencias = []; // [{ valor, clave }] para "Agregar Individual"
+
+      // Clientes para el filtro de Control tiempos (admin). Se piden una vez
+      // por sesión al abrir la vista: no entran en refrescarCatalogos.
+      let listaClientesSugerencias = [];
+      let clientesCTCargados = false;
+
+      function cargarClientesCT() {
+        if (clientesCTCargados) return;
+        clientesCTCargados = true;
+        llamarAPI("getClientes", {})
+          .then(function (resp) {
+            if (!resp.success) throw new Error(resp.message);
+            const vistos = new Set();
+            listaClientesSugerencias = [];
+            (resp.data || []).forEach(function (c) {
+              const nombre = String(c || "").trim();
+              const clave = normalizarPedido(nombre);
+              if (!nombre || vistos.has(clave)) return;
+              vistos.add(clave);
+              listaClientesSugerencias.push({ valor: nombre, clave: clave });
+            });
+          })
+          .catch(function (err) {
+            // Se reintenta la próxima vez que se abra la vista.
+            clientesCTCargados = false;
+            console.error("Error cargando clientes:", err.message);
+          });
+      }
       let datosSupervisores = { coordinadores: [], supernumerarios: [] };
       let unidadesEsperadas = null;
       let unidadesRestantes = null;
@@ -4582,6 +4625,12 @@
         "sugCtOperario",
         null,
         () => listaOperariosSugerencias,
+      );
+      activarSugerenciasPedido(
+        "ctClienteInput",
+        "sugCtCliente",
+        null,
+        () => listaClientesSugerencias,
       );
       document
         .getElementById("operarioInput")
