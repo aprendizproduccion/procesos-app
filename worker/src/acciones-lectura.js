@@ -294,6 +294,92 @@ export const accionesLectura = {
     return { success: true, paquetes };
   },
 
+  // Detalle de un pedido en Seguimiento: una fila por EAN. registros.ean es
+  // el ean_producto canónico (submitRegistro lo toma de _localizarValidacionEan),
+  // así que el cruce por igualdad exacta no sufre con el "0" del Zebra.
+  async obtenerDetalleSeguimientoPedido(datos, env) {
+    const pedido = await _resolverPedido(env, datos.pedido);
+    if (!pedido)
+      return { success: false, message: "Falta el número de pedido." };
+
+    const { results } = await env.DB.prepare(
+      "SELECT v.ean_producto AS ean, v.sublinea AS subLinea, v.estado AS estado, " +
+        "v.unidades_totales AS unidadesTotales, v.unidades_procesadas AS unidadesProcesadas, " +
+        "v.codigos_sobrantes AS codigosSobrantes, v.sin_limite AS sinLimite, " +
+        "COALESCE(js.justificado, 0) AS justificado, " +
+        "COALESCE(rg.nRegistros, 0) AS nRegistros, rg.supernumerarios AS supernumerarios, " +
+        "COALESCE(rg.horasTotales, 0) AS horasTotales, " +
+        "COALESCE(rg.sumaUnidadesPorTiempo, 0) AS sumaUnidadesPorTiempo " +
+        "FROM validacion_eanes v " +
+        "LEFT JOIN (" +
+        "SELECT ean, SUM(faltante) AS justificado FROM justificaciones " +
+        "WHERE pedido = ? GROUP BY ean" +
+        ") js ON js.ean = v.ean_producto " +
+        "LEFT JOIN (" +
+        "SELECT ean, COUNT(*) AS nRegistros, " +
+        "GROUP_CONCAT(DISTINCT supernumerario) AS supernumerarios, " +
+        "SUM(tiempo_total) AS horasTotales, " +
+        "SUM(tiempo_total * unidades_hora_estandar) AS sumaUnidadesPorTiempo " +
+        "FROM registros WHERE numero_pedido = ? AND anulado = 0 GROUP BY ean" +
+        ") rg ON rg.ean = v.ean_producto " +
+        "WHERE v.numero_pedido = ? ORDER BY v.sublinea, v.ean_producto",
+    )
+      .bind(pedido, pedido, pedido)
+      .all();
+
+    // GROUP_CONCAT(DISTINCT ...) no acepta separador propio: sale con ",".
+    const _listaSupers = (texto) =>
+      String(texto || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    const supersPedido = new Set();
+
+    const eanes = results.map((r) => {
+      const sinLimite = r.sinLimite === 1;
+      const conSobrantes = r.unidadesProcesadas + r.codigosSobrantes;
+      // EAN nuevo desde el pull llega con estado NULL (ver _pedidoEstaCompleto).
+      const estado =
+        r.estado || (conSobrantes > 0 ? "En proceso" : "Pendiente");
+      const supers = _listaSupers(r.supernumerarios);
+      supers.forEach((s) => supersPedido.add(s));
+      const sinRegistros = r.nRegistros === 0;
+      return {
+        ean: r.ean,
+        subLinea: r.subLinea,
+        estado,
+        supernumerarios: supers,
+        unidadesTotales: r.unidadesTotales,
+        unidadesProcesadas: r.unidadesProcesadas,
+        sinLimite,
+        // Mismo criterio que el pedido: cerrado por justificación = lo que faltó.
+        unidadesPendientes: sinLimite
+          ? null
+          : estado === "Completado" && r.justificado > 0
+            ? r.justificado
+            : r.unidadesTotales - r.unidadesProcesadas,
+        horasTotales: sinRegistros
+          ? null
+          : Math.round(r.horasTotales * 100) / 100,
+        eficiencia:
+          sinRegistros || r.sumaUnidadesPorTiempo <= 0
+            ? null
+            : Math.round(
+                (r.unidadesProcesadas / r.sumaUnidadesPorTiempo) * 100,
+              ),
+      };
+    });
+
+    return {
+      success: true,
+      pedido,
+      eanes,
+      supernumerariosPedido: [...supersPedido].sort((a, b) =>
+        a.localeCompare(b, "es"),
+      ),
+    };
+  },
+
   async obtenerControlTiempos(datos, env) {
     const esAdmin = datos.admin === true;
     const cedula = String(datos.cedula || "").trim();
