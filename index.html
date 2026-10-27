@@ -1167,12 +1167,19 @@
           <div class="panel-grid">
             <div>
               <label>Nombre de operario</label>
-              <input
-                id="edicionOperarioInput"
-                placeholder="Ej: Juan Pérez"
-                autocomplete="off"
-                enterkeyhint="search"
-              />
+              <div class="campo-sugerencias">
+                <input
+                  id="edicionOperarioInput"
+                  placeholder="Ej: Juan Pérez"
+                  autocomplete="off"
+                  enterkeyhint="search"
+                />
+                <div
+                  id="sugEdicionOperario"
+                  class="lista-sugerencias"
+                  role="listbox"
+                ></div>
+              </div>
             </div>
             <div>
               <label>Fecha</label>
@@ -1526,12 +1533,19 @@
               </div>
               <div>
                 <label>Operario</label>
-                <input
-                  id="ctOperarioInput"
-                  placeholder="Ej: Juan Pérez"
-                  autocomplete="off"
-                  enterkeyhint="search"
-                />
+                <div class="campo-sugerencias">
+                  <input
+                    id="ctOperarioInput"
+                    placeholder="Ej: Juan Pérez"
+                    autocomplete="off"
+                    enterkeyhint="search"
+                  />
+                  <div
+                    id="sugCtOperario"
+                    class="lista-sugerencias"
+                    role="listbox"
+                  ></div>
+                </div>
               </div>
               <div>
                 <label>Cliente</label>
@@ -1758,7 +1772,7 @@
                 autocomplete="off"
                 enterkeyhint="done"
               />
-              
+
               <div
                 id="sugOperario"
                 class="lista-sugerencias"
@@ -4550,6 +4564,22 @@
       activarSugerenciasPedido(
         "operarioInput",
         "sugOperario",
+        null,
+        () => listaOperariosSugerencias,
+      );
+      // Filtros "Operario" de Editar registros y Control tiempos (admin).
+      // Elegir solo llena el campo, como los demás filtros del panel: se
+      // aplica con "Aplicar" o con Enter (listeners existentes). El Worker
+      // filtra por "contiene" normalizado, así que el texto parcial sigue valiendo.
+      activarSugerenciasPedido(
+        "edicionOperarioInput",
+        "sugEdicionOperario",
+        null,
+        () => listaOperariosSugerencias,
+      );
+      activarSugerenciasPedido(
+        "ctOperarioInput",
+        "sugCtOperario",
         null,
         () => listaOperariosSugerencias,
       );
