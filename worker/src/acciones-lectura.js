@@ -215,7 +215,8 @@ export const accionesLectura = {
         "ve.soloSinLimite AS soloSinLimite, ve.eanesAbiertos AS eanesAbiertos, " +
         "COALESCE(js.justificado, 0) AS justificado, " +
         "COALESCE(rg.horasTotales,0) AS horasTotales, " +
-        "COALESCE(rg.sumaUnidadesPorTiempo,0) AS sumaUnidadesPorTiempo " +
+        "COALESCE(rg.sumaUnidadesPorTiempo,0) AS sumaUnidadesPorTiempo, " +
+        "COALESCE(pf.fecha, '') AS fecha " +
         "FROM (" +
         "SELECT numero_pedido, GROUP_CONCAT(DISTINCT sublinea) AS subLinea, " +
         "SUM(unidades_totales) AS unidadesTotales, SUM(unidades_procesadas) AS unidadesProcesadas, " +
@@ -232,6 +233,12 @@ export const accionesLectura = {
         "SUM(tiempo_total * unidades_hora_estandar) AS sumaUnidadesPorTiempo " +
         "FROM registros WHERE anulado = 0 GROUP BY numero_pedido" +
         ") rg ON rg.numero_pedido = ve.numero_pedido " +
+        // Mismo criterio que la hoja "Seguimiento paquetes": la fecha más
+        // antigua del pedido entre sus sublíneas, ignorando celdas vacías.
+        "LEFT JOIN (" +
+        "SELECT numero_pedido, MIN(fecha) AS fecha FROM pedidos " +
+        "WHERE fecha <> '' GROUP BY numero_pedido" +
+        ") pf ON pf.numero_pedido = ve.numero_pedido " +
         "ORDER BY ve.numero_pedido",
     ).all();
 
@@ -247,6 +254,7 @@ export const accionesLectura = {
 
       const noIniciado = estado === "Pendiente";
       return {
+        fecha: r.fecha,
         pedido: r.pedido,
         subLinea: r.subLinea,
         unidadesTotales: r.unidadesTotales,
