@@ -40,6 +40,16 @@ export const accionesLectura = {
     return { success: true, data: results };
   },
 
+  async getClientes(datos, env) {
+    // Solo alimenta las sugerencias del filtro Cliente de Control tiempos
+    // (admin). El filtro sigue siendo "contiene" sobre registros.cliente,
+    // así que un cliente que ya no esté en pedidos se puede escribir a mano.
+    const { results } = await env.DB.prepare(
+      "SELECT DISTINCT cliente FROM pedidos WHERE cliente <> '' ORDER BY cliente",
+    ).all();
+    return { success: true, data: results.map((r) => r.cliente) };
+  },
+
   async buscarOperarioPorCedula(datos, env) {
     const cedula = String(datos.cedula || "").trim();
     if (!cedula) return { success: false, message: "Falta la cédula." };
@@ -290,7 +300,10 @@ export const accionesLectura = {
     if (!cedula && !esAdmin)
       return { success: false, message: "Falta la cédula." };
 
-    const filtro = datos.filtro === "historico" ? "historico" : "fecha";
+    // El histórico (últimos 100) es solo del operario: el administrador ve
+    // registros sin tope, así que siempre filtra por fecha.
+    const filtro =
+      !esAdmin && datos.filtro === "historico" ? "historico" : "fecha";
     const hoy = _fechaHoyBogota();
     let fechaFiltro = hoy;
     if (filtro === "fecha") {
