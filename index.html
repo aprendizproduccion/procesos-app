@@ -1344,6 +1344,7 @@
           <table>
             <thead>
               <tr>
+                <th>Fecha</th>
                 <th>Pedido</th>
                 <th>Sub línea</th>
                 <th>Estado</th>
@@ -3072,6 +3073,7 @@
           .map(function (p) {
             return (
               `<tr>` +
+              `<td style="white-space:nowrap">${p.fecha ? escapeHtml(_textoFechaChip(p.fecha)) : "—"}</td>` +
               `<td>${escapeHtml(p.pedido)}</td>` +
               `<td>${escapeHtml(p.subLinea)}</td>` +
               `<td>${escapeHtml(p.estado)}</td>` +
