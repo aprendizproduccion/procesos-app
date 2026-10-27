@@ -1751,12 +1751,19 @@
         <div>
           <label>Agregar Individual</label>
           <div class="add-row">
-            <input
-              id="operarioInput"
-              list="sugeridos"
-              placeholder="Nombre del operario"
-            />
-            <datalist id="sugeridos"></datalist>
+            <div class="campo-sugerencias">
+              <input
+                id="operarioInput"
+                placeholder="Nombre del operario"
+                autocomplete="off"
+                enterkeyhint="done"
+              />
+              <div
+                id="sugOperario"
+                class="lista-sugerencias"
+                role="listbox"
+              ></div>
+            </div>
             <button type="button" onclick="agregarOperario()">
               + Individual
             </button>
@@ -4405,6 +4412,7 @@
       let procesos = [];
       let operarios = [];
       let catalogoOperarios = [];
+      let listaOperariosSugerencias = []; // [{ valor, clave }] para "Agregar Individual"
       let datosSupervisores = { coordinadores: [], supernumerarios: [] };
       let unidadesEsperadas = null;
       let unidadesRestantes = null;
@@ -4535,6 +4543,23 @@
 
       activarSugerenciasPedido("pedido", "sugPedido");
       activarSugerenciasPedido("opPedido", "sugOpPedido");
+      // Operario individual del administrador. Sin listaCompleta: aparece al
+      // escribir, máximo 8. Elegir solo llena el campo; se agrega con
+      // "+ Individual" o con Enter.
+      activarSugerenciasPedido(
+        "operarioInput",
+        "sugOperario",
+        null,
+        () => listaOperariosSugerencias,
+      );
+      document
+        .getElementById("operarioInput")
+        .addEventListener("keydown", function (e) {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            agregarOperario();
+          }
+        });
       activarSugerenciasPedido("ctPedidoInput", "sugCtPedido");
       [
         "ctPedidoInput",
@@ -4868,9 +4893,14 @@
               return;
             }
             catalogoOperarios = resp.data;
-            document.getElementById("sugeridos").innerHTML = catalogoOperarios
-              .map((op) => `<option value="${op.nombre}">`)
-              .join("");
+            listaOperariosSugerencias = catalogoOperarios
+              .map((op) => String(op.nombre || "").trim())
+              .filter(Boolean)
+              .sort((a, b) => a.localeCompare(b, "es"))
+              .map((nombre) => ({
+                valor: nombre,
+                clave: normalizarPedido(nombre),
+              }));
             const equiposUnicos = [
               ...new Set(
                 catalogoOperarios.map((op) => op.equipo).filter(Boolean),
@@ -4944,7 +4974,7 @@
             return Promise.resolve(false);
         }
         _refrescoCatalogosEnCurso = true;
-        // getOperariosData son 241 filas y solo alimenta #sugeridos y
+        // getOperariosData son 241 filas y solo alimenta #sugOperario y
         // #equipoSelect, ambos exclusivos de la vista del administrador. Con
         // 200 operarios con la app abierta toda la jornada, esta consulta es
         // la que más pesa en filas leídas de D1. En la carga inicial sin
@@ -5066,8 +5096,11 @@
           return;
         }
 
+        // Misma normalización que las sugerencias: sin tildes, mayúsculas
+        // ni espacios. Se guarda el nombre exacto del catálogo.
+        const claveEscrita = normalizarPedido(escrito);
         const match = catalogoOperarios.find(
-          (op) => op.nombre.toLowerCase() === escrito.toLowerCase(),
+          (op) => normalizarPedido(op.nombre) === claveEscrita,
         );
 
         if (!match) {
