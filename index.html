@@ -330,6 +330,11 @@
       .seguimiento-grafica-wrap {
         margin-bottom: 18px;
       }
+      #vistaSeguimientoPaquetes tr.fila-total-seg td {
+        font-weight: 700;
+        background: var(--gv-superficie-alt);
+        border-top: 2px solid var(--gv-aquamarine);
+      }
       .filtro-estado-seg {
         display: flex;
         flex-wrap: wrap;
@@ -1413,7 +1418,7 @@
 
         <div style="overflow-x: auto">
           <table>
-            <thead>
+            <thead id="seguimientoPaquetesHead">
               <tr>
                 <th>Fecha</th>
                 <th>Pedido</th>
@@ -3190,6 +3195,121 @@
           .join("");
       }
 
+      // ---- Detalle de un pedido: una fila por EAN + fila Total ----
+      const COLUMNAS_SEG_GENERAL = [
+        "Fecha",
+        "Pedido",
+        "Sub línea",
+        "Estado",
+        "Uni. totales",
+        "Uni. procesadas",
+        "Uni. pendientes",
+        "Horas totales",
+        "Eficiencia",
+      ];
+      const COLUMNAS_SEG_DETALLE = [
+        "Fecha",
+        "Pedido",
+        "Supernumerario",
+        "Sub línea",
+        "Estado",
+        "EAN",
+        "Uni. totales",
+        "Uni. procesadas",
+        "Uni. pendientes",
+        "Horas totales",
+        "Eficiencia",
+      ];
+      // El buscador dispara en cada tecla: una respuesta vieja no pinta.
+      let detalleSegConsulta = 0;
+
+      function _pintarEncabezadoSeg(esDetalle) {
+        const columnas = esDetalle
+          ? COLUMNAS_SEG_DETALLE
+          : COLUMNAS_SEG_GENERAL;
+        document.getElementById("seguimientoPaquetesHead").innerHTML =
+          "<tr>" + columnas.map((c) => `<th>${c}</th>`).join("") + "</tr>";
+      }
+
+      function _filaAvisoDetalleSeg(texto) {
+        document.getElementById("seguimientoPaquetesBody").innerHTML =
+          `<tr><td colspan="${COLUMNAS_SEG_DETALLE.length}" style="text-align:center;color:var(--gv-texto-suave)">${escapeHtml(texto)}</td></tr>`;
+      }
+
+      function _textoSupersSeg(lista) {
+        return lista && lista.length ? escapeHtml(lista.join(", ")) : "—";
+      }
+
+      function cargarDetalleEanesSeg(p) {
+        const consulta = ++detalleSegConsulta;
+        _pintarEncabezadoSeg(true);
+        _filaAvisoDetalleSeg("Cargando EAN del pedido...");
+
+        llamarAPI("obtenerDetalleSeguimientoPedido", { pedido: p.pedido })
+          .then(function (res) {
+            if (consulta !== detalleSegConsulta) return;
+            if (!res.success) {
+              _filaAvisoDetalleSeg(
+                res.message || "No se pudo cargar el detalle del pedido.",
+              );
+              return;
+            }
+            renderFilasDetalleSeg(p, res);
+          })
+          .catch(function (err) {
+            if (consulta !== detalleSegConsulta) return;
+            _filaAvisoDetalleSeg("Error de conexión: " + err.message);
+          });
+      }
+
+      function renderFilasDetalleSeg(p, res) {
+        const eanes = res.eanes || [];
+        if (!eanes.length) {
+          _filaAvisoDetalleSeg("Este pedido no tiene EAN en Validación.");
+          return;
+        }
+        const celdaFecha = `<td style="white-space:nowrap">${p.fecha ? escapeHtml(_textoFechaChip(p.fecha)) : "—"}</td>`;
+        const celdaPedido = `<td>${escapeHtml(p.pedido)}</td>`;
+
+        const filas = eanes.map(function (e) {
+          return (
+            `<tr>` +
+            celdaFecha +
+            celdaPedido +
+            `<td>${_textoSupersSeg(e.supernumerarios)}</td>` +
+            `<td>${escapeHtml(e.subLinea)}</td>` +
+            `<td>${escapeHtml(e.estado)}</td>` +
+            `<td style="white-space:nowrap">${escapeHtml(e.ean)}</td>` +
+            `<td>${e.sinLimite ? "Sin límite" : e.unidadesTotales}</td>` +
+            `<td>${e.unidadesProcesadas}</td>` +
+            `<td>${e.unidadesPendientes !== null ? e.unidadesPendientes : "—"}</td>` +
+            `<td>${e.horasTotales !== null ? e.horasTotales : "—"}</td>` +
+            `<td>${e.eficiencia !== null ? e.eficiencia + "%" : "—"}</td>` +
+            `</tr>`
+          );
+        });
+
+        // Fila Total: las mismas cifras del pedido que mostraba la tabla antes.
+        filas.push(
+          `<tr class="fila-total-seg">` +
+            `<td>Total</td>` +
+            celdaPedido +
+            `<td>${_textoSupersSeg(res.supernumerariosPedido)}</td>` +
+            `<td>${escapeHtml(p.subLinea)}</td>` +
+            `<td>${escapeHtml(p.estado)}</td>` +
+            `<td>—</td>` +
+            `<td>${textoTotalPaquete(p)}</td>` +
+            `<td>${p.unidadesProcesadas}</td>` +
+            `<td>${p.unidadesPendientes !== null ? p.unidadesPendientes : "—"}</td>` +
+            `<td>${p.horasTotales !== null ? p.horasTotales : "—"}</td>` +
+            `<td>${p.eficiencia !== null ? p.eficiencia + "%" : "—"}</td>` +
+            `</tr>`,
+        );
+
+        document.getElementById("seguimientoPaquetesBody").innerHTML =
+          filas.join("");
+      }
+
       // ---- Filtro por estado (solo la tabla de la vista general) ----
       // KPIs y gráficas siguen mostrando el total de activos.
       let filtroEstadoSeg = "";
@@ -3228,6 +3348,9 @@
       }
 
       function _filasVistaGeneralSeg(activos) {
+        // Si el detalle seguía cargando, su respuesta ya no debe pintar aquí.
+        detalleSegConsulta++;
+        _pintarEncabezadoSeg(false);
         const verCompletados = filtroEstadoSeg === FILTRO_COMPLETADOS_SEG;
         let lista;
         if (verCompletados) lista = _paquetesCompletadosSeg();
@@ -3281,7 +3404,7 @@
           "block";
         document.getElementById("seguimientoDetallePedidoLabel").textContent =
           `Pedido ${p.pedido} — Total: ${textoTotalPaquete(p)} uds`;
-        renderFilasPaquetes([p]);
+        cargarDetalleEanesSeg(p);
         renderGraficaDetallePedido(p);
         renderGaugeEficienciaDetalle(p);
         actualizarKpiEficienciaDetalle(p);
