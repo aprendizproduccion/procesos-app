@@ -330,6 +330,28 @@
       .seguimiento-grafica-wrap {
         margin-bottom: 18px;
       }
+      .filtro-estado-seg {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 4px;
+      }
+      .chip-estado {
+        min-height: 38px;
+        padding: 0 14px;
+        background: var(--gv-white);
+        border: 1px solid var(--gv-borde);
+        border-radius: 999px;
+        font-family: inherit;
+        font-size: var(--gv-cuerpo);
+        font-weight: 600;
+        color: var(--gv-jet);
+        cursor: pointer;
+      }
+      .chip-estado[aria-pressed="true"] {
+        background: var(--gv-celeste);
+        border-color: var(--gv-aquamarine);
+      }
 
       /* ===== Botones — Manual de marca, sección 07 ===== */
       /* Base "con caja": 48 px de alto, 14 px, ancho completo. */
@@ -1268,6 +1290,39 @@
           </div>
           <div class="seguimiento-grafica-wrap">
             <canvas id="graficaEficienciaPaquetes" height="220"></canvas>
+          </div>
+          <div
+            class="filtro-estado-seg"
+            role="group"
+            aria-label="Filtrar pedidos por estado"
+          >
+            <button
+              type="button"
+              class="chip-estado"
+              data-estado=""
+              aria-pressed="true"
+              onclick="cambiarFiltroEstadoSeg('')"
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              class="chip-estado"
+              data-estado="En proceso"
+              aria-pressed="false"
+              onclick="cambiarFiltroEstadoSeg('En proceso')"
+            >
+              En proceso
+            </button>
+            <button
+              type="button"
+              class="chip-estado"
+              data-estado="Pendiente"
+              aria-pressed="false"
+              onclick="cambiarFiltroEstadoSeg('Pendiente')"
+            >
+              Pendientes
+            </button>
           </div>
         </div>
 
@@ -2474,6 +2529,7 @@
         document.getElementById("vistaDashboard").style.display = "none";
         document.getElementById("vistaSeguimientoPaquetes").style.display =
           "block";
+        _marcarChipsEstadoSeg("");
         cargarSeguimientoPaquetes();
       }
 
@@ -3088,14 +3144,50 @@
           .join("");
       }
 
+      // ---- Filtro por estado (solo la tabla de la vista general) ----
+      // KPIs y gráficas siguen mostrando el total de activos.
+      let filtroEstadoSeg = "";
+
+      function _paquetesActivosSeg() {
+        return paquetesActuales.filter((p) => !p.cerrado && !p.soloSinLimite);
+      }
+
+      function _marcarChipsEstadoSeg(estado) {
+        filtroEstadoSeg = estado;
+        document
+          .querySelectorAll("#vistaSeguimientoPaquetes .chip-estado")
+          .forEach((b) =>
+            b.setAttribute(
+              "aria-pressed",
+              b.dataset.estado === estado ? "true" : "false",
+            ),
+          );
+      }
+
+      function _filasVistaGeneralSeg(activos) {
+        const lista = filtroEstadoSeg
+          ? activos.filter((p) => p.estado === filtroEstadoSeg)
+          : activos;
+        // Sin activos ya hay aviso arriba; este cubre solo el filtro vacío.
+        if (filtroEstadoSeg && activos.length > 0 && lista.length === 0) {
+          document.getElementById("seguimientoPaquetesBody").innerHTML =
+            '<tr><td colspan="9" style="text-align:center;color:var(--gv-texto-suave)">No hay pedidos con ese estado.</td></tr>';
+          return;
+        }
+        renderFilasPaquetes(lista);
+      }
+
+      function cambiarFiltroEstadoSeg(estado) {
+        _marcarChipsEstadoSeg(estado);
+        _filasVistaGeneralSeg(_paquetesActivosSeg());
+      }
+
       function mostrarVistaGeneral() {
         document.getElementById("seguimientoVistaGeneral").style.display =
           "block";
         document.getElementById("seguimientoVistaDetalle").style.display =
           "none";
-        const activos = paquetesActuales.filter(
-          (p) => !p.cerrado && !p.soloSinLimite,
-        );
+        const activos = _paquetesActivosSeg();
         if (paquetesActuales.length > 0 && activos.length === 0) {
           const ocultosSinLimite = paquetesActuales.some(
             (p) => p.soloSinLimite && !p.cerrado,
@@ -3105,7 +3197,7 @@
               ? '<p class="hint">No hay pedidos activos con unidades definidas. Los pedidos sin límite no se listan aquí: búscalos por número.</p>'
               : '<p class="hint">No hay pedidos pendientes ni en proceso.</p>';
         }
-        renderFilasPaquetes(activos);
+        _filasVistaGeneralSeg(activos);
         actualizarKpisPaquetes(activos);
         renderGraficasPaquetes(activos);
       }
