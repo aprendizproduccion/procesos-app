@@ -1303,7 +1303,7 @@
               aria-pressed="true"
               onclick="cambiarFiltroEstadoSeg('')"
             >
-              Todos
+              Activos
             </button>
             <button
               type="button"
@@ -1322,6 +1322,15 @@
               onclick="cambiarFiltroEstadoSeg('Pendiente')"
             >
               Pendientes
+            </button>
+            <button
+              type="button"
+              class="chip-estado"
+              data-estado="Completados"
+              aria-pressed="false"
+              onclick="cambiarFiltroEstadoSeg('Completados')"
+            >
+              Completados
             </button>
           </div>
         </div>
@@ -3164,14 +3173,40 @@
           );
       }
 
+      // No es un estado del Worker: agrupa "Cumple" y "No cumple".
+      const FILTRO_COMPLETADOS_SEG = "Completados";
+
+      // Más reciente primero (la fecha ISO ordena bien como texto); los que no
+      // tienen fecha quedan al fondo. Empate: por número de pedido.
+      function _paquetesCompletadosSeg() {
+        return paquetesActuales
+          .filter((p) => p.cerrado)
+          .sort(
+            (a, b) =>
+              String(b.fecha || "").localeCompare(String(a.fecha || "")) ||
+              String(a.pedido).localeCompare(String(b.pedido), "es", {
+                numeric: true,
+              }),
+          );
+      }
+
       function _filasVistaGeneralSeg(activos) {
-        const lista = filtroEstadoSeg
-          ? activos.filter((p) => p.estado === filtroEstadoSeg)
-          : activos;
+        const verCompletados = filtroEstadoSeg === FILTRO_COMPLETADOS_SEG;
+        let lista;
+        if (verCompletados) lista = _paquetesCompletadosSeg();
+        else if (filtroEstadoSeg)
+          lista = activos.filter((p) => p.estado === filtroEstadoSeg);
+        else lista = activos;
         // Sin activos ya hay aviso arriba; este cubre solo el filtro vacío.
-        if (filtroEstadoSeg && activos.length > 0 && lista.length === 0) {
+        const hayAvisoArriba = !verCompletados && activos.length === 0;
+        if (filtroEstadoSeg && !hayAvisoArriba && lista.length === 0) {
+          const texto = verCompletados
+            ? "Aún no hay pedidos completados."
+            : "No hay pedidos con ese estado.";
           document.getElementById("seguimientoPaquetesBody").innerHTML =
-            '<tr><td colspan="9" style="text-align:center;color:var(--gv-texto-suave)">No hay pedidos con ese estado.</td></tr>';
+            '<tr><td colspan="9" style="text-align:center;color:var(--gv-texto-suave)">' +
+            texto +
+            "</td></tr>";
           return;
         }
         renderFilasPaquetes(lista);
