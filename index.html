@@ -1226,14 +1226,19 @@
         <div id="seguimientoAlerta"></div>
 
         <div class="add-row" style="margin-bottom: 14px">
-          <input
-            id="seguimientoPedidoInput"
-            list="sugeridosPedidosSeguimiento"
-            placeholder="Buscar pedido..."
-            autocomplete="off"
-            enterkeyhint="search"
-          />
-          <datalist id="sugeridosPedidosSeguimiento"></datalist>
+          <div class="campo-sugerencias">
+            <input
+              id="seguimientoPedidoInput"
+              placeholder="Buscar pedido..."
+              autocomplete="off"
+              enterkeyhint="search"
+            />
+            <div
+              id="sugSeguimientoPedido"
+              class="lista-sugerencias"
+              role="listbox"
+            ></div>
+          </div>
         </div>
 
         <div id="seguimientoVistaGeneral">
@@ -2927,7 +2932,7 @@
               return;
             }
             paquetesActuales = res.paquetes || [];
-            poblarDatalistPedidos(paquetesActuales);
+            poblarSugerenciasSeguimiento(paquetesActuales);
             if (paquetesActuales.length === 0) {
               alertaDiv.innerHTML =
                 '<p class="hint">No hay paquetes registrados.</p>';
@@ -3043,12 +3048,16 @@
 
       let chartDetallePedido = null;
       let paquetesActuales = [];
+      // Fuente del buscador: los pedidos de validacion_eanes, no el catálogo
+      // de procesos que alimenta listaPedidos.
+      let listaPedidosSeguimiento = [];
 
-      function poblarDatalistPedidos(paquetes) {
-        document.getElementById("sugeridosPedidosSeguimiento").innerHTML =
-          paquetes
-            .map((p) => `<option value="${escapeHtml(p.pedido)}"></option>`)
-            .join("");
+      function poblarSugerenciasSeguimiento(paquetes) {
+        listaPedidosSeguimiento = paquetes
+          .map((p) => String(p.pedido || "").trim())
+          .filter(Boolean)
+          .sort((a, b) => a.localeCompare(b, "es", { numeric: true }))
+          .map((ped) => ({ valor: ped, clave: normalizarPedido(ped) }));
       }
 
       function textoTotalPaquete(p) {
@@ -3125,8 +3134,9 @@
           return;
         }
 
+        const claveBuscada = normalizarPedido(valor);
         const encontrado = paquetesActuales.find(
-          (p) => String(p.pedido) === valor,
+          (p) => normalizarPedido(p.pedido) === claveBuscada,
         );
 
         if (!encontrado) {
@@ -3989,6 +3999,12 @@
       document
         .getElementById("seguimientoPedidoInput")
         .addEventListener("input", filtrarPedidoBuscado);
+      activarSugerenciasPedido(
+        "seguimientoPedidoInput",
+        "sugSeguimientoPedido",
+        null,
+        () => listaPedidosSeguimiento,
+      );
 
       function volverAlDashboard() {
         [
