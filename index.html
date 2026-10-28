@@ -1100,6 +1100,14 @@
           <span class="tarjetaApp-icono">🍽️</span>
           <span>Confirmación de alimentación</span>
         </button>
+        <button
+          type="button"
+          class="tarjetaApp"
+          onclick="abrirAppExterna('almacenesEnLinea')"
+        >
+          <span class="tarjetaApp-icono">🏬</span>
+          <span>Almacenes en línea</span>
+        </button>
       </div>
       <button
         type="button"
@@ -2535,6 +2543,7 @@
           "https://extiblu-horas-extra.vercel.app/administrador",
         alimentacion:
           "https://extiblu-horas-extra.vercel.app/checklist-comidas",
+        almacenesEnLinea: "https://almacenes-en-linea.vercel.app/",
       };
 
       function abrirAppExterna(clave) {
