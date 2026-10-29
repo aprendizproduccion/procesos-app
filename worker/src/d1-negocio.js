@@ -753,3 +753,21 @@ export function _fechaHoraBogota(fecha) {
 export function _ahoraISO() {
   return new Date().toISOString();
 }
+
+// Interruptor por catálogo (tabla config). Las escrituras de un catálogo solo
+// se aceptan cuando ya salió de la sincronización con Sheets: antes, el pull
+// las revertiría o las borraría.
+export async function _exigirCatalogoEnApp(env, clave) {
+  const fila = await env.DB.prepare(
+    "SELECT valor FROM config WHERE clave = 'catalogos_en_app'",
+  ).first();
+  const lista = String((fila && fila.valor) || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (!lista.includes(clave)) {
+    throw new Error(
+      "Este catálogo todavía se sincroniza desde Sheets: por ahora se edita en la hoja.",
+    );
+  }
+}
