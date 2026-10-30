@@ -687,6 +687,234 @@ export async function _inicioCadena(env, cedula, fecha) {
   return { inicio: TURNO_POR_DEFECTO, turnoConfigurado: false };
 }
 
+// ---------------- CASCADA DE HORAS ENCADENADAS (pendiente 7) ----------------
+// En una fila del operario (hora_inicio_auto = 1) la hora fin es un hecho (la
+// hora del servidor al confirmar la cédula) y la hora inicio es derivada: el
+// fin del registro anterior del día, o el turno si no hay anterior. Cuando una
+// edición, anulación o reactivación cambia los fines de un día, se recalcula el
+// inicio de las filas automáticas POSTERIORES al cambio cuyo predecesor cambió.
+// La fila tocada y las filas manuales nunca se recalculan. No se tocan
+// editado_por / editado_en / motivo_edicion de las filas ajustadas.
+
+function _horaValida(h) {
+  return PATRON_HORA.test(String(h == null ? "" : h).trim());
+}
+
+// Inicio que le corresponde a "fila" según la cadena: la mayor hora_final de
+// las demás filas activas del día que terminan antes que ella; si no hay
+// ninguna, el turno. Las horas HH:MM con cero a la izquierda comparan bien
+// como texto.
+function _inicioDerivado(filas, fila, turno) {
+  let mejor = "";
+  filas.forEach((f) => {
+    if (f.id === fila.id || !_horaValida(f.hora_final)) return;
+    if (f.hora_final < fila.hora_final && f.hora_final > mejor)
+      mejor = f.hora_final;
+  });
+  return mejor || turno;
+}
+
+// Plan de UN día, sin D1 (función pura: se prueba sola).
+// - antes / despues: filas activas del día sin el cambio y con el cambio.
+// - x: la fila tocada { id, antes, despues }, donde antes/despues son
+//   { hora_inicio, hora_final } o null si en ese momento no está activa en
+//   este día (anulada, o en otra fecha).
+// Devuelve { conflicto: texto | null, cambios: [...] }.
+export function _planCadenaDia({ antes, despues, turno, x }) {
+  const finesX = [x.antes, x.despues]
+    .filter((v) => v && _horaValida(v.hora_final))
+    .map((v) => v.hora_final);
+  if (finesX.length === 0) return { conflicto: null, cambios: [] };
+
+  // Conflicto: la fila tocada alcanza el fin de un registro posterior. Si ya
+  // estaba en este día, solo cuentan los fines que quedaban después de su fin
+  // anterior (no se bloquea por cruces que ya existían). Si llega al día
+  // (reactivar o cambio de fecha), cuenta cualquier fin dentro de su franja.
+  if (x.despues && _horaValida(x.despues.hora_final)) {
+    const limite = x.antes ? x.antes.hora_final : x.despues.hora_inicio;
+    const choques = despues
+      .filter(
+        (f) =>
+          f.id !== x.id &&
+          _horaValida(f.hora_final) &&
+          f.hora_final > limite &&
+          f.hora_final <= x.despues.hora_final,
+      )
+      .sort((a, b) => (a.hora_final < b.hora_final ? -1 : 1));
+    if (choques.length > 0) {
+      const c = choques[0];
+      return {
+        conflicto:
+          "Este registro terminaría a las " +
+          x.despues.hora_final +
+          " y genera conflicto con un registro posterior del mismo operario: #" +
+          c.id +
+          " (pedido " +
+          c.numero_pedido +
+          ", de " +
+          c.hora_inicio +
+          " a " +
+          c.hora_final +
+          "). Corrige o anula primero ese registro.",
+        cambios: [],
+      };
+    }
+  }
+
+  const desde = finesX.reduce((m, h) => (h < m ? h : m));
+  const cambios = [];
+  const posteriores = despues
+    .filter(
+      (f) =>
+        f.id !== x.id &&
+        Number(f.hora_inicio_auto) === 1 &&
+        _horaValida(f.hora_final) &&
+        f.hora_final > desde,
+    )
+    .sort((a, b) => (a.hora_final < b.hora_final ? -1 : 1));
+
+  for (const f of posteriores) {
+    const inicioViejo = _inicioDerivado(antes, f, turno);
+    const inicioNuevo = _inicioDerivado(despues, f, turno);
+    // Solo se tocan las filas cuyo predecesor cambió por ESTE cambio.
+    if (inicioNuevo === inicioViejo || inicioNuevo === f.hora_inicio) continue;
+
+    let duracion;
+    try {
+      duracion = _calcularDuracionValidada(
+        inicioNuevo,
+        f.hora_final,
+        Number(f.suplemento) || 0,
+      );
+    } catch (err) {
+      return {
+        conflicto:
+          "El cambio genera conflicto con un registro posterior del mismo operario: #" +
+          f.id +
+          " (pedido " +
+          f.numero_pedido +
+          ", termina a las " +
+          f.hora_final +
+          ") pasaría a empezar a las " +
+          inicioNuevo +
+          " y quedaría inválido: " +
+          err.message +
+          " Corrige o anula primero ese registro.",
+        cambios: [],
+      };
+    }
+
+    const durHoras = Math.round((duracion.duracionRealMin / 60) * 100) / 100;
+    const { unidadesHoraReal, eficiencia } = _calcularMetricasProduccion(
+      Number(f.unidades_procesadas_operario) || 0,
+      Number(f.unidades_hora_estandar) || 0,
+      durHoras,
+    );
+    cambios.push({
+      id: f.id,
+      pedido: f.numero_pedido,
+      horaFinal: f.hora_final,
+      inicioAnterior: f.hora_inicio,
+      horaInicio: inicioNuevo,
+      duracionBrutaMin: duracion.duracionBrutaMin,
+      tiempoTotal: durHoras,
+      unidadesHoraReal,
+      eficiencia,
+    });
+  }
+  return { conflicto: null, cambios };
+}
+
+async function _filasActivasDia(env, cedula, fecha) {
+  const { results } = await env.DB.prepare(
+    "SELECT id, hora_inicio, hora_final, hora_inicio_auto, suplemento, " +
+      "unidades_procesadas_operario, unidades_hora_estandar, numero_pedido " +
+      "FROM registros WHERE cedula_operario = ? AND fecha = ? AND anulado = 0",
+  )
+    .bind(cedula, fecha)
+    .all();
+  return results.map((r) => ({
+    ...r,
+    hora_inicio: String(r.hora_inicio == null ? "" : r.hora_inicio).trim(),
+    hora_final: String(r.hora_final == null ? "" : r.hora_final).trim(),
+  }));
+}
+
+// Calcula, SIN escribir, lo que la cascada cambiaría por tocar el registro
+// "id" del operario "cedula".
+// - antes: { fecha, hora_inicio, hora_final } del registro antes del cambio,
+//   o null si estaba anulado (reactivar).
+// - despues: lo mismo después del cambio, o null si queda anulado (anular).
+// Lee las filas de D1 tal como están (el registro todavía sin el cambio). Si
+// devuelve conflicto, el llamador no debe escribir nada.
+export async function _planCascadaRegistro(env, { id, cedula, antes, despues }) {
+  const ced = String(cedula == null ? "" : cedula).trim();
+  const fechas = [
+    ...new Set([antes && antes.fecha, despues && despues.fecha].filter(Boolean)),
+  ];
+  if (!ced || fechas.length === 0) return { conflicto: null, cambios: [] };
+
+  const filaTurno = await env.DB.prepare(
+    "SELECT turno FROM operarios WHERE cedula = ?",
+  )
+    .bind(ced)
+    .first();
+  const turno =
+    String((filaTurno && filaTurno.turno) || "").trim() || TURNO_POR_DEFECTO;
+
+  const limpiar = (v) => ({
+    id,
+    hora_inicio: String(v.hora_inicio == null ? "" : v.hora_inicio).trim(),
+    hora_final: String(v.hora_final == null ? "" : v.hora_final).trim(),
+  });
+
+  const cambios = [];
+  for (const fecha of fechas) {
+    const otras = (await _filasActivasDia(env, ced, fecha)).filter(
+      (f) => f.id !== id,
+    );
+    const xAntes = antes && antes.fecha === fecha ? limpiar(antes) : null;
+    const xDespues = despues && despues.fecha === fecha ? limpiar(despues) : null;
+    const plan = _planCadenaDia({
+      antes: xAntes ? otras.concat([xAntes]) : otras,
+      despues: xDespues ? otras.concat([xDespues]) : otras,
+      turno,
+      x: { id, antes: xAntes, despues: xDespues },
+    });
+    if (plan.conflicto) return { conflicto: plan.conflicto, cambios: [] };
+    cambios.push(...plan.cambios);
+  }
+  return { conflicto: null, cambios };
+}
+
+// Escribe el plan en un solo batch. Cada UPDATE va condicionado a que la fila
+// siga activa, automática y con las mismas horas que se leyeron: si un envío
+// del operario la cambió entre medias, esa fila se salta en vez de pisarse.
+// Devuelve los cambios que sí se aplicaron (para el push y Seguimiento).
+export async function _aplicarCascada(env, cambios) {
+  if (!cambios || cambios.length === 0) return [];
+  const resultados = await env.DB.batch(
+    cambios.map((c) =>
+      env.DB.prepare(
+        "UPDATE registros SET hora_inicio = ?, duracion_bruta_min = ?, tiempo_total = ?, " +
+          "unidades_hora_real = ?, eficiencia = ?, anulado_sincronizado_sheets = 0 " +
+          "WHERE id = ? AND anulado = 0 AND hora_inicio_auto = 1 " +
+          "AND TRIM(hora_inicio) = ? AND TRIM(hora_final) = ?",
+      ).bind(
+        c.horaInicio,
+        c.duracionBrutaMin,
+        c.tiempoTotal,
+        c.unidadesHoraReal,
+        c.eficiencia,
+        c.id,
+        c.inicioAnterior,
+        c.horaFinal,
+      ),
+    ),
+  );
+  return cambios.filter((c, i) => resultados[i].meta.changes > 0);
+}
+
 export function _fechaHoyBogota() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Bogota",
