@@ -24,6 +24,8 @@ import {
   _sincronizarEstadoPedido,
   _actualizarSeguimientoPedido,
   _resolverPedido,
+  _planCascadaRegistro,
+  _aplicarCascada,
 } from "./d1-negocio.js";
 
 import {
@@ -32,6 +34,49 @@ import {
   _eliminarFilaRegistroSheets,
   _pushSeguimientoYMarcar,
 } from "./push-sheets.js";
+
+// La fila tocada ya quedó en D1: si la cascada falla, no se le falla al
+// usuario. Los posteriores quedan como hoy (sin ajustar) y queda el log.
+async function _aplicarCascadaSinFallar(env, cambios) {
+  try {
+    return await _aplicarCascada(env, cambios);
+  } catch (err) {
+    console.error("Cascada de horas: no se aplicó — " + err.message);
+    return [];
+  }
+}
+
+// Después de aplicar la cascada: push a Sheets de cada fila ajustada (su
+// anulado_sincronizado_sheets ya quedó en 0, así que la reconciliación la
+// recoge si el push falla) y refresco de "Seguimiento paquetes" de los pedidos
+// cerrados que tocó, porque cambió su eficiencia. Los pedidos que la acción ya
+// actualiza por su cuenta van en yaAtendidos. Nunca lanza.
+async function _trasCascada(env, ctx, aplicados, yaAtendidos) {
+  if (!aplicados || aplicados.length === 0) return [];
+  aplicados.forEach((c) => ctx.waitUntil(_pushFilaRegistroYMarcar(env, c.id)));
+  const pedidos = [...new Set(aplicados.map((c) => c.pedido))].filter(
+    (p) => !(yaAtendidos || []).includes(p),
+  );
+  for (const p of pedidos) {
+    try {
+      if (await _pedidoEstaCompleto(env, p)) {
+        await _actualizarSeguimientoPedido(env, p, true);
+        ctx.waitUntil(_pushSeguimientoYMarcar(env, p));
+      }
+    } catch (err) {
+      console.error(
+        "Cascada de horas: no se refrescó Seguimiento de " + p + " — " + err.message,
+      );
+    }
+  }
+  return aplicados.map((c) => ({
+    id: c.id,
+    pedido: c.pedido,
+    horaInicioAnterior: c.inicioAnterior,
+    horaInicio: c.horaInicio,
+    horaFinal: c.horaFinal,
+  }));
+}
 
 export const accionesEscritura = {
   async submitRegistro(payload, env, ctx) {
@@ -839,7 +884,8 @@ export const accionesEscritura = {
     if (!editadoPor) throw new Error("Falta el nombre de quien edita.");
 
     const actual = await env.DB.prepare(
-      "SELECT numero_pedido, ean FROM registros WHERE id = ? AND anulado = 0",
+      "SELECT numero_pedido, ean, cedula_operario, fecha, hora_inicio, hora_final " +
+        "FROM registros WHERE id = ? AND anulado = 0",
     )
       .bind(id)
       .first();
@@ -956,6 +1002,20 @@ export const accionesEscritura = {
       durHoras,
     );
 
+    // Cascada de horas encadenadas: se calcula ANTES de escribir. Si el cambio
+    // choca con un registro posterior del operario, no se guarda nada.
+    const planCadena = await _planCascadaRegistro(env, {
+      id,
+      cedula: actual.cedula_operario,
+      antes: {
+        fecha: actual.fecha,
+        hora_inicio: actual.hora_inicio,
+        hora_final: actual.hora_final,
+      },
+      despues: { fecha, hora_inicio: horaInicio, hora_final: horaFin },
+    });
+    if (planCadena.conflicto) throw new Error(planCadena.conflicto);
+
     const ahora = _ahoraISO();
     const resultado = await env.DB.prepare(
       "UPDATE registros SET fecha = ?, coordinador = ?, supernumerario = ?, proceso = ?, " +
@@ -1008,6 +1068,10 @@ export const accionesEscritura = {
       );
     }
 
+    // Antes de los recálculos: así Seguimiento del pedido propio ya toma la
+    // eficiencia ajustada de los posteriores.
+    const cadenaAplicada = await _aplicarCascadaSinFallar(env, planCadena.cambios);
+
     // Mover unidades = recalcular LOS DOS pares desde la fuente, nunca llevar
     // un delta a mano: el destino las recibe y el origen las suelta.
     await _recalcularContadorValidacion(env, pedido, ean);
@@ -1027,7 +1091,20 @@ export const accionesEscritura = {
     ctx.waitUntil(_pushFilaRegistroYMarcar(env, id));
     ctx.waitUntil(_pushSeguimientoYMarcar(env, pedido));
 
-    return { success: true, id, pedido, ean, movido: seMueve, pedidoCompleto };
+    const cadenaAjustada = await _trasCascada(env, ctx, cadenaAplicada, [
+      pedido,
+      pedidoOrigen,
+    ]);
+
+    return {
+      success: true,
+      id,
+      pedido,
+      ean,
+      movido: seMueve,
+      pedidoCompleto,
+      cadenaAjustada,
+    };
   },
 
   async anularRegistro(payload, env, ctx) {
@@ -1042,7 +1119,8 @@ export const accionesEscritura = {
     if (!anuladoPor) throw new Error("Falta el nombre de quien anula.");
 
     const actual = await env.DB.prepare(
-      "SELECT numero_pedido, ean FROM registros WHERE id = ? AND anulado = 0",
+      "SELECT numero_pedido, ean, cedula_operario, fecha, hora_inicio, hora_final " +
+        "FROM registros WHERE id = ? AND anulado = 0",
     )
       .bind(id)
       .first();
@@ -1054,6 +1132,19 @@ export const accionesEscritura = {
     const pedido = actual.numero_pedido;
     const ean = actual.ean;
     const ahora = _ahoraISO();
+
+    // Al salir de la cadena, el siguiente hereda el fin del anterior (o el turno).
+    const planCadena = await _planCascadaRegistro(env, {
+      id,
+      cedula: actual.cedula_operario,
+      antes: {
+        fecha: actual.fecha,
+        hora_inicio: actual.hora_inicio,
+        hora_final: actual.hora_final,
+      },
+      despues: null,
+    });
+    if (planCadena.conflicto) throw new Error(planCadena.conflicto);
 
     const resultado = await env.DB.prepare(
       "UPDATE registros SET anulado = 1, anulado_por = ?, anulado_en = ?, " +
@@ -1068,6 +1159,8 @@ export const accionesEscritura = {
       );
     }
 
+    const cadenaAplicada = await _aplicarCascadaSinFallar(env, planCadena.cambios);
+
     await _recalcularContadorValidacion(env, pedido, ean);
     const pedidoCompleto = await _sincronizarEstadoPedido(env, pedido);
     // Si la anulación reabrió el pedido, esto deja la fila como no vigente y
@@ -1077,7 +1170,9 @@ export const accionesEscritura = {
     ctx.waitUntil(_pushFilaRegistroYMarcar(env, id));
     ctx.waitUntil(_pushSeguimientoYMarcar(env, pedido));
 
-    return { success: true, id, pedidoCompleto };
+    const cadenaAjustada = await _trasCascada(env, ctx, cadenaAplicada, [pedido]);
+
+    return { success: true, id, pedidoCompleto, cadenaAjustada };
   },
 
   async reactivarRegistro(payload, env, ctx) {
@@ -1092,7 +1187,8 @@ export const accionesEscritura = {
     if (!reactivadoPor) throw new Error("Falta el nombre de quien reactiva.");
 
     const actual = await env.DB.prepare(
-      "SELECT numero_pedido, ean, unidades_procesadas_operario, codigos_sobrantes " +
+      "SELECT numero_pedido, ean, unidades_procesadas_operario, codigos_sobrantes, " +
+        "cedula_operario, fecha, hora_inicio, hora_final " +
         "FROM registros WHERE id = ? AND anulado = 1",
     )
       .bind(id)
@@ -1133,6 +1229,20 @@ export const accionesEscritura = {
     }
 
     const ahora = _ahoraISO();
+    // Al volver a la cadena, puede chocar con un registro que ocupó su franja
+    // mientras estaba anulado: en ese caso no se reactiva.
+    const planCadena = await _planCascadaRegistro(env, {
+      id,
+      cedula: actual.cedula_operario,
+      antes: null,
+      despues: {
+        fecha: actual.fecha,
+        hora_inicio: actual.hora_inicio,
+        hora_final: actual.hora_final,
+      },
+    });
+    if (planCadena.conflicto) throw new Error(planCadena.conflicto);
+
     const resultado = await env.DB.prepare(
       "UPDATE registros SET anulado = 0, editado_por = ?, editado_en = ?, " +
         "motivo_edicion = ?, anulado_sincronizado_sheets = 0 WHERE id = ? AND anulado = 1",
@@ -1146,6 +1256,8 @@ export const accionesEscritura = {
       );
     }
 
+    const cadenaAplicada = await _aplicarCascadaSinFallar(env, planCadena.cambios);
+
     await _recalcularContadorValidacion(env, pedido, ean);
     const pedidoCompleto = await _sincronizarEstadoPedido(env, pedido);
     await _actualizarSeguimientoPedido(env, pedido, pedidoCompleto);
@@ -1153,7 +1265,9 @@ export const accionesEscritura = {
     ctx.waitUntil(_pushFilaRegistroYMarcar(env, id));
     ctx.waitUntil(_pushSeguimientoYMarcar(env, pedido));
 
-    return { success: true, id, pedidoCompleto };
+    const cadenaAjustada = await _trasCascada(env, ctx, cadenaAplicada, [pedido]);
+
+    return { success: true, id, pedidoCompleto, cadenaAjustada };
   },
 
   async eliminarRegistro(payload, env, ctx) {
