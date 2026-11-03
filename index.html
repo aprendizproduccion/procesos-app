@@ -5954,7 +5954,7 @@
               alertaDiv.innerHTML = res.turnoConfigurado
                 ? ""
                 : '<div class="msg warn">No tienes turno configurado: tu hora de inicio arranca en 06:00. Avisa a tu supernumerario.</div>';
-              document.getElementById("opFecha").valueAsDate = new Date();
+              document.getElementById("opFecha").value = _hoyBogotaCT();
               opHoraInicioCadena = res.horaInicioPrevista || "";
               // Hora fin congelada en el momento de confirmar. El respaldo con
               // la hora local solo cubre un Worker sin desplegar todavía.
@@ -6335,7 +6335,7 @@
         document.getElementById("opAlertaUnidades").innerHTML = "";
         document.getElementById("opCodigosSobrantes").value = "";
         document.getElementById("opObservaciones").value = "";
-        document.getElementById("opFecha").valueAsDate = new Date();
+        document.getElementById("opFecha").value = _hoyBogotaCT();
         document.getElementById("opAlertaHoras").innerHTML = "";
         // Cédula, coordinador y supernumerario se mantienen.
       }
