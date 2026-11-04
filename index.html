@@ -3310,7 +3310,7 @@
             `<td>${escapeHtml(e.subLinea)}</td>` +
             `<td>${esAparte ? "Aparte" : escapeHtml(e.estado)}</td>` +
             `<td style="white-space:nowrap">${escapeHtml(e.ean)}</td>` +
-            `<td>${e.sinLimite ? "Sin límite" : esAparte ? "—" : e.unidadesTotales}</td>` +
+            `<td>${e.sinLimite ? "Sin límite" : e.unidadesTotales}</td>` +
             `<td>${_fmtUnidades(e.unidadesProcesadas)}</td>` +
             `<td>${esAparte ? "—" : _fmtUnidades(e.unidadesPendientes)}</td>` +
             `<td>${e.horasTotales !== null ? e.horasTotales : "—"}</td>` +
@@ -3357,12 +3357,22 @@
           const supersAparte = [
             ...new Set(aparte.flatMap((e) => e.supernumerarios || [])),
           ];
+          const _unicosSeg = (lista) =>
+            [...new Set(lista.filter(Boolean))].join(", ") || "—";
+          const totalesAparte = aparte.some((e) => e.sinLimite)
+            ? "Sin límite"
+            : _fmtUnidades(
+                aparte.reduce((s, e) => s + (Number(e.unidadesTotales) || 0), 0),
+              );
           filas.push(
             `<tr class="fila-total-seg fila-aparte-seg">` +
               `<td>Total aparte</td>` +
               celdaPedido +
               `<td>${_textoSupersSeg(supersAparte)}</td>` +
-              `<td>—</td><td>—</td><td>—</td><td>—</td>` +
+              `<td>${escapeHtml(_unicosSeg(aparte.map((e) => e.subLinea)))}</td>` +
+              `<td>Aparte</td>` +
+              `<td>${escapeHtml(_unicosSeg(aparte.map((e) => String(e.ean))))}</td>` +
+              `<td>${totalesAparte}</td>` +
               `<td>${_fmtUnidades(procAparte)}</td>` +
               `<td>—</td>` +
               `<td>${horasAparte !== null ? horasAparte : "—"}</td>` +
