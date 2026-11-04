@@ -7,6 +7,8 @@ import {
   TURNO_POR_DEFECTO,
   _resolverPedido,
   _formasEan,
+  _sqlEanReferente,
+  _sqlRegistroReferente,
 } from "./d1-negocio.js";
 
 export const accionesLectura = {
@@ -122,6 +124,7 @@ export const accionesLectura = {
       restantes: e.restanteNeto,
       sinLimite: e.sinLimite,
       justificado: e.justificado,
+      referente: e.referente,
     }));
     const totalPedido = eanes.reduce((s, e) => s + e.esperadas, 0);
     const procesadoPedido = eanes.reduce(
@@ -218,30 +221,36 @@ export const accionesLectura = {
   },
 
   async obtenerSeguimientoPaquetes(datos, env) {
+    const REF = _sqlEanReferente("");
     const { results } = await env.DB.prepare(
       "SELECT ve.numero_pedido AS pedido, ve.subLinea AS subLinea, " +
         "ve.unidadesTotales AS unidadesTotales, ve.unidadesProcesadas AS unidadesProcesadas, " +
-        "ve.codigosSobrantes AS codigosSobrantes, ve.sinLimite AS sinLimite, " +
-        "ve.soloSinLimite AS soloSinLimite, ve.eanesAbiertos AS eanesAbiertos, " +
+        "ve.codigosSobrantes AS codigosSobrantes, ve.nReferentes AS nReferentes, " +
+        "ve.eanesAbiertos AS eanesAbiertos, " +
         "COALESCE(js.justificado, 0) AS justificado, " +
         "COALESCE(rg.horasTotales,0) AS horasTotales, " +
         "COALESCE(rg.sumaUnidadesPorTiempo,0) AS sumaUnidadesPorTiempo, " +
         "COALESCE(pf.fecha, '') AS fecha " +
         "FROM (" +
         "SELECT numero_pedido, GROUP_CONCAT(DISTINCT sublinea) AS subLinea, " +
-        "SUM(unidades_totales) AS unidadesTotales, SUM(unidades_procesadas) AS unidadesProcesadas, " +
-        "SUM(codigos_sobrantes) AS codigosSobrantes, MAX(sin_limite) AS sinLimite, " +
-        "MIN(sin_limite) AS soloSinLimite, " +
-        "SUM(CASE WHEN COALESCE(estado, '') <> 'Completado' THEN 1 ELSE 0 END) AS eanesAbiertos " +
+        // Cifras y estado solo de los EAN referentes (ver _sqlEanReferente).
+        // nReferentes = 0: pedido de trabajo indirecto, nunca cierra.
+        "SUM(CASE WHEN " + REF + " THEN unidades_totales ELSE 0 END) AS unidadesTotales, " +
+        "SUM(CASE WHEN " + REF + " THEN unidades_procesadas ELSE 0 END) AS unidadesProcesadas, " +
+        "SUM(CASE WHEN " + REF + " THEN codigos_sobrantes ELSE 0 END) AS codigosSobrantes, " +
+        "SUM(CASE WHEN " + REF + " THEN 1 ELSE 0 END) AS nReferentes, " +
+        "SUM(CASE WHEN " + REF + " AND COALESCE(estado, '') <> 'Completado' THEN 1 ELSE 0 END) AS eanesAbiertos " +
         "FROM validacion_eanes GROUP BY numero_pedido" +
         ") ve " +
         "LEFT JOIN (" +
         "SELECT pedido, SUM(faltante) AS justificado FROM justificaciones GROUP BY pedido" +
         ") js ON js.pedido = ve.numero_pedido " +
         "LEFT JOIN (" +
-        "SELECT numero_pedido, SUM(tiempo_total) AS horasTotales, " +
-        "SUM(tiempo_total * unidades_hora_estandar) AS sumaUnidadesPorTiempo " +
-        "FROM registros WHERE anulado = 0 GROUP BY numero_pedido" +
+        "SELECT r.numero_pedido, SUM(r.tiempo_total) AS horasTotales, " +
+        "SUM(r.tiempo_total * r.unidades_hora_estandar) AS sumaUnidadesPorTiempo " +
+        "FROM registros r WHERE r.anulado = 0 AND " +
+        _sqlRegistroReferente("r") +
+        " GROUP BY r.numero_pedido" +
         ") rg ON rg.numero_pedido = ve.numero_pedido " +
         // Mismo criterio que la hoja "Seguimiento paquetes": la fecha más
         // antigua del pedido entre sus sublíneas, ignorando celdas vacías.
@@ -254,9 +263,12 @@ export const accionesLectura = {
 
     const paquetes = results.map((r) => {
       const unidadesConSobrantes = r.unidadesProcesadas + r.codigosSobrantes;
-      // Cerrado = mismo criterio que _pedidoEstaCompleto: todos los EAN en
-      // Completado y ninguno sin límite. Etiquetas iguales a las de la hoja.
-      const cerrado = !r.sinLimite && r.eanesAbiertos === 0;
+      // Cerrado = mismo criterio que _pedidoEstaCompleto: tiene EAN referentes
+      // y todos están en Completado. Etiquetas iguales a las de la hoja.
+      // sinLimite y soloSinLimite significan ahora "sin EAN referentes": el
+      // frontend oculta esos pedidos y no les ofrece Justificar.
+      const sinReferentes = r.nReferentes === 0;
+      const cerrado = !sinReferentes && r.eanesAbiertos === 0;
       let estado;
       if (cerrado) estado = r.justificado > 0 ? "No cumple" : "Cumple";
       else if (unidadesConSobrantes > 0) estado = "En proceso";
@@ -270,14 +282,14 @@ export const accionesLectura = {
         unidadesTotales: r.unidadesTotales,
         unidadesProcesadas: r.unidadesProcesadas,
         // Cerrado por justificación: lo que faltó, igual que en la hoja.
-        unidadesPendientes: r.sinLimite
+        unidadesPendientes: sinReferentes
           ? null
           : estado === "No cumple"
             ? r.justificado
             : r.unidadesTotales - r.unidadesProcesadas,
         cerrado,
-        sinLimite: r.sinLimite === 1,
-        soloSinLimite: r.soloSinLimite === 1,
+        sinLimite: sinReferentes,
+        soloSinLimite: sinReferentes,
         estado,
         horasTotales: noIniciado
           ? null
@@ -306,6 +318,7 @@ export const accionesLectura = {
       "SELECT v.ean_producto AS ean, v.sublinea AS subLinea, v.estado AS estado, " +
         "v.unidades_totales AS unidadesTotales, v.unidades_procesadas AS unidadesProcesadas, " +
         "v.codigos_sobrantes AS codigosSobrantes, v.sin_limite AS sinLimite, " +
+        "CASE WHEN " + _sqlEanReferente("v.") + " THEN 1 ELSE 0 END AS referente, " +
         "COALESCE(js.justificado, 0) AS justificado, " +
         "COALESCE(rg.nRegistros, 0) AS nRegistros, rg.supernumerarios AS supernumerarios, " +
         "COALESCE(rg.horasTotales, 0) AS horasTotales, " +
@@ -352,6 +365,7 @@ export const accionesLectura = {
         unidadesTotales: r.unidadesTotales,
         unidadesProcesadas: r.unidadesProcesadas,
         sinLimite,
+        referente: r.referente === 1,
         // Mismo criterio que el pedido: cerrado por justificación = lo que faltó.
         unidadesPendientes: sinLimite
           ? null
@@ -505,6 +519,7 @@ async function _detalleEanesPedido(env, pedido) {
   const { results } = await env.DB.prepare(
     "SELECT ean_producto AS ean, unidades_totales AS esperadas, unidades_procesadas AS procesadas, " +
       "codigos_sobrantes AS sobrantes, estado, sin_limite AS sinLimite, " +
+      "CASE WHEN " + _sqlEanReferente("v.") + " THEN 1 ELSE 0 END AS referente, " +
       "(SELECT COALESCE(SUM(faltante),0) FROM justificaciones j " +
       " WHERE j.pedido = v.numero_pedido AND j.ean = v.ean_producto) AS justificado " +
       "FROM validacion_eanes v WHERE numero_pedido = ?",
@@ -522,6 +537,7 @@ async function _detalleEanesPedido(env, pedido) {
       ? null
       : r.esperadas - r.procesadas - r.justificado - r.sobrantes,
     sinLimite: r.sinLimite === 1,
+    referente: r.referente === 1,
     estado: r.estado || "Pendiente",
   }));
 }

@@ -26,6 +26,7 @@ import {
   _resolverPedido,
   _planCascadaRegistro,
   _aplicarCascada,
+  _sqlEanReferente,
 } from "./d1-negocio.js";
 
 import {
@@ -752,6 +753,7 @@ export const accionesEscritura = {
       // real es la guarda de cada INSERT, que vuelve a leer dentro del batch.
       const { results: eanes } = await env.DB.prepare(
         "SELECT v.ean_producto AS ean, v.sin_limite AS sinLimite, " +
+          "CASE WHEN " + _sqlEanReferente("v.") + " THEN 1 ELSE 0 END AS referente, " +
           "(v.unidades_totales - v.unidades_procesadas - v.codigos_sobrantes - " +
           "(SELECT COALESCE(SUM(j.faltante), 0) FROM justificaciones j " +
           "WHERE j.pedido = v.numero_pedido AND j.ean = v.ean_producto)) AS faltante " +
@@ -764,12 +766,15 @@ export const accionesEscritura = {
         throw new Error(
           "El pedido " + pedido + " no existe en Validación eanes.",
         );
-      if (eanes.some((e) => e.sinLimite === 1))
+      // Solo se justifican los EAN referentes: el EAN 0 y los sin límite no
+      // cuentan para el cierre (ver _sqlEanReferente).
+      const referentes = eanes.filter((e) => e.referente === 1);
+      if (referentes.length === 0)
         throw new Error(
-          "Este pedido tiene EANes sin límite de unidades; no se puede cerrar por justificación.",
+          "Este pedido no tiene EAN con unidades asignadas; no se cierra por justificación.",
         );
 
-      const conFaltante = eanes.filter((e) => e.faltante > 0);
+      const conFaltante = referentes.filter((e) => e.faltante > 0);
       if (conFaltante.length === 0)
         throw new Error(
           "Este pedido ya no tiene faltante pendiente por justificar.",

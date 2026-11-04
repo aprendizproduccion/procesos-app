@@ -272,12 +272,37 @@ export async function _marcarPedidoIniciado(env, pedido, ahora) {
   }
 }
 
+// EAN "referente": tiene unidades asignadas y es un EAN real. Solo estos
+// deciden el cierre del pedido y suman a sus cifras. El EAN 0 (inducciones,
+// explicaciones; cualquier texto solo de ceros) y los sin límite (trabajo sin
+// unidades estimadas) se muestran aparte. alias: prefijo de tabla ("v.") o "".
+export function _sqlEanReferente(alias) {
+  const a = alias || "";
+  return "(" + a + "sin_limite = 0 AND TRIM(" + a + "ean_producto, '0') <> '')";
+}
+
+// Registros que cuentan para las cifras del pedido: los de EAN referentes.
+// NOT EXISTS (y no IN) para conservar los registros cuyo EAN ya no está en
+// validacion_eanes; la condición sobre .ean excluye el EAN 0 aunque su fila
+// se haya borrado. alias: nombre o alias de la tabla registros, sin punto.
+export function _sqlRegistroReferente(alias) {
+  return (
+    "(TRIM(" + alias + ".ean, '0') <> '' AND NOT EXISTS (SELECT 1 FROM validacion_eanes vx " +
+    "WHERE vx.numero_pedido = " + alias + ".numero_pedido AND vx.ean_producto = " +
+    alias + ".ean AND vx.sin_limite = 1))"
+  );
+}
+
 export async function _pedidoEstaCompleto(env, pedido) {
   const row = await env.DB.prepare(
     // COALESCE: con estado NULL, \"NULL != 'Completado'\" da NULL y el EAN no se
     // contaba como pendiente. Los EANes nuevos entran desde el pull sin estado,
     // así que un pedido podía darse por completo con EANes sin tocar.
-    "SELECT COUNT(*) AS total, SUM(CASE WHEN COALESCE(estado, '') != 'Completado' THEN 1 ELSE 0 END) AS pendientes " +
+    // Solo deciden los EAN referentes (ver _sqlEanReferente). Sin ninguno
+    // (trabajo indirecto puro) el pedido nunca cierra solo.
+    "SELECT COALESCE(SUM(CASE WHEN " + _sqlEanReferente("") + " THEN 1 ELSE 0 END), 0) AS total, " +
+      "COALESCE(SUM(CASE WHEN " + _sqlEanReferente("") +
+      " AND COALESCE(estado, '') != 'Completado' THEN 1 ELSE 0 END), 0) AS pendientes " +
       "FROM validacion_eanes WHERE numero_pedido = ?",
   )
     .bind(pedido)
@@ -318,10 +343,14 @@ export async function _datosSeguimientoPedido(env, pedido) {
       "(SELECT GROUP_CONCAT(par, ' | ') FROM (SELECT DISTINCT p.sublinea || ' - ' || p.cliente AS par " +
       "FROM pedidos p WHERE p.numero_pedido = ?1 AND p.sublinea IN " +
       "(SELECT sublinea FROM validacion_eanes WHERE numero_pedido = ?1) ORDER BY par)) AS sublineaCliente, " +
-      "(SELECT COALESCE(SUM(unidades_procesadas), 0) FROM validacion_eanes WHERE numero_pedido = ?1) AS procesadas, " +
+      // EAN 0 y sin límite no suman a las cifras del pedido (ver _sqlEanReferente).
+      "(SELECT COALESCE(SUM(unidades_procesadas), 0) FROM validacion_eanes WHERE numero_pedido = ?1 " +
+      "AND " + _sqlEanReferente("") + ") AS procesadas, " +
       "(SELECT COALESCE(SUM(faltante), 0) FROM justificaciones WHERE pedido = ?1) AS justificado, " +
       "(SELECT COALESCE(SUM(tiempo_total * unidades_hora_estandar), 0) FROM registros " +
-      "WHERE numero_pedido = ?1 AND anulado = 0) AS estandar, " +
+      "WHERE numero_pedido = ?1 AND anulado = 0 AND " +
+      _sqlRegistroReferente("registros") +
+      ") AS estandar, " +
       "(SELECT GROUP_CONCAT(nombre, ' - ') FROM (SELECT DISTINCT supernumerario AS nombre FROM registros " +
       "WHERE numero_pedido = ?1 AND anulado = 0 AND supernumerario <> '' ORDER BY nombre)) AS supernumerarios, " +
       "(SELECT GROUP_CONCAT(nombre, ' - ') FROM (SELECT DISTINCT coordinador AS nombre FROM registros " +
@@ -403,7 +432,7 @@ export async function _actualizarSeguimientoPedido(env, pedido, completo) {
 }
 
 // Red de seguridad de seguimiento_paquetes, la llama el cron del Worker.
-// 1) Pedidos cerrados (todos sus EANes Completado, ninguno sin límite) que no
+// 1) Pedidos cerrados (todos sus EAN referentes Completado) que no
 //    tienen fila vigente → se les escribe. También hace el backfill.
 // 2) Filas vigentes cuyo pedido sigue en validacion_eanes pero ya no está
 //    cerrado → pasan a no vigentes. Si el pedido desapareció de
@@ -416,8 +445,8 @@ export async function _actualizarSeguimientoPedido(env, pedido, completo) {
 export async function _reconciliarSeguimientoD1(env) {
   const { results: sinFila } = await env.DB.prepare(
     "SELECT v.numero_pedido FROM validacion_eanes v GROUP BY v.numero_pedido " +
-      "HAVING SUM(CASE WHEN COALESCE(v.estado, '') <> 'Completado' THEN 1 ELSE 0 END) = 0 " +
-      "AND MAX(v.sin_limite) = 0 " +
+      "HAVING SUM(CASE WHEN " + _sqlEanReferente("v.") + " AND COALESCE(v.estado, '') <> 'Completado' THEN 1 ELSE 0 END) = 0 " +
+      "AND SUM(CASE WHEN " + _sqlEanReferente("v.") + " THEN 1 ELSE 0 END) > 0 " +
       "AND NOT EXISTS (SELECT 1 FROM seguimiento_paquetes s " +
       "WHERE s.numero_pedido = v.numero_pedido AND s.vigente = 1) " +
       "LIMIT 15",
@@ -426,7 +455,7 @@ export async function _reconciliarSeguimientoD1(env) {
   const { results: reabiertos } = await env.DB.prepare(
     "SELECT s.numero_pedido FROM seguimiento_paquetes s WHERE s.vigente = 1 " +
       "AND EXISTS (SELECT 1 FROM validacion_eanes v WHERE v.numero_pedido = s.numero_pedido " +
-      "AND (COALESCE(v.estado, '') <> 'Completado' OR v.sin_limite = 1)) " +
+      "AND " + _sqlEanReferente("v.") + " AND COALESCE(v.estado, '') <> 'Completado') " +
       "LIMIT 10",
   ).all();
 
