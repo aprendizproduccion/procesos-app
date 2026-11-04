@@ -335,6 +335,16 @@
         background: var(--gv-superficie-alt);
         border-top: 2px solid var(--gv-aquamarine);
       }
+      #vistaSeguimientoPaquetes tr.fila-aparte-seg td {
+        color: var(--gv-texto-suave);
+        background: var(--gv-superficie-alt);
+      }
+      #vistaSeguimientoPaquetes tr.fila-titulo-aparte-seg td {
+        font-weight: 700;
+        color: var(--gv-jet);
+        background: var(--gv-platinum);
+        border-top: 2px solid var(--gv-borde);
+      }
       .filtro-estado-seg {
         display: flex;
         flex-wrap: wrap;
@@ -3288,28 +3298,32 @@
         const celdaFecha = `<td style="white-space:nowrap">${p.fecha ? escapeHtml(_textoFechaChip(p.fecha)) : "—"}</td>`;
         const celdaPedido = `<td>${escapeHtml(p.pedido)}</td>`;
 
-        const filas = eanes.map(function (e) {
+        // referente === false: EAN 0 o sin límite (ver _sqlEanReferente del Worker).
+        const referentes = eanes.filter((e) => e.referente !== false);
+        const aparte = eanes.filter((e) => e.referente === false);
+        const filaEan = function (e, esAparte) {
           return (
-            `<tr>` +
+            `<tr${esAparte ? ' class="fila-aparte-seg"' : ""}>` +
             celdaFecha +
             celdaPedido +
             `<td>${_textoSupersSeg(e.supernumerarios)}</td>` +
             `<td>${escapeHtml(e.subLinea)}</td>` +
-            `<td>${escapeHtml(e.estado)}</td>` +
+            `<td>${esAparte ? "Aparte" : escapeHtml(e.estado)}</td>` +
             `<td style="white-space:nowrap">${escapeHtml(e.ean)}</td>` +
-            `<td>${e.sinLimite ? "Sin límite" : e.unidadesTotales}</td>` +
+            `<td>${e.sinLimite ? "Sin límite" : esAparte ? "—" : e.unidadesTotales}</td>` +
             `<td>${_fmtUnidades(e.unidadesProcesadas)}</td>` +
-            `<td>${_fmtUnidades(e.unidadesPendientes)}</td>` +
+            `<td>${esAparte ? "—" : _fmtUnidades(e.unidadesPendientes)}</td>` +
             `<td>${e.horasTotales !== null ? e.horasTotales : "—"}</td>` +
-            `<td>${e.eficiencia !== null ? e.eficiencia + "%" : "—"}</td>` +
+            `<td>${!esAparte && e.eficiencia !== null ? e.eficiencia + "%" : "—"}</td>` +
             `</tr>`
           );
-        });
+        };
+        const filas = referentes.map((e) => filaEan(e, false));
 
-        // Fila Total: las mismas cifras del pedido que mostraba la tabla antes.
+        // Fila Total: cifras del pedido, solo de los EAN con unidades.
         filas.push(
           `<tr class="fila-total-seg">` +
-            `<td>Total</td>` +
+            `<td>Total pedido</td>` +
             celdaPedido +
             `<td>${_textoSupersSeg(res.supernumerariosPedido)}</td>` +
             `<td>${escapeHtml(p.subLinea)}</td>` +
@@ -3322,6 +3336,40 @@
             `<td>${p.eficiencia !== null ? p.eficiencia + "%" : "—"}</td>` +
             `</tr>`,
         );
+
+        // EAN 0 y sin límite: aparte, no cuentan para el cierre ni para las
+        // cifras del pedido. Total aparte suma solo unidades y horas.
+        if (aparte.length) {
+          filas.push(
+            `<tr class="fila-titulo-aparte-seg"><td colspan="${COLUMNAS_SEG_DETALLE.length}">EAN 0 y sin límite (no cuentan para el cierre)</td></tr>`,
+          );
+          aparte.forEach((e) => filas.push(filaEan(e, true)));
+          const procAparte = aparte.reduce(
+            (s, e) => s + (Number(e.unidadesProcesadas) || 0),
+            0,
+          );
+          const conHoras = aparte.filter((e) => e.horasTotales !== null);
+          const horasAparte = conHoras.length
+            ? Math.round(
+                conHoras.reduce((s, e) => s + e.horasTotales, 0) * 100,
+              ) / 100
+            : null;
+          const supersAparte = [
+            ...new Set(aparte.flatMap((e) => e.supernumerarios || [])),
+          ];
+          filas.push(
+            `<tr class="fila-total-seg fila-aparte-seg">` +
+              `<td>Total aparte</td>` +
+              celdaPedido +
+              `<td>${_textoSupersSeg(supersAparte)}</td>` +
+              `<td>—</td><td>—</td><td>—</td><td>—</td>` +
+              `<td>${_fmtUnidades(procAparte)}</td>` +
+              `<td>—</td>` +
+              `<td>${horasAparte !== null ? horasAparte : "—"}</td>` +
+              `<td>—</td>` +
+              `</tr>`,
+          );
+        }
 
         document.getElementById("seguimientoPaquetesBody").innerHTML =
           filas.join("");
@@ -3633,8 +3681,9 @@
       // Mismo criterio que justificarPedido en el Worker: solo suman los EAN
       // con faltante. restantePedido no sirve: los EAN con exceso lo restan.
       function _faltanteJustificable(detalleEanes) {
+        // referente === false: EAN 0 o sin límite, no se justifican (igual que el Worker).
         const suma = (detalleEanes || []).reduce(function (s, e) {
-          return e.restantes > 0 ? s + e.restantes : s;
+          return e.referente !== false && e.restantes > 0 ? s + e.restantes : s;
         }, 0);
         return Math.round(suma * 100) / 100;
       }
