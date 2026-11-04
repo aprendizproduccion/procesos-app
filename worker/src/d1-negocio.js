@@ -272,24 +272,28 @@ export async function _marcarPedidoIniciado(env, pedido, ahora) {
   }
 }
 
-// EAN "referente": tiene unidades asignadas y es un EAN real. Solo estos
-// deciden el cierre del pedido y suman a sus cifras. El EAN 0 (inducciones,
-// explicaciones; cualquier texto solo de ceros) y los sin límite (trabajo sin
-// unidades estimadas) se muestran aparte. alias: prefijo de tabla ("v.") o "".
+// EAN "referente": tiene unidades asignadas. Solo estos deciden el cierre del
+// pedido y suman a sus cifras. Van aparte: los sin límite (trabajo sin
+// unidades estimadas) y el EAN 0 con unidades en 0 (inducciones,
+// explicaciones). Un EAN 0 CON unidades es un producto sin código y sí
+// cuenta. "EAN 0" = texto solo de ceros. alias: prefijo de tabla ("v.") o "".
 export function _sqlEanReferente(alias) {
   const a = alias || "";
-  return "(" + a + "sin_limite = 0 AND TRIM(" + a + "ean_producto, '0') <> '')";
+  return (
+    "(" + a + "sin_limite = 0 AND (TRIM(" + a + "ean_producto, '0') <> '' OR " +
+    a + "unidades_totales > 0))"
+  );
 }
 
-// Registros que cuentan para las cifras del pedido: los de EAN referentes.
-// NOT EXISTS (y no IN) para conservar los registros cuyo EAN ya no está en
-// validacion_eanes; la condición sobre .ean excluye el EAN 0 aunque su fila
-// se haya borrado. alias: nombre o alias de la tabla registros, sin punto.
+// Registros que cuentan para las cifras del pedido: todos menos los de un EAN
+// no referente. NOT EXISTS (y no IN) para conservar los registros cuyo EAN ya
+// no está en validacion_eanes. alias: nombre o alias de la tabla registros,
+// sin punto.
 export function _sqlRegistroReferente(alias) {
   return (
-    "(TRIM(" + alias + ".ean, '0') <> '' AND NOT EXISTS (SELECT 1 FROM validacion_eanes vx " +
+    "NOT EXISTS (SELECT 1 FROM validacion_eanes vx " +
     "WHERE vx.numero_pedido = " + alias + ".numero_pedido AND vx.ean_producto = " +
-    alias + ".ean AND vx.sin_limite = 1))"
+    alias + ".ean AND NOT " + _sqlEanReferente("vx.") + ")"
   );
 }
 

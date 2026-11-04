@@ -3341,7 +3341,7 @@
         // cifras del pedido. Total aparte suma solo unidades y horas.
         if (aparte.length) {
           filas.push(
-            `<tr class="fila-titulo-aparte-seg"><td colspan="${COLUMNAS_SEG_DETALLE.length}">EAN 0 y sin límite (no cuentan para el cierre)</td></tr>`,
+            `<tr class="fila-titulo-aparte-seg"><td colspan="${COLUMNAS_SEG_DETALLE.length}">EAN 0 sin unidades y sin límite (no cuentan para el cierre)</td></tr>`,
           );
           aparte.forEach((e) => filas.push(filaEan(e, true)));
           const procAparte = aparte.reduce(
