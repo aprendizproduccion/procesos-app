@@ -733,6 +733,12 @@ function _horaValida(h) {
   return PATRON_HORA.test(String(h == null ? "" : h).trim());
 }
 
+// ISO aaaa-mm-dd → dd/mm/aaaa para los mensajes de conflicto de la cadena.
+function _fechaCadenaTexto(fecha) {
+  const p = String(fecha || "").split("-");
+  return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : String(fecha || "");
+}
+
 // Inicio que le corresponde a "fila" según la cadena: la mayor hora_final de
 // las demás filas activas del día que terminan antes que ella; si no hay
 // ninguna, el turno. Las horas HH:MM con cero a la izquierda comparan bien
@@ -753,7 +759,7 @@ function _inicioDerivado(filas, fila, turno) {
 //   { hora_inicio, hora_final } o null si en ese momento no está activa en
 //   este día (anulada, o en otra fecha).
 // Devuelve { conflicto: texto | null, cambios: [...] }.
-export function _planCadenaDia({ antes, despues, turno, x }) {
+export function _planCadenaDia({ antes, despues, turno, x, fecha }) {
   const finesX = [x.antes, x.despues]
     .filter((v) => v && _horaValida(v.hora_final))
     .map((v) => v.hora_final);
@@ -780,15 +786,13 @@ export function _planCadenaDia({ antes, despues, turno, x }) {
         conflicto:
           "Este registro terminaría a las " +
           x.despues.hora_final +
-          " y genera conflicto con un registro posterior del mismo operario: #" +
-          c.id +
-          " (pedido " +
-          c.numero_pedido +
+          " y se cruza con un registro posterior de este operario: el del " +
+          _fechaCadenaTexto(fecha) +
           ", de " +
           c.hora_inicio +
           " a " +
           c.hora_final +
-          "). Corrige o anula primero ese registro.",
+          ". Corrige o anula primero ese registro.",
         cambios: [],
       };
     }
@@ -822,13 +826,11 @@ export function _planCadenaDia({ antes, despues, turno, x }) {
     } catch (err) {
       return {
         conflicto:
-          "El cambio genera conflicto con un registro posterior del mismo operario: #" +
-          f.id +
-          " (pedido " +
-          f.numero_pedido +
-          ", termina a las " +
+          "El cambio genera conflicto con un registro posterior de este operario: el del " +
+          _fechaCadenaTexto(fecha) +
+          " que termina a las " +
           f.hora_final +
-          ") pasaría a empezar a las " +
+          " pasaría a empezar a las " +
           inicioNuevo +
           " y quedaría inválido: " +
           err.message +
@@ -913,6 +915,7 @@ export async function _planCascadaRegistro(env, { id, cedula, antes, despues }) 
       despues: xDespues ? otras.concat([xDespues]) : otras,
       turno,
       x: { id, antes: xAntes, despues: xDespues },
+      fecha,
     });
     if (plan.conflicto) return { conflicto: plan.conflicto, cambios: [] };
     cambios.push(...plan.cambios);
