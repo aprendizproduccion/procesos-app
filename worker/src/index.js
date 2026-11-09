@@ -2,6 +2,20 @@ import { accionesLectura } from "./acciones-lectura.js";
 import { accionesAuth } from "./acciones-auth.js";
 import { accionesEscritura } from "./acciones-escritura.js";
 import { _reconciliarSeguimientoD1 } from "./d1-negocio.js";
+import {
+  leerModoAuth,
+  verificarSesion,
+  secretoSesionesConfigurado,
+} from "./sesiones.js";
+
+// Pasan sin sesión en cualquier modo. establecerClaveUsuario la protege la
+// clave maestra.
+const ACCIONES_PUBLICAS = new Set([
+  "nombrePorCedula",
+  "validarLogin",
+  "cerrarSesion",
+  "establecerClaveUsuario",
+]);
 
 export default {
   // Cron del Worker (ver "triggers" en wrangler.jsonc). Solo corre la red de
@@ -36,7 +50,9 @@ export default {
       );
     }
 
-    const { action, token, datos } = body;
+    // `sesion` va fuera de `datos` a propósito: así no entra en la huella de
+    // idempotencia de las escrituras, que se calcula sobre `datos`.
+    const { action, token, datos, sesion: tokenSesion } = body;
 
     if (!env.TOKEN_API || token !== env.TOKEN_API) {
       return json({ success: false, message: "Token inválido" }, 401);
@@ -50,8 +66,51 @@ export default {
     }
 
     try {
-      const ip = request.headers.get("CF-Connecting-IP") || "desconocida";
-      const resultado = await handler(datos || {}, env, ctx, ip);
+      // Por el service binding CF-Connecting-IP no llega: el proxy reenvía
+      // la IP real en X-Cliente-IP.
+      const ip =
+        request.headers.get("X-Cliente-IP") ||
+        request.headers.get("CF-Connecting-IP") ||
+        "desconocida";
+
+      let sesion = null;
+      if (!ACCIONES_PUBLICAS.has(action)) {
+        if (tokenSesion) {
+          // Un token que no vale se rechaza también en mixto: así una cuenta
+          // desactivada o una sesión vencida lleva al login desde ya.
+          sesion = await verificarSesion(env, tokenSesion);
+          if (!sesion) {
+            if (!secretoSesionesConfigurado(env)) {
+              console.error(
+                "SECRET_SESIONES ausente o corto: toda sesión se ve vencida.",
+              );
+            }
+            return json(
+              {
+                success: false,
+                sesionVencida: true,
+                message:
+                  "Tu sesión venció o ya no es válida. Inicia sesión de nuevo.",
+              },
+              401,
+            );
+          }
+        } else if ((await leerModoAuth(env)) === "mixto") {
+          // Frontend viejo en caché. En S3 se revisa que ya no aparezca.
+          console.log("sin sesión: " + action);
+        } else {
+          return json(
+            {
+              success: false,
+              sesionVencida: true,
+              message: "Inicia sesión para continuar.",
+            },
+            401,
+          );
+        }
+      }
+
+      const resultado = await handler(datos || {}, env, ctx, ip, sesion);
       return json(resultado);
     } catch (err) {
       return json({ success: false, message: err.message }, 500);

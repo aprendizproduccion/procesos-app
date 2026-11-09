@@ -20,6 +20,12 @@ export const DURACION_SESION_SEG = {
 const DEMORA_MAX_SEG = 10; // techo de demora tras intentos fallidos repetidos
 const DECAY_MS = 60 * 60 * 1000; // 1 hora sin fallos nuevos = contador reiniciado
 
+// La llave "ip:" solo empieza a demorar pasado este número de fallos. Bodega y
+// oficinas salen cada una por una IP pública compartida: sin umbral, los
+// errores de digitación de todos sumarían en un solo contador. La protección
+// por persona la da la llave "ced:", que demora desde el primer fallo.
+export const UMBRAL_DEMORA_IP = 20;
+
 const _enc = new TextEncoder();
 const _dec = new TextDecoder();
 
@@ -142,8 +148,8 @@ export async function firmarToken(env, { rol, cedula, nombre, v }) {
 }
 
 // Devuelve el contenido del token si la firma es válida y no venció; si no,
-// null. No consulta D1: la versión y el estado de la cuenta los revisa quien
-// llama (S1), solo para los roles con clave.
+// null. No consulta D1: la versión y el estado de la cuenta los revisa
+// verificarSesion, solo para los roles con clave.
 export async function verificarToken(env, token) {
   const partes = String(token || "").split(".");
   if (partes.length !== 2 || !partes[0] || !partes[1]) return null;
@@ -170,6 +176,57 @@ export async function verificarToken(env, token) {
   return datos;
 }
 
+// true si SECRET_SESIONES sirve para firmar. Sin él, toda sesión se ve
+// vencida y no hay otro síntoma: index.js lo usa para dejarlo en el log.
+export function secretoSesionesConfigurado(env) {
+  return String(env.SECRET_SESIONES || "").length >= 32;
+}
+
+// Sesión de una petición: { rol, cedula, nombre } o null. El operario se
+// valida solo con la firma y la expiración. Supervisor y Planeación, además,
+// contra D1: la cuenta y la persona deben seguir activas y la versión debe
+// coincidir (cambiar la contraseña o desactivar invalida al instante).
+export async function verificarSesion(env, token) {
+  const datos = await verificarToken(env, token);
+  if (!datos) return null;
+  const cedula = String(datos.cedula || "");
+  if (!cedula) return null;
+  if (ROLES_CON_CLAVE.includes(datos.rol)) {
+    const fila = await env.DB.prepare(
+      "SELECT u.version, u.activo AS cuenta_activa, o.activo AS persona_activa " +
+        "FROM usuarios u JOIN operarios o ON o.cedula = u.cedula " +
+        "WHERE u.cedula = ? AND u.rol = ?",
+    )
+      .bind(cedula, datos.rol)
+      .first();
+    if (
+      !fila ||
+      fila.cuenta_activa !== 1 ||
+      fila.persona_activa !== 1 ||
+      fila.version !== Number(datos.v)
+    ) {
+      return null;
+    }
+  }
+  return { rol: datos.rol, cedula, nombre: String(datos.nombre || "") };
+}
+
+// ---------- modo de autenticación (config.auth_modo) ----------
+// 'mixto': se aceptan peticiones sin sesión (frontend viejo en caché).
+// 'estricto': solo las acciones públicas pasan sin sesión. Si la fila falta o
+// trae otro valor, se trata como estricto (fail-closed).
+export async function leerModoAuth(env) {
+  const fila = await env.DB.prepare(
+    "SELECT valor FROM config WHERE clave = 'auth_modo'",
+  ).first();
+  const valor = fila
+    ? String(fila.valor || "")
+        .trim()
+        .toLowerCase()
+    : "";
+  return valor === "mixto" ? "mixto" : "estricto";
+}
+
 // ---------- demora por intentos fallidos (tabla intentos_login) ----------
 // Llaves con prefijo: "ip:<ip>", "ced:<cedula>", "maestra:<ip>". Las filas
 // viejas de validarLogin usan la IP sin prefijo; conviven sin problema.
@@ -188,12 +245,14 @@ export async function intentosVigentes(env, llave) {
 
 // Suma un fallo a cada llave y espera según el mayor contador. Sin bloqueo
 // duro: un bloqueo permitiría dejar sin acceso a un compañero a propósito.
-export async function registrarFalloYEsperar(env, llaves) {
+// umbrales: { llave: n } — esa llave solo cuenta para la demora pasados n
+// fallos (se usa para la llave "ip:", ver UMBRAL_DEMORA_IP).
+export async function registrarFalloYEsperar(env, llaves, umbrales = {}) {
   const ahora = new Date().toISOString();
   let mayor = 0;
   for (const llave of llaves) {
     const nuevos = (await intentosVigentes(env, llave)) + 1;
-    mayor = Math.max(mayor, nuevos);
+    mayor = Math.max(mayor, nuevos - (umbrales[llave] || 0));
     await env.DB.prepare(
       "INSERT INTO intentos_login (identificador, intentos, actualizado_en) VALUES (?, ?, ?) " +
         "ON CONFLICT(identificador) DO UPDATE SET intentos = excluded.intentos, " +

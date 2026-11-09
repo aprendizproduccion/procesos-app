@@ -1,6 +1,11 @@
 import {
+  ITERACIONES_PBKDF2,
   ROLES_CON_CLAVE,
+  UMBRAL_DEMORA_IP,
   hashClave,
+  verificarClave,
+  firmarToken,
+  leerModoAuth,
   textosIguales,
   registrarFalloYEsperar,
   borrarIntentos,
@@ -8,69 +13,136 @@ import {
 
 const LARGO_MIN_CLAVE = 8; // mínimo para las contraseñas de usuarios
 
-const DEMORA_MAX_SEG = 10; // techo de demora tras intentos fallidos repetidos
-const DECAY_MS = 60 * 60 * 1000; // 1 hora sin fallos nuevos = contador se considera reiniciado
+const MSG_CEDULA_INACTIVA = "No encontramos esa cédula entre el personal activo.";
+
+// Sin cuenta se calcula igual un hash contra esta fila, para que el tiempo de
+// respuesta no delate si la cédula tiene cuenta.
+const CUENTA_FICTICIA = {
+  hash: "A".repeat(43),
+  sal: "A".repeat(22),
+  iteraciones: ITERACIONES_PBKDF2,
+};
+
+async function _personaActiva(env, cedula) {
+  return env.DB.prepare(
+    "SELECT nombre_operario AS nombre FROM operarios WHERE cedula = ? AND activo = 1",
+  )
+    .bind(cedula)
+    .first();
+}
+
+// El proxy quita token y exp del JSON y los guarda en la cookie rp_ses.
+async function _respuestaLogin(env, contenido) {
+  const t = await firmarToken(env, contenido);
+  return {
+    success: true,
+    rol: contenido.rol,
+    nombre: contenido.nombre,
+    cedula: contenido.cedula,
+    token: t.token,
+    exp: t.exp,
+    duracion: t.duracion,
+  };
+}
+
+// Formato viejo, sin cédula: { rol: "operario" } o { rol: "supervisor",
+// password } contra PASS_SUPERVISOR. Solo en modo mixto, para un index.html en
+// caché. No devuelve token. Sale en S4 junto con PASS_SUPERVISOR.
+async function _loginSinCedula(env, ip, rol, clave) {
+  if (rol === "planeacion" || (await leerModoAuth(env)) !== "mixto") {
+    return { success: false, message: "Escribe o escanea tu cédula." };
+  }
+  if (rol === "operario") return { success: true, rol };
+
+  const claveGuardada = env.PASS_SUPERVISOR || "";
+  if (!claveGuardada) {
+    return {
+      success: false,
+      message:
+        "No hay contraseña configurada para este rol. Contacta al administrador.",
+    };
+  }
+  const llave = "ip:" + (ip || "desconocida");
+  if (await textosIguales(clave, claveGuardada)) {
+    await borrarIntentos(env, [llave]);
+    return { success: true, rol };
+  }
+  await registrarFalloYEsperar(env, [llave]);
+  return { success: false, message: "Contraseña incorrecta." };
+}
 
 export const accionesAuth = {
+  // Pública. Muestra el nombre en el login antes de pedir la contraseña. Solo
+  // dice si la cédula está activa en Operarios, no si tiene cuenta.
+  async nombrePorCedula(datos, env) {
+    const cedula = String(datos.cedula || "").trim();
+    if (!cedula) {
+      return { success: false, message: "Escribe o escanea tu cédula." };
+    }
+    const persona = await _personaActiva(env, cedula);
+    if (!persona) return { success: false, message: MSG_CEDULA_INACTIVA };
+    return { success: true, nombre: persona.nombre };
+  },
+
+  // Pública. Login de los tres roles por cédula: el operario sin contraseña,
+  // supervisor y Planeación contra su cuenta en `usuarios`. Devuelve un token
+  // firmado (ver _respuestaLogin). La respuesta no distingue "no tienes
+  // cuenta" de "contraseña incorrecta".
   async validarLogin(datos, env, ctx, ip) {
     const rol = String(datos.rol || "")
       .trim()
       .toLowerCase();
+    const cedula = String(datos.cedula || "").trim();
     const clave = String(datos.password || "");
 
-    if (rol === "operario") {
-      // El perfil operario no requiere contraseña.
-      return { success: true, rol };
-    }
-
-    if (rol !== "supervisor") {
+    if (rol !== "operario" && !ROLES_CON_CLAVE.includes(rol)) {
       return { success: false, message: "Rol inválido." };
     }
+    if (!cedula) return _loginSinCedula(env, ip, rol, clave);
 
-    const claveGuardada = env.PASS_SUPERVISOR || "";
-    if (!claveGuardada) {
-      return {
-        success: false,
-        message:
-          "No hay contraseña configurada para este rol. Contacta al administrador.",
-      };
+    if (rol === "operario") {
+      const persona = await _personaActiva(env, cedula);
+      if (!persona) return { success: false, message: MSG_CEDULA_INACTIVA };
+      return _respuestaLogin(env, { rol, cedula, nombre: persona.nombre, v: 0 });
     }
 
-    const identificador = ip || "desconocida";
+    const llaveIp = "ip:" + (ip || "desconocida");
+    const llaves = [llaveIp, "ced:" + cedula];
     const fila = await env.DB.prepare(
-      "SELECT intentos, actualizado_en FROM intentos_login WHERE identificador = ?",
+      "SELECT u.hash, u.sal, u.iteraciones, u.version, u.activo AS cuenta_activa, " +
+        "o.nombre_operario AS nombre, o.activo AS persona_activa " +
+        "FROM usuarios u JOIN operarios o ON o.cedula = u.cedula " +
+        "WHERE u.cedula = ? AND u.rol = ?",
     )
-      .bind(identificador)
+      .bind(cedula, rol)
       .first();
-    const yaExpiro =
-      fila && Date.now() - new Date(fila.actualizado_en).getTime() > DECAY_MS;
-    const intentosPrevios = fila && !yaExpiro ? fila.intentos : 0;
-
-    if (clave === claveGuardada) {
-      if (fila) {
-        await env.DB.prepare(
-          "DELETE FROM intentos_login WHERE identificador = ?",
-        )
-          .bind(identificador)
-          .run();
-      }
-      return { success: true, rol };
+    const claveOk = await verificarClave(clave, fila || CUENTA_FICTICIA);
+    if (
+      !fila ||
+      !claveOk ||
+      fila.cuenta_activa !== 1 ||
+      fila.persona_activa !== 1
+    ) {
+      await registrarFalloYEsperar(env, llaves, {
+        [llaveIp]: UMBRAL_DEMORA_IP,
+      });
+      return { success: false, message: "Cédula o contraseña incorrecta." };
     }
+    // Se borran las dos llaves: quien ataca desde internet nunca acierta desde
+    // su IP, y en bodega la protección por persona la sigue dando "ced:".
+    await borrarIntentos(env, llaves);
+    return _respuestaLogin(env, {
+      rol,
+      cedula,
+      nombre: fila.nombre,
+      v: fila.version,
+    });
+  },
 
-    // Contraseña incorrecta: registrar el intento y aplicar demora creciente
-    // (no bloqueo duro, para no afectar a otros dispositivos que compartan IP).
-    const intentosNuevos = intentosPrevios + 1;
-    await env.DB.prepare(
-      "INSERT INTO intentos_login (identificador, intentos, actualizado_en) VALUES (?, ?, ?) " +
-        "ON CONFLICT(identificador) DO UPDATE SET intentos = excluded.intentos, actualizado_en = excluded.actualizado_en",
-    )
-      .bind(identificador, intentosNuevos, new Date().toISOString())
-      .run();
-
-    const demoraSeg = Math.min(intentosNuevos, DEMORA_MAX_SEG);
-    await new Promise((resolve) => setTimeout(resolve, demoraSeg * 1000));
-
-    return { success: false, message: "Contraseña incorrecta." };
+  // Pública. El token no tiene estado en el servidor: cerrar sesión es borrar
+  // la cookie, y eso lo hace el proxy al ver esta acción.
+  async cerrarSesion() {
+    return { success: true };
   },
 
   // Crea, restablece, desactiva o reactiva la cuenta de un administrativo o de
