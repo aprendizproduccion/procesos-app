@@ -11,7 +11,7 @@ import {
   borrarIntentos,
 } from "./sesiones.js";
 
-const LARGO_MIN_CLAVE = 8; // mínimo para las contraseñas de usuarios
+const LARGO_MIN_CLAVE = 8; // mínimo para las contraseñas de  usuarios
 
 const MSG_CEDULA_INACTIVA = "No encontramos esa cédula entre el personal activo.";
 
