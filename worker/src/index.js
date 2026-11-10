@@ -109,7 +109,7 @@ export default {
             );
           }
         } else if (!rolesPermitidos && (await leerModoAuth(env)) === "mixto") {
-          // Las acciones del mapa no entran aquí: exigen sesión también en
+          // Las acciones del mapa no entran  aquí: exigen sesión también en
           // mixto, y caen al 401 de abajo sin dejar log de "sin sesión".
           // Frontend viejo en caché. En S3 se revisa que ya no aparezca.
           console.log("sin sesión: " + action);
