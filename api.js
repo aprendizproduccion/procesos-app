@@ -25,8 +25,9 @@ function llamarAPI(action, datos, intento) {
       return res.text();
     })
     .then(function (texto) {
+      var datos;
       try {
-        return JSON.parse(texto);
+        datos = JSON.parse(texto);
       } catch (e) {
         console.warn(
           "llamarAPI: respuesta no-JSON en intento " +
@@ -47,5 +48,15 @@ function llamarAPI(action, datos, intento) {
           "El servidor no respondió correctamente después de varios intentos. Verifica tu conexión e inténtalo de nuevo.",
         );
       }
+      // Sesión vencida o inválida: el proxy ya borró la cookie; index.html
+      // lleva al login. Sin reintento: repetir la petición no la arregla.
+      if (
+        datos &&
+        datos.sesionVencida &&
+        typeof window.alVencerSesion === "function"
+      ) {
+        window.alVencerSesion(datos.message);
+      }
+      return datos;
     });
 }

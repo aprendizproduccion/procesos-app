@@ -2320,7 +2320,7 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
-    <script src="api.js?v=20261009"></script>
+    <script src="api.js?v=20261110"></script>
     <script>
       let rolActual = null;
 
@@ -4438,6 +4438,8 @@
       }
 
       function volverALogin() {
+        // Borra la cookie de sesión, si hay. No se espera la respuesta.
+        llamarAPI("cerrarSesion", {}).catch(function () {});
         // 1. Ocultar vistas
         [
           "vistaPrincipal",
@@ -5762,6 +5764,16 @@
 
       function cerrarModalAviso() {
         document.getElementById("modalAviso").classList.remove("visible");
+      }
+
+      // La llama api.js cuando el servidor responde sesionVencida. Hasta el
+      // corte solo puede pasarle a Planeación (los demás no tienen cookie).
+      function alVencerSesion(mensaje) {
+        volverALogin();
+        mostrarModalAviso(
+          mensaje || "Tu sesión venció. Inicia sesión de nuevo.",
+          "Sesión vencida",
+        );
       }
 
       let opNombreOperario = "";
