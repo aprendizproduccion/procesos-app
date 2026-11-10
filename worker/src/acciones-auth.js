@@ -145,6 +145,21 @@ export const accionesAuth = {
     return { success: true };
   },
 
+  // No es pública: index.js ya verificó el token. Con token inválido responde
+  // 401 sesionVencida antes de llegar aquí. La usa el navegador al recargar
+  // para confirmar que la sesión guardada en rp_sesion sigue viva.
+  async sesionActual(datos, env, ctx, ip, sesion) {
+    if (!sesion) {
+      return { success: false, sinSesion: true, message: "No hay sesión activa." };
+    }
+    return {
+      success: true,
+      rol: sesion.rol,
+      nombre: sesion.nombre,
+      cedula: sesion.cedula,
+    };
+  },
+
   // Crea, restablece, desactiva o reactiva la cuenta de un administrativo o de
   // Planeación. Protegida por el secret CLAVE_MAESTRA; se llama desde la
   // consola del navegador. Una contraseña nueva o un cambio de estado sube

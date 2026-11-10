@@ -17,6 +17,14 @@ const ACCIONES_PUBLICAS = new Set([
   "establecerClaveUsuario",
 ]);
 
+// Acciones que exigen sesión de ciertos roles en cualquier modo, también en
+// mixto. Sin sesión → 401 sesionVencida (lleva al login); con sesión de otro
+// rol → 403. Hasta el corte solo entran aquí las acciones de Planeación; en el
+// corte se suman las demás y este mapa pasa a ser el mapa de permisos completo.
+const PERMISOS_POR_ACCION = {
+  // Se llena con F2, por ejemplo: getClientesPlaneacion: ["planeacion"],
+};
+
 export default {
   // Cron del Worker (ver "triggers" en wrangler.jsonc). Solo corre la red de
   // seguridad de "Seguimiento paquetes"; no pasa por el token ni por ACCIONES
@@ -73,6 +81,11 @@ export default {
         request.headers.get("CF-Connecting-IP") ||
         "desconocida";
 
+      // Object.hasOwn: "toString" y similares no cuentan como entradas.
+      const rolesPermitidos = Object.hasOwn(PERMISOS_POR_ACCION, action)
+        ? PERMISOS_POR_ACCION[action]
+        : null;
+
       let sesion = null;
       if (!ACCIONES_PUBLICAS.has(action)) {
         if (tokenSesion) {
@@ -95,7 +108,9 @@ export default {
               401,
             );
           }
-        } else if ((await leerModoAuth(env)) === "mixto") {
+        } else if (!rolesPermitidos && (await leerModoAuth(env)) === "mixto") {
+          // Las acciones del mapa no entran aquí: exigen sesión también en
+          // mixto, y caen al 401 de abajo sin dejar log de "sin sesión".
           // Frontend viejo en caché. En S3 se revisa que ya no aparezca.
           console.log("sin sesión: " + action);
         } else {
@@ -108,6 +123,14 @@ export default {
             401,
           );
         }
+      }
+
+      if (rolesPermitidos && !rolesPermitidos.includes(sesion.rol)) {
+        console.warn("sin permiso: " + action + " (rol " + sesion.rol + ")");
+        return json(
+          { success: false, message: "No tienes permiso para esta acción." },
+          403,
+        );
       }
 
       const resultado = await handler(datos || {}, env, ctx, ip, sesion);
