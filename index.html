@@ -964,8 +964,38 @@
         >
           Operativo
         </button>
+        <button
+          type="button"
+          class="btn-submit btn-gv-contorno"
+          onclick="seleccionarRol('planeacion')"
+        >
+          Planeación
+        </button>
       </div>
       <div id="loginPasswordBox" style="display: none; margin-top: 14px">
+        <div id="loginCedulaWrap" style="display: none">
+          <label for="loginCedula">Cédula</label>
+          <div class="add-row" style="margin-bottom: 14px">
+            <input
+              id="loginCedula"
+              placeholder="Escanea o escribe tu cédula"
+              autocomplete="off"
+              enterkeyhint="next"
+            />
+            <button
+              type="button"
+              id="btnLoginCedula"
+              onclick="confirmarCedulaLogin()"
+            >
+              Continuar
+            </button>
+          </div>
+          <div
+            id="loginNombre"
+            class="ean-confirmado"
+            style="display: none"
+          ></div>
+        </div>
         <div id="loginPasswordFieldWrap">
           <label id="loginRolLabel"></label>
           <div style="position: relative">
@@ -1037,7 +1067,12 @@
       style="display: none; max-width: 400px; margin: 60px auto"
     >
       <h1 style="margin-top: 0; font-size: 20px">Menú</h1>
-      <div class="dashboard-grid">
+      <p
+        id="dashboardNombreSesion"
+        class="hint"
+        style="display: none; margin-top: 0; text-align: center"
+      ></p>
+      <div class="dashboard-grid" id="gridGeneralDashboard">
         <button
           type="button"
           class="tarjetaApp"
@@ -1118,6 +1153,12 @@
           <span class="tarjetaApp-icono">🏬</span>
           <span>Almacenes en línea</span>
         </button>
+      </div>
+      <!-- Solo Planeación: los módulos que reemplazan las hojas (F2 en adelante). -->
+      <div id="gridPlaneacionDashboard" style="display: none">
+        <p class="msg info" style="margin-top: 0; text-align: center">
+          Los módulos de Clientes y Pedidos están en construcción.
+        </p>
       </div>
       <button
         type="button"
@@ -2323,21 +2364,29 @@
     <script src="api.js?v=20261110"></script>
     <script>
       let rolActual = null;
+      // Nombre de quien inició sesión con cédula (hoy solo Planeación). Es solo
+      // para la interfaz: la sesión real es la cookie rp_ses.
+      let nombreSesion = "";
+      let loginCedulaConfirmada = "";
+      let loginConsultaCedula = 0; // descarta respuestas viejas de nombrePorCedula
 
       // ---------------- SESIÓN PERSISTENTE (localStorage) ----------------
       const SESION_DURACION_MS = 8 * 60 * 60 * 1000; // 8 horas
 
-      function guardarSesion(rol) {
-        localStorage.setItem(
-          "rp_sesion",
-          JSON.stringify({ rol, expira: Date.now() + SESION_DURACION_MS }),
-        );
+      // duracionSeg viene del servidor en el login con cédula: así rp_sesion
+      // vence junto con la cookie. Sin ella, 8 h como siempre.
+      function guardarSesion(rol, nombre, duracionSeg) {
+        const ms = duracionSeg > 0 ? duracionSeg * 1000 : SESION_DURACION_MS;
+        const datos = { rol, expira: Date.now() + ms };
+        if (nombre) datos.nombre = nombre;
+        localStorage.setItem("rp_sesion", JSON.stringify(datos));
       }
 
       function _restaurarSesionGuardada() {
         try {
           const guardado = JSON.parse(localStorage.getItem("rp_sesion"));
           if (guardado && guardado.rol && guardado.expira > Date.now()) {
+            nombreSesion = guardado.nombre || "";
             return guardado.rol;
           }
         } catch (e) {}
@@ -2357,12 +2406,49 @@
         ).style.display = rolActual === "supervisor" ? "" : "none";
         document.getElementById("btnAlimentacionDashboard").style.display =
           rolActual === "supervisor" ? "" : "none";
+        // Planeación ve solo sus módulos; los demás roles, la grilla de siempre.
+        const esPlaneacion = rolActual === "planeacion";
+        document.getElementById("gridGeneralDashboard").style.display =
+          esPlaneacion ? "none" : "";
+        document.getElementById("gridPlaneacionDashboard").style.display =
+          esPlaneacion ? "" : "none";
+        _pintarNombreSesion();
+      }
+
+      function _pintarNombreSesion() {
+        const el = document.getElementById("dashboardNombreSesion");
+        el.textContent = nombreSesion ? "Sesión de " + nombreSesion : "";
+        el.style.display = nombreSesion ? "" : "none";
+      }
+
+      // rp_sesion solo recuerda la interfaz. Al recargar se confirma con el
+      // servidor que la cookie sigue viva; si no, de vuelta al login.
+      function _verificarSesionPlaneacion() {
+        llamarAPI("sesionActual", {})
+          .then(function (res) {
+            if (res.sesionVencida) return; // ya lo atendió alVencerSesion
+            if (rolActual !== "planeacion") return; // ya salió de la sesión
+            if (res.success && res.rol === "planeacion") {
+              nombreSesion = res.nombre || nombreSesion;
+              _pintarNombreSesion();
+              return;
+            }
+            volverALogin();
+            mostrarModalAviso(
+              "Tu sesión venció. Inicia sesión de nuevo.",
+              "Sesión vencida",
+            );
+          })
+          .catch(function () {
+            // Sin conexión no se saca a nadie: la siguiente acción lo decide.
+          });
       }
 
       const _rolRestaurado = _restaurarSesionGuardada();
       if (_rolRestaurado) {
         rolActual = _rolRestaurado;
         _mostrarDashboardTrasLogin();
+        if (rolActual === "planeacion") _verificarSesionPlaneacion();
       }
 
       // ---------------- BORRADOR DE FORMULARIO (localStorage) ----------------
@@ -2507,20 +2593,101 @@
         },
       );
 
+      // Planeación entra con cédula → nombre → contraseña. Administrativo y
+      // Operativo siguen con el login de siempre hasta el corte.
       function seleccionarRol(rol) {
         rolActual = rol;
+        const conCedula = rol === "planeacion";
+        _reiniciarPasoCedulaLogin();
+        document.getElementById("loginCedula").value = "";
         document.getElementById("loginBotones").style.display = "none";
         document.getElementById("loginPasswordBox").style.display = "block";
+        document.getElementById("loginCedulaWrap").style.display = conCedula
+          ? "block"
+          : "none";
         document.getElementById("loginPasswordFieldWrap").style.display =
           rol === "supervisor" ? "block" : "none";
         document.getElementById("loginRolLabel").textContent =
-          rol === "supervisor" ? "Contraseña de Administrativo" : "";
+          rol === "supervisor"
+            ? "Contraseña de Administrativo"
+            : conCedula
+              ? "Contraseña"
+              : "";
         document.getElementById("loginPassword").value = "";
         document.getElementById("loginError").innerHTML = "";
+        // Planeación no puede entrar hasta confirmar su cédula.
+        document.getElementById("btnEnviarLogin").disabled = conCedula;
         if (rol === "supervisor") {
           document.getElementById("loginPassword").focus();
+        } else if (conCedula) {
+          document.getElementById("loginCedula").focus();
         }
       }
+
+      // Vuelve al primer paso de Planeación: sin nombre ni contraseña a la vista.
+      function _reiniciarPasoCedulaLogin() {
+        loginCedulaConfirmada = "";
+        loginConsultaCedula++;
+        const nombre = document.getElementById("loginNombre");
+        nombre.textContent = "";
+        nombre.style.display = "none";
+        if (rolActual === "planeacion") {
+          document.getElementById("loginPasswordFieldWrap").style.display =
+            "none";
+          document.getElementById("loginPassword").value = "";
+          document.getElementById("btnEnviarLogin").disabled = true;
+        }
+      }
+
+      function confirmarCedulaLogin() {
+        const cedula = document.getElementById("loginCedula").value.trim();
+        const errorDiv = document.getElementById("loginError");
+        if (!cedula) return;
+        const consulta = ++loginConsultaCedula;
+        const btn = document.getElementById("btnLoginCedula");
+        btn.disabled = true;
+        errorDiv.innerHTML = "";
+        llamarAPI("nombrePorCedula", { cedula: cedula })
+          .then(function (res) {
+            if (consulta !== loginConsultaCedula) return;
+            if (!res.success) {
+              errorDiv.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
+              return;
+            }
+            loginCedulaConfirmada = cedula;
+            const nombre = document.getElementById("loginNombre");
+            nombre.textContent = res.nombre;
+            nombre.style.display = "block";
+            document.getElementById("loginPasswordFieldWrap").style.display =
+              "block";
+            document.getElementById("btnEnviarLogin").disabled = false;
+            document.getElementById("loginPassword").focus();
+          })
+          .catch(function (err) {
+            if (consulta !== loginConsultaCedula) return;
+            errorDiv.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
+          })
+          .finally(function () {
+            btn.disabled = false;
+          });
+      }
+
+      // Si la cédula cambia después de confirmarla, se vuelve a confirmar.
+      document
+        .getElementById("loginCedula")
+        .addEventListener("input", function () {
+          if (loginCedulaConfirmada && this.value.trim() !== loginCedulaConfirmada) {
+            _reiniciarPasoCedulaLogin();
+          }
+        });
+      document
+        .getElementById("loginCedula")
+        .addEventListener("keydown", function (e) {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            confirmarCedulaLogin();
+          }
+        });
 
       function cancelarSeleccionRol() {
         rolActual = null;
@@ -4476,6 +4643,7 @@
           "opCodigosSobrantes",
           "opObservaciones",
           "loginPassword",
+          "loginCedula",
           "calcUnidadesEstandar",
           "calcUnidadesCaja",
         ];
@@ -4513,6 +4681,7 @@
           "previewCard",
           "opNombreConfirmado",
           "loginPasswordBox",
+          "loginCedulaWrap",
           "btnLinkProceso",
           "opBtnLinkProceso",
         ].forEach((id) => (document.getElementById(id).style.display = "none"));
@@ -4568,6 +4737,9 @@
         opPayloadPendiente = null;
         _detenerRelojHoraFin();
         _pintarHorasOperario();
+        _reiniciarPasoCedulaLogin();
+        nombreSesion = "";
+        _pintarNombreSesion();
         localStorage.removeItem("rp_sesion");
         operarios = [];
 
@@ -4577,23 +4749,36 @@
       }
 
       function enviarLogin() {
-        const clave =
-          rolActual === "supervisor"
-            ? document.getElementById("loginPassword").value
-            : "";
-        if (rolActual === "supervisor" && !clave) return;
+        const conClave =
+          rolActual === "supervisor" || rolActual === "planeacion";
+        const clave = conClave
+          ? document.getElementById("loginPassword").value
+          : "";
+        if (conClave && !clave) return;
+        if (rolActual === "planeacion" && !loginCedulaConfirmada) return;
         const btn = document.getElementById("btnEnviarLogin");
         if (btn.disabled) return; // evita doble envío (doble Enter/tap en móvil)
         const textoOriginal = btn.innerHTML;
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner"></span>';
-        llamarAPI("validarLogin", { rol: rolActual, password: clave })
+        const datosLogin = { rol: rolActual, password: clave };
+        if (rolActual === "planeacion") datosLogin.cedula = loginCedulaConfirmada;
+        llamarAPI("validarLogin", datosLogin)
           .then(function (res) {
             if (res.success) {
-              guardarSesion(rolActual);
+              nombreSesion = rolActual === "planeacion" ? res.nombre || "" : "";
+              guardarSesion(rolActual, nombreSesion, res.duracion);
+              document.getElementById("loginPassword").value = "";
               _mostrarDashboardTrasLogin();
+              // Con Planeación restaurada la carga inicial de catálogos se omitió:
+              // si después entra otro rol sin recargar, se hace aquí.
+              const faltaCarga =
+                rolActual !== "planeacion" &&
+                _ultimoRefrescoCatalogos === 0 &&
+                !_refrescoCatalogosEnCurso;
+              if (faltaCarga) refrescarCatalogos(true);
               // La carga inicial se lo saltó porque rolActual aún era null.
-              if (rolActual === "supervisor") cargarOperarios();
+              else if (rolActual === "supervisor") cargarOperarios();
             } else {
               document.getElementById("loginError").innerHTML =
                 `<div class="msg err">${res.message}</div>`;
@@ -5249,6 +5434,9 @@
 
       // Orquestador: guarda de modal abierto + tope de frecuencia.
       function refrescarCatalogos(forzar) {
+        // Planeación no usa procesos, supervisores ni operarios: sus módulos
+        // cargan sus propios datos.
+        if (rolActual === "planeacion") return Promise.resolve(false);
         if (_refrescoCatalogosEnCurso) return Promise.resolve(false);
         if (!forzar) {
           if (idRegistroEnEdicion !== null) return Promise.resolve(false);
