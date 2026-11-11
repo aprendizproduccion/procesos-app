@@ -1,6 +1,7 @@
 import { accionesLectura } from "./acciones-lectura.js";
 import { accionesAuth } from "./acciones-auth.js";
 import { accionesEscritura } from "./acciones-escritura.js";
+import { accionesPlaneacion } from "./acciones-planeacion.js";
 import { _reconciliarSeguimientoD1 } from "./d1-negocio.js";
 import {
   leerModoAuth,
@@ -22,7 +23,8 @@ const ACCIONES_PUBLICAS = new Set([
 // rol → 403. Hasta el corte solo entran aquí las acciones de Planeación; en el
 // corte se suman las demás y este mapa pasa a ser el mapa de permisos completo.
 const PERMISOS_POR_ACCION = {
-  // Se llena con F2, por ejemplo: getClientesPlaneacion: ["planeacion"],
+  obtenerPedidosPlaneacion: ["planeacion"],
+  obtenerClientesPlaneacion: ["planeacion"],
 };
 
 export default {
@@ -148,6 +150,7 @@ const ACCIONES = {
   ...accionesLectura,
   ...accionesAuth,
   ...accionesEscritura,
+  ...accionesPlaneacion,
 };
 
 function json(data, status = 200) {
