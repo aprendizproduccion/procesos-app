@@ -368,6 +368,66 @@
         border-color: var(--gv-aquamarine);
       }
 
+      /* ===== Módulos de Planeación (Pedidos y Clientes) ===== */
+      .pl-tarjeta {
+        border: 1px solid var(--gv-borde);
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 10px;
+        background: var(--gv-superficie-alt);
+      }
+      .pl-cabecera {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 6px 10px;
+        margin-bottom: 4px;
+      }
+      .pl-cabecera strong {
+        font-size: 15px;
+        word-break: break-word;
+      }
+      .pl-fecha {
+        color: var(--gv-texto-suave);
+        font-size: var(--gv-cuerpo-sm);
+      }
+      .pl-distintivo {
+        margin-left: auto;
+        background: var(--gv-celeste);
+        color: var(--gv-jet);
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .pl-sublineas {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+      }
+      .pl-sublinea {
+        background: var(--gv-white);
+        border: 1px solid var(--gv-borde);
+        border-radius: 999px;
+        padding: 3px 10px;
+        font-size: var(--gv-cuerpo-sm);
+      }
+      .pl-sublinea.pl-huerfana {
+        border-color: #fde68a;
+        background: #fffbeb;
+        color: #92400e;
+      }
+      .pl-tarjeta .msg {
+        margin-top: 8px;
+        padding: 6px 10px;
+      }
+      .pl-conteo {
+        font-weight: 400;
+        color: var(--gv-texto-suave);
+      }
+
       /* ===== Botones — Manual de marca, sección 07 ===== */
       /* Base "con caja": 48 px de alto, 14 px, ancho completo. */
       .btn-submit {
@@ -1162,10 +1222,27 @@
         </button>
       </div>
       <!-- Solo Planeación: los módulos que reemplazan las hojas (F2 en adelante). -->
-      <div id="gridPlaneacionDashboard" style="display: none">
-        <p class="msg info" style="margin-top: 0; text-align: center">
-          Los módulos de Clientes y Pedidos están en construcción.
-        </p>
+      <div
+        id="gridPlaneacionDashboard"
+        class="dashboard-grid"
+        style="display: none"
+      >
+        <button
+          type="button"
+          class="tarjetaApp"
+          onclick="abrirPedidosPlaneacion()"
+        >
+          <span class="tarjetaApp-icono">🧾</span>
+          <span>Pedidos</span>
+        </button>
+        <button
+          type="button"
+          class="tarjetaApp"
+          onclick="abrirClientesPlaneacion()"
+        >
+          <span class="tarjetaApp-icono">🏢</span>
+          <span>Clientes</span>
+        </button>
       </div>
       <button
         type="button"
@@ -1685,6 +1762,124 @@
             <tbody id="ctBody"></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <div id="vistaPedidosPlaneacion" style="display: none">
+      <button
+        type="button"
+        class="btn-submit btn-gv-contorno"
+        style="margin-bottom: 14px"
+        onclick="volverAlDashboard()"
+      >
+        ← Volver al Menú
+      </button>
+      <h1>Pedidos</h1>
+      <div class="card">
+        <p class="hint" style="margin-top: 0">
+          Solo lectura: hasta el corte, los pedidos se siguen montando en la
+          hoja "Numero pedidos".
+        </p>
+        <input
+          id="plPedidoBuscar"
+          placeholder="Buscar por pedido o cliente..."
+          autocomplete="off"
+          enterkeyhint="search"
+        />
+        <div
+          class="filtro-estado-seg"
+          role="group"
+          aria-label="Filtrar pedidos"
+          style="margin-bottom: 12px"
+        >
+          <button
+            type="button"
+            class="chip-estado"
+            data-filtro-pl=""
+            aria-pressed="true"
+            onclick="cambiarFiltroPlPedidos('')"
+          >
+            Todos <span class="pl-conteo" id="plConteoTodos"></span>
+          </button>
+          <button
+            type="button"
+            class="chip-estado"
+            data-filtro-pl="alertas"
+            aria-pressed="false"
+            onclick="cambiarFiltroPlPedidos('alertas')"
+          >
+            Con alertas <span class="pl-conteo" id="plConteoAlertas"></span>
+          </button>
+          <button
+            type="button"
+            class="chip-estado"
+            data-filtro-pl="sinEan"
+            aria-pressed="false"
+            onclick="cambiarFiltroPlPedidos('sinEan')"
+          >
+            Sin EAN <span class="pl-conteo" id="plConteoSinEan"></span>
+          </button>
+        </div>
+        <div id="plPedidosAlerta"></div>
+        <div id="plPedidosLista"></div>
+        <button
+          type="button"
+          id="btnPlPedidosMas"
+          class="btn-submit btn-gv-contorno"
+          style="display: none"
+          onclick="verMasPlPedidos()"
+        >
+          Ver más
+        </button>
+      </div>
+    </div>
+
+    <div id="vistaClientesPlaneacion" style="display: none">
+      <button
+        type="button"
+        class="btn-submit btn-gv-contorno"
+        style="margin-bottom: 14px"
+        onclick="volverAlDashboard()"
+      >
+        ← Volver al Menú
+      </button>
+      <h1>Clientes</h1>
+      <div class="card">
+        <p class="hint" style="margin-top: 0" id="plClientesNota"></p>
+        <input
+          id="plClienteBuscar"
+          placeholder="Buscar cliente..."
+          autocomplete="off"
+          enterkeyhint="search"
+        />
+        <div
+          class="filtro-estado-seg"
+          role="group"
+          aria-label="Filtrar clientes"
+          style="margin-bottom: 12px"
+        >
+          <button
+            type="button"
+            class="chip-estado"
+            data-filtro-cl=""
+            aria-pressed="true"
+            onclick="cambiarFiltroPlClientes('')"
+          >
+            Todos <span class="pl-conteo" id="plConteoClientes"></span>
+          </button>
+          <button
+            type="button"
+            class="chip-estado"
+            data-filtro-cl="duplicados"
+            aria-pressed="false"
+            onclick="cambiarFiltroPlClientes('duplicados')"
+          >
+            Escritos de varias formas
+            <span class="pl-conteo" id="plConteoDuplicados"></span>
+          </button>
+        </div>
+        <div id="plClientesAlerta"></div>
+        <div id="plClientesLista"></div>
       </div>
     </div>
 
@@ -4554,6 +4749,8 @@
           "vistaEdicionRegistros",
           "vistaSeguimientoPaquetes",
           "vistaControlTiempos",
+          "vistaPedidosPlaneacion",
+          "vistaClientesPlaneacion",
         ].forEach((id) => {
           document.getElementById(id).style.display = "none";
         });
@@ -4623,6 +4820,8 @@
           "vistaEdicionRegistros",
           "vistaSeguimientoPaquetes",
           "vistaControlTiempos",
+          "vistaPedidosPlaneacion",
+          "vistaClientesPlaneacion",
         ].forEach((id) => {
           document.getElementById(id).style.display = "none";
         });
@@ -5970,6 +6169,293 @@
           "Sesión vencida",
         );
       }
+
+      // ---------------- PLANEACIÓN: PEDIDOS Y CLIENTES (F2a, solo lectura) ----------------
+      // Los datos se piden cada vez que se abre la vista: el pull de la hoja
+      // puede haber cambiado algo. El buscador filtra la lista en vivo con la
+      // misma normalización de pedidos (sin tildes, mayúsculas ni espacios).
+      const PL_PEDIDOS_POR_PAGINA = 50;
+      let plPedidos = [];
+      let plFiltroPedidos = "";
+      let plPedidosMostrados = PL_PEDIDOS_POR_PAGINA;
+      let plClientes = [];
+      let plFiltroClientes = "";
+      let plConsulta = 0; // una respuesta vieja no pinta
+
+      function _abrirVistaPlaneacion(idVista) {
+        document.getElementById("vistaDashboard").style.display = "none";
+        document.getElementById(idVista).style.display = "block";
+        window.scrollTo(0, 0);
+      }
+
+      function _marcarChipsPl(atributo, valor) {
+        document.querySelectorAll("[" + atributo + "]").forEach((b) =>
+          b.setAttribute(
+            "aria-pressed",
+            b.getAttribute(atributo) === valor ? "true" : "false",
+          ),
+        );
+      }
+
+      function _errorPl(idAlerta, idLista, mensaje) {
+        document.getElementById(idAlerta).innerHTML =
+          `<div class="msg err">${escapeHtml(mensaje)}</div>`;
+        document.getElementById(idLista).innerHTML = "";
+      }
+
+      function abrirPedidosPlaneacion() {
+        _abrirVistaPlaneacion("vistaPedidosPlaneacion");
+        document.getElementById("plPedidoBuscar").value = "";
+        plFiltroPedidos = "";
+        plPedidosMostrados = PL_PEDIDOS_POR_PAGINA;
+        _marcarChipsPl("data-filtro-pl", "");
+        plPedidos = [];
+        ["plConteoTodos", "plConteoAlertas", "plConteoSinEan"].forEach(
+          (id) => (document.getElementById(id).textContent = ""),
+        );
+        document.getElementById("plPedidosLista").innerHTML = "";
+        document.getElementById("btnPlPedidosMas").style.display = "none";
+        document.getElementById("plPedidosAlerta").innerHTML =
+          '<p class="hint">Cargando pedidos...</p>';
+        const consulta = ++plConsulta;
+        llamarAPI("obtenerPedidosPlaneacion", {})
+          .then(function (res) {
+            if (consulta !== plConsulta || res.sesionVencida) return;
+            if (!res.success) {
+              _errorPl("plPedidosAlerta", "plPedidosLista", res.message);
+              return;
+            }
+            plPedidos = res.pedidos || [];
+            document.getElementById("plConteoTodos").textContent =
+              "(" + plPedidos.length + ")";
+            document.getElementById("plConteoAlertas").textContent =
+              "(" + plPedidos.filter((p) => p.alertas.length).length + ")";
+            document.getElementById("plConteoSinEan").textContent =
+              "(" + plPedidos.filter((p) => p.eanes === 0).length + ")";
+            renderPlPedidos();
+          })
+          .catch(function (err) {
+            if (consulta !== plConsulta) return;
+            _errorPl(
+              "plPedidosAlerta",
+              "plPedidosLista",
+              "Error de conexión: " + err.message,
+            );
+          });
+      }
+
+      function _plPedidosFiltrados() {
+        const clave = normalizarPedido(
+          document.getElementById("plPedidoBuscar").value,
+        );
+        return plPedidos.filter(function (p) {
+          if (plFiltroPedidos === "alertas" && !p.alertas.length) return false;
+          if (plFiltroPedidos === "sinEan" && p.eanes > 0) return false;
+          if (!clave) return true;
+          return (
+            normalizarPedido(p.pedido).includes(clave) ||
+            p.sublineas.some((s) => normalizarPedido(s.cliente).includes(clave))
+          );
+        });
+      }
+
+      function _tarjetaPlPedido(p) {
+        // Un campo que difiere entre sublíneas sale como "Varios" en la
+        // cabecera y con su valor en cada sublínea.
+        const dif = p.difieren || {};
+        const sublineas = p.sublineas
+          .map(function (s) {
+            const partes = [];
+            if (s.enPedidos) {
+              if (dif.cliente) partes.push(s.cliente || "sin cliente");
+              if (dif.evento) partes.push(s.evento);
+              if (dif.clasificacion) partes.push(s.clasificacion);
+              if (dif.fecha)
+                partes.push(s.fecha ? _textoFechaChip(s.fecha) : "sin fecha");
+            }
+            const extra = partes.length ? " · " + partes.join(" · ") : "";
+            const ean = s.eanes === 1 ? "1 EAN" : s.eanes + " EAN";
+            return (
+              `<span class="pl-sublinea${s.enPedidos ? "" : " pl-huerfana"}">` +
+              `${escapeHtml(s.sublinea)}${escapeHtml(extra)} · ${ean}</span>`
+            );
+          })
+          .join("");
+        const cliente = dif.cliente
+          ? "<em>Varios clientes</em>"
+          : p.cliente
+            ? escapeHtml(p.cliente)
+            : "<em>Sin cliente</em>";
+        const evento = dif.evento ? "Varios eventos" : escapeHtml(p.evento);
+        const clasificacion = dif.clasificacion
+          ? "Varias clasificaciones"
+          : escapeHtml(p.clasificacion);
+        const datos = p.soloEnValidacion
+          ? ""
+          : `<div>${cliente}</div>` +
+            `<div class="hint" style="margin: 2px 0 0">${evento} · ${clasificacion}</div>`;
+        const alertas = p.alertas
+          .map((a) => `<div class="msg warn">${escapeHtml(a)}</div>`)
+          .join("");
+        return (
+          `<div class="pl-tarjeta">` +
+          `<div class="pl-cabecera"><strong>Pedido ${escapeHtml(p.pedido)}</strong>` +
+          `<span class="pl-fecha">${p.fecha ? escapeHtml(_textoFechaChip(p.fecha)) : "Sin fecha"}</span>` +
+          (p.conRegistros
+            ? '<span class="pl-distintivo">Con registros</span>'
+            : "") +
+          `</div>` +
+          datos +
+          `<div class="pl-sublineas">${sublineas}</div>` +
+          alertas +
+          `</div>`
+        );
+      }
+
+      function renderPlPedidos() {
+        const lista = _plPedidosFiltrados();
+        const alerta = document.getElementById("plPedidosAlerta");
+        const btnMas = document.getElementById("btnPlPedidosMas");
+        const visibles = lista.slice(0, plPedidosMostrados);
+        document.getElementById("plPedidosLista").innerHTML = visibles
+          .map(_tarjetaPlPedido)
+          .join("");
+        if (!lista.length) {
+          alerta.innerHTML = plPedidos.length
+            ? '<p class="hint">No hay pedidos con ese filtro.</p>'
+            : '<p class="hint">No hay pedidos en el catálogo.</p>';
+        } else {
+          alerta.innerHTML =
+            '<p class="hint">Mostrando ' +
+            visibles.length +
+            " de " +
+            lista.length +
+            " pedidos, los más recientes primero.</p>";
+        }
+        btnMas.style.display = lista.length > visibles.length ? "" : "none";
+      }
+
+      function verMasPlPedidos() {
+        plPedidosMostrados += PL_PEDIDOS_POR_PAGINA;
+        renderPlPedidos();
+      }
+
+      function cambiarFiltroPlPedidos(filtro) {
+        plFiltroPedidos = filtro;
+        plPedidosMostrados = PL_PEDIDOS_POR_PAGINA;
+        _marcarChipsPl("data-filtro-pl", filtro);
+        renderPlPedidos();
+      }
+
+      document
+        .getElementById("plPedidoBuscar")
+        .addEventListener("input", function () {
+          plPedidosMostrados = PL_PEDIDOS_POR_PAGINA;
+          renderPlPedidos();
+        });
+
+      function abrirClientesPlaneacion() {
+        _abrirVistaPlaneacion("vistaClientesPlaneacion");
+        document.getElementById("plClienteBuscar").value = "";
+        plFiltroClientes = "";
+        _marcarChipsPl("data-filtro-cl", "");
+        plClientes = [];
+        ["plConteoClientes", "plConteoDuplicados"].forEach(
+          (id) => (document.getElementById(id).textContent = ""),
+        );
+        document.getElementById("plClientesNota").textContent = "";
+        document.getElementById("plClientesLista").innerHTML = "";
+        document.getElementById("plClientesAlerta").innerHTML =
+          '<p class="hint">Cargando clientes...</p>';
+        const consulta = ++plConsulta;
+        llamarAPI("obtenerClientesPlaneacion", {})
+          .then(function (res) {
+            if (consulta !== plConsulta || res.sesionVencida) return;
+            if (!res.success) {
+              _errorPl("plClientesAlerta", "plClientesLista", res.message);
+              return;
+            }
+            plClientes = res.clientes || [];
+            document.getElementById("plClientesNota").textContent =
+              (res.tablaCargada
+                ? "Solo lectura. "
+                : 'Solo lectura. La tabla de clientes se carga en el corte; por ahora la lista sale de los clientes que usan los pedidos de "Numero pedidos". ') +
+              (res.pedidosSinCliente
+                ? res.pedidosSinCliente +
+                  (res.pedidosSinCliente === 1
+                    ? " pedido no tiene cliente."
+                    : " pedidos no tienen cliente.")
+                : "");
+            document.getElementById("plConteoClientes").textContent =
+              "(" + plClientes.length + ")";
+            document.getElementById("plConteoDuplicados").textContent =
+              "(" + plClientes.filter((c) => c.variantes.length > 1).length + ")";
+            renderPlClientes();
+          })
+          .catch(function (err) {
+            if (consulta !== plConsulta) return;
+            _errorPl(
+              "plClientesAlerta",
+              "plClientesLista",
+              "Error de conexión: " + err.message,
+            );
+          });
+      }
+
+      function renderPlClientes() {
+        const clave = normalizarPedido(
+          document.getElementById("plClienteBuscar").value,
+        );
+        const lista = plClientes.filter(function (c) {
+          if (plFiltroClientes === "duplicados" && c.variantes.length < 2)
+            return false;
+          if (!clave) return true;
+          return c.variantes.some((v) =>
+            normalizarPedido(v.nombre).includes(clave),
+          );
+        });
+        document.getElementById("plClientesAlerta").innerHTML = lista.length
+          ? ""
+          : '<p class="hint">No hay clientes con ese filtro.</p>';
+        document.getElementById("plClientesLista").innerHTML = lista
+          .map(function (c) {
+            const variantes =
+              c.variantes.length > 1
+                ? `<div class="msg warn">Se escribe de ${c.variantes.length} formas: ` +
+                  c.variantes
+                    .map(
+                      (v) =>
+                        `"${escapeHtml(v.nombre)}" (${v.pedidos} ${v.pedidos === 1 ? "pedido" : "pedidos"})`,
+                    )
+                    .join(" · ") +
+                  `</div>`
+                : "";
+            const estado =
+              c.enTabla && c.activo === false
+                ? '<span class="pl-distintivo">Inactivo</span>'
+                : "";
+            return (
+              `<div class="pl-tarjeta">` +
+              `<div class="pl-cabecera"><strong>${escapeHtml(c.nombre)}</strong>` +
+              `<span class="pl-fecha">${c.pedidos} ${c.pedidos === 1 ? "pedido" : "pedidos"}</span>` +
+              estado +
+              `</div>` +
+              variantes +
+              `</div>`
+            );
+          })
+          .join("");
+      }
+
+      function cambiarFiltroPlClientes(filtro) {
+        plFiltroClientes = filtro;
+        _marcarChipsPl("data-filtro-cl", filtro);
+        renderPlClientes();
+      }
+
+      document
+        .getElementById("plClienteBuscar")
+        .addEventListener("input", renderPlClientes);
 
       let opNombreOperario = "";
       let opCedulaConfirmada = "";
