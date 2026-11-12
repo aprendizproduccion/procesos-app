@@ -1986,6 +1986,8 @@
           id="totalUnidades"
           type="number"
           min="0"
+          step="1"
+          inputmode="numeric"
           placeholder="Ej: 1000"
         />
         <div id="alertaCantidad"></div>
@@ -2216,7 +2218,14 @@
       <div id="opAlertaHoras"></div>
 
       <label>Unidades procesadas</label>
-      <input id="opUnidades" type="number" min="0" placeholder="Ej: 50" />
+      <input
+        id="opUnidades"
+        type="number"
+        min="0"
+        step="1"
+        inputmode="numeric"
+        placeholder="Ej: 50"
+      />
       <div id="opAlertaUnidades"></div>
 
       <label>Códigos sobrantes (si aplica)</label>
@@ -2878,7 +2887,10 @@
       document
         .getElementById("loginCedula")
         .addEventListener("input", function () {
-          if (loginCedulaConfirmada && this.value.trim() !== loginCedulaConfirmada) {
+          if (
+            loginCedulaConfirmada &&
+            this.value.trim() !== loginCedulaConfirmada
+          ) {
             _reiniciarPasoCedulaLogin();
           }
         });
@@ -3731,7 +3743,10 @@
           const totalesAparte = aparte.some((e) => e.sinLimite)
             ? "Sin límite"
             : _fmtUnidades(
-                aparte.reduce((s, e) => s + (Number(e.unidadesTotales) || 0), 0),
+                aparte.reduce(
+                  (s, e) => s + (Number(e.unidadesTotales) || 0),
+                  0,
+                ),
               );
           filas.push(
             `<tr class="fila-total-seg fila-aparte-seg">` +
@@ -4457,6 +4472,20 @@
             '<div class="msg err">Ingresa unidades procesadas válidas.</div>';
           return;
         }
+        // Decimal solo si es el valor que ya tenía (reparto de un lote).
+        const registroOriginal = registrosEditarActuales.find(
+          (r) => r.id === idRegistroEnEdicion,
+        );
+        const unidadesOriginales = registroOriginal
+          ? Number(registroOriginal.unidadesProcesadas)
+          : NaN;
+        if (
+          !_esUnidadEntera(unidadesTexto) &&
+          unidadesNum !== unidadesOriginales
+        ) {
+          alertaDiv.innerHTML = `<div class="msg err">${MSG_UNIDADES_ENTERAS}</div>`;
+          return;
+        }
         const codSobrantesResult = obtenerCodigosSobrantesValidados(
           "editCodigosSobrantes",
         );
@@ -4968,7 +4997,8 @@
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner"></span>';
         const datosLogin = { rol: rolActual, password: clave };
-        if (rolActual === "planeacion") datosLogin.cedula = loginCedulaConfirmada;
+        if (rolActual === "planeacion")
+          datosLogin.cedula = loginCedulaConfirmada;
         llamarAPI("validarLogin", datosLogin)
           .then(function (res) {
             if (res.success) {
@@ -5891,6 +5921,14 @@
         }
       }
 
+      // Mismo texto que MSG_UNIDADES_ENTERAS del Worker.
+      const MSG_UNIDADES_ENTERAS =
+        "Las unidades deben ser un número entero, sin puntos, comas ni decimales (ej: 29530).";
+
+      function _esUnidadEntera(texto) {
+        return /^\d+$/.test(String(texto || "").trim());
+      }
+
       function obtenerCodigosSobrantesValidados(inputId) {
         const raw = document.getElementById(inputId).value.trim();
         if (raw === "") return { ok: true, valor: 0 };
@@ -5924,6 +5962,10 @@
           alertaDiv.innerHTML =
             contadorHtml +
             `<div class="msg err">Los códigos sobrantes deben ser un número entero (sin letras ni decimales).</div>`;
+          btnSubmit.disabled = true;
+        } else if (!_esUnidadEntera(totalInput)) {
+          alertaDiv.innerHTML =
+            contadorHtml + `<div class="msg err">${MSG_UNIDADES_ENTERAS}</div>`;
           btnSubmit.disabled = true;
         } else if (sumaTotal > unidadesRestantes) {
           alertaDiv.innerHTML =
@@ -6085,6 +6127,8 @@
           payload.totalUnidades < 0
         )
           return mostrarMsg("Falta el total de unidades.", false);
+        if (!_esUnidadEntera(totalUnidadesTexto))
+          return mostrarMsg(MSG_UNIDADES_ENTERAS, false);
         if (payload.operarios.length === 0)
           return mostrarMsg("Agrega al menos un operario o un equipo.", false);
 
@@ -6189,12 +6233,14 @@
       }
 
       function _marcarChipsPl(atributo, valor) {
-        document.querySelectorAll("[" + atributo + "]").forEach((b) =>
-          b.setAttribute(
-            "aria-pressed",
-            b.getAttribute(atributo) === valor ? "true" : "false",
-          ),
-        );
+        document
+          .querySelectorAll("[" + atributo + "]")
+          .forEach((b) =>
+            b.setAttribute(
+              "aria-pressed",
+              b.getAttribute(atributo) === valor ? "true" : "false",
+            ),
+          );
       }
 
       function _errorPl(idAlerta, idLista, mensaje) {
@@ -6389,7 +6435,9 @@
             document.getElementById("plConteoClientes").textContent =
               "(" + plClientes.length + ")";
             document.getElementById("plConteoDuplicados").textContent =
-              "(" + plClientes.filter((c) => c.variantes.length > 1).length + ")";
+              "(" +
+              plClientes.filter((c) => c.variantes.length > 1).length +
+              ")";
             renderPlClientes();
           })
           .catch(function (err) {
@@ -6969,6 +7017,8 @@
             "Falta la cantidad de unidades procesadas.",
             false,
           );
+        if (!_esUnidadEntera(unidadesProcesadasTexto))
+          return mostrarMsgOperario(MSG_UNIDADES_ENTERAS, false);
 
         if (bruta < DURACION_CORTA_MIN) {
           opPayloadPendiente = payload;

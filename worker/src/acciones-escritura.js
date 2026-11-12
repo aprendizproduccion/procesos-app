@@ -36,6 +36,11 @@ import {
   _pushSeguimientoYMarcar,
 } from "./push-sheets.js";
 
+// Unidades solo enteras: un punto o una coma casi siempre es un separador de
+// miles mal puesto (29.530 llegaba como 29.53 unidades), no un decimal real.
+const MSG_UNIDADES_ENTERAS =
+  "Las unidades deben ser un número entero, sin puntos, comas ni decimales (ej: 29530).";
+
 // La fila tocada ya quedó en D1: si la cascada falla, no se le falla al
 // usuario. Los posteriores quedan como hoy (sin ajustar) y queda el log.
 async function _aplicarCascadaSinFallar(env, cambios) {
@@ -119,6 +124,7 @@ export const accionesEscritura = {
       const total = Number(payload.totalUnidades);
       if (!Number.isFinite(total) || total < 0)
         throw new Error("Total de unidades inválido.");
+      if (!Number.isInteger(total)) throw new Error(MSG_UNIDADES_ENTERAS);
 
       const validacion = await _localizarValidacionEan(env, pedido, codigoEan);
       // De aquí en adelante se usa el EAN tal como quedó en D1 (ean_producto),
@@ -426,6 +432,7 @@ export const accionesEscritura = {
       const total = Number(payload.unidadesProcesadas);
       if (!Number.isFinite(total) || total < 0)
         throw new Error("Unidades procesadas inválidas.");
+      if (!Number.isInteger(total)) throw new Error(MSG_UNIDADES_ENTERAS);
 
       const validacion = await _localizarValidacionEan(env, pedido, codigoEan);
       codigoEan = validacion.ean_producto;
@@ -889,8 +896,8 @@ export const accionesEscritura = {
     if (!editadoPor) throw new Error("Falta el nombre de quien edita.");
 
     const actual = await env.DB.prepare(
-      "SELECT numero_pedido, ean, cedula_operario, fecha, hora_inicio, hora_final " +
-        "FROM registros WHERE id = ? AND anulado = 0",
+      "SELECT numero_pedido, ean, cedula_operario, fecha, hora_inicio, hora_final, " +
+        "unidades_procesadas_operario FROM registros WHERE id = ? AND anulado = 0",
     )
       .bind(id)
       .first();
@@ -953,6 +960,13 @@ export const accionesEscritura = {
     const unidadesNuevas = Number(payload.unidadesProcesadas);
     if (!Number.isFinite(unidadesNuevas) || unidadesNuevas < 0)
       throw new Error("Unidades procesadas inválidas.");
+    // Decimal solo si no cambió: las filas de un lote repartido (100 / 3)
+    // traen decimales legítimos y deben poder editarse en lo demás.
+    if (
+      !Number.isInteger(unidadesNuevas) &&
+      unidadesNuevas !== Number(actual.unidades_procesadas_operario)
+    )
+      throw new Error(MSG_UNIDADES_ENTERAS);
     const codigosSobrantesNuevos = _validarCodigosSobrantes(
       payload.codigosSobrantes,
     );
