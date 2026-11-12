@@ -6035,30 +6035,31 @@
         const total = Number(document.getElementById("totalUnidades").value);
         const n = operarios.length;
         const card = document.getElementById("previewCard");
-        if (!total || n === 0) {
+        if (!total || n === 0 || !Number.isInteger(total)) {
           card.style.display = "none";
           return;
         }
 
-        const unidadesPorOperario = Math.round((total / n) * 100) / 100;
+        // Mismo reparto que _repartirEntero del Worker: parte entera para
+        // todos y el sobrante completo al primero de la lista.
+        const base = Math.floor(total / n);
+        const resto = total - base * n;
         const durHoras = durationMinutos() / 60;
         // El estándar del proceso es por persona: cada operario debe sacar
         // la tasa completa, igual que en submitRegistro del Worker.
         const esperado = durHoras > 0 ? tasaActual() * durHoras : 0;
-        const ritmoReal =
-          durHoras > 0
-            ? Math.round((unidadesPorOperario / durHoras) * 100) / 100
-            : 0;
-        const efic =
-          esperado > 0
-            ? Math.round((unidadesPorOperario / esperado) * 100)
-            : null;
 
         const filas = operarios
-          .map(
-            (nombre) =>
-              `<tr><td>${nombre}</td><td>${unidadesPorOperario}</td><td>${ritmoReal}</td><td>${efic !== null ? efic + "%" : "—"}</td></tr>`,
-          )
+          .map((nombre, i) => {
+            const unidades = i === 0 ? base + resto : base;
+            const ritmoReal =
+              durHoras > 0
+                ? Math.round((unidades / durHoras) * 100) / 100
+                : 0;
+            const efic =
+              esperado > 0 ? Math.round((unidades / esperado) * 100) : null;
+            return `<tr><td>${nombre}</td><td>${unidades}</td><td>${ritmoReal}</td><td>${efic !== null ? efic + "%" : "—"}</td></tr>`;
+          })
           .join("");
 
         document.getElementById("previewBody").innerHTML = filas;

@@ -41,6 +41,15 @@ import {
 const MSG_UNIDADES_ENTERAS =
   "Las unidades deben ser un número entero, sin puntos, comas ni decimales (ej: 29530).";
 
+// Reparte un entero entre n operarios sin decimales: todos reciben la parte
+// entera y el sobrante va completo al primero de la lista (ej: 100 / 3 →
+// 34, 33, 33). La suma de las filas da siempre el total exacto.
+function _repartirEntero(total, n) {
+  const base = Math.floor(total / n);
+  const resto = total - base * n;
+  return Array.from({ length: n }, (_, i) => (i === 0 ? base + resto : base));
+}
+
 // La fila tocada ya quedó en D1: si la cascada falla, no se le falla al
 // usuario. Los posteriores quedan como hoy (sin ajustar) y queda el log.
 async function _aplicarCascadaSinFallar(env, cambios) {
@@ -177,14 +186,13 @@ export const accionesEscritura = {
       const fecha = _validarFechaRegistro(payload.fecha);
       const ahora = _ahoraISO();
 
-      const unidadesPorOperario = Math.round((total / n) * 100) / 100;
-      const codigosSobrantesPorOperario =
-        Math.round((codigosSobrantes / n) * 100) / 100;
+      const unidadesPorOperario = _repartirEntero(total, n);
+      const sobrantesPorOperario = _repartirEntero(codigosSobrantes, n);
       const durHoras = Math.round((duracionRealMin / 60) * 100) / 100;
-      const { unidadesHoraReal, eficiencia } = _calcularMetricasProduccion(
-        unidadesPorOperario,
-        tasaEstandar, // el estándar del proceso es por persona, no por banda
-        durHoras,
+      // Una métrica por operario: el primero puede llevar unidades de más.
+      // El estándar del proceso es por persona, no por banda.
+      const metricas = unidadesPorOperario.map((u) =>
+        _calcularMetricasProduccion(u, tasaEstandar, durHoras),
       );
 
       await _marcarPedidoIniciado(env, pedido, ahora);
@@ -288,10 +296,10 @@ export const accionesEscritura = {
           datosPedido.clasificacionProceso,
           duracionBrutaMin,
           durHoras,
-          unidadesPorOperario,
-          codigosSobrantesPorOperario,
-          unidadesHoraReal,
-          eficiencia,
+          unidadesPorOperario[i],
+          sobrantesPorOperario[i],
+          metricas[i].unidadesHoraReal,
+          metricas[i].eficiencia,
           ahora,
         ),
       );
@@ -328,9 +336,9 @@ export const accionesEscritura = {
         duracionBrutaMin,
         datosPedido.clasificacionProceso,
         durHoras,
-        unidadesPorOperario,
-        unidadesHoraReal,
-        eficiencia,
+        unidadesPorOperario[i],
+        metricas[i].unidadesHoraReal,
+        metricas[i].eficiencia,
       ]);
 
       const resultadosBatch = await env.DB.batch(statements);
