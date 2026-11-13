@@ -414,6 +414,9 @@
         padding: 3px 10px;
         font-size: var(--gv-cuerpo-sm);
       }
+      .pl-sublinea.cp-fija {
+        background: var(--gv-superficie-alt);
+      }
       .pl-sublinea.pl-huerfana {
         border-color: #fde68a;
         background: #fffbeb;
@@ -430,6 +433,7 @@
       .pl-acciones {
         display: flex;
         justify-content: flex-end;
+        gap: 8px;
         margin-top: 8px;
       }
       .pl-acciones button {
@@ -1919,6 +1923,7 @@
       <div class="card">
         <div id="cpAviso"></div>
         <div
+          id="cpTipoGrupo"
           class="filtro-estado-seg"
           role="group"
           aria-label="Tipo"
@@ -1944,7 +1949,9 @@
           </button>
         </div>
         <div id="cpBloquePedido">
-          <label for="cpUnidades">Unidades pedidas</label>
+          <label for="cpUnidades" id="cpUnidadesEtiqueta"
+            >Unidades pedidas</label
+          >
           <input
             id="cpUnidades"
             type="number"
@@ -2038,7 +2045,7 @@
         <input id="cpFecha" readonly />
         <div id="cpNumeroBloque" class="msg info">
           Número del pedido: <span id="cpNumero" class="cp-numero">—</span>
-          <div class="hint" style="margin: 4px 0 0">
+          <div class="hint" style="margin: 4px 0 0" id="cpNumeroHint">
             Unidades y una letra por cada proceso con estándar. El sistema lo
             confirma al crear.
           </div>
@@ -6539,8 +6546,8 @@
             plEdicionPedidos = res.edicionHabilitada === true;
             document.getElementById("plPedidosNota").textContent =
               plEdicionPedidos
-                ? "Solo se pueden eliminar los pedidos sin registros."
-                : 'Hasta el corte, los pedidos se siguen montando en la hoja "Numero pedidos": puedes ver el formulario, pero no crear ni eliminar.';
+                ? "Al editar, lo que ya tiene EAN o registros no se puede quitar. Solo se pueden eliminar los pedidos sin registros."
+                : 'Hasta el corte, los pedidos se siguen montando en la hoja "Numero pedidos": puedes ver los formularios, pero no crear, editar ni eliminar.';
             document.getElementById("plConteoTodos").textContent =
               "(" + plPedidos.length + ")";
             document.getElementById("plConteoAlertas").textContent =
@@ -6612,10 +6619,19 @@
         const alertas = p.alertas
           .map((a) => `<div class="msg warn">${escapeHtml(a)}</div>`)
           .join("");
-        const acciones =
-          plEdicionPedidos && !p.conRegistros
-            ? `<div class="pl-acciones"><button type="button" class="btn-gv-mini btn-gv-contorno" data-eliminar-pl="${indice}">Eliminar</button></div>`
-            : "";
+        // Editar se ve siempre (hasta el corte, solo para conocer el
+        // formulario); un pedido que solo está en Validación eanes se corrige
+        // en la hoja.
+        const botones =
+          (p.soloEnValidacion
+            ? ""
+            : `<button type="button" class="btn-gv-mini btn-gv-contorno" data-editar-pl="${indice}">Editar</button>`) +
+          (plEdicionPedidos && !p.conRegistros
+            ? `<button type="button" class="btn-gv-mini btn-gv-contorno" data-eliminar-pl="${indice}">Eliminar</button>`
+            : "");
+        const acciones = botones
+          ? `<div class="pl-acciones">${botones}</div>`
+          : "";
         return (
           `<div class="pl-tarjeta">` +
           `<div class="pl-cabecera"><strong>Pedido ${escapeHtml(p.pedido)}</strong>` +
@@ -6677,6 +6693,12 @@
       document
         .getElementById("plPedidosLista")
         .addEventListener("click", function (e) {
+          const editar = e.target.closest("[data-editar-pl]");
+          if (editar) {
+            const p = plPedidos[Number(editar.dataset.editarPl)];
+            if (p) abrirEditarPedido(p.pedido);
+            return;
+          }
           const boton = e.target.closest("[data-eliminar-pl]");
           if (!boton) return;
           const p = plPedidos[Number(boton.dataset.eliminarPl)];
@@ -6787,6 +6809,11 @@
       let cpProcesos = []; // [{ nombre, estandar (texto), link, nuevo, estandares }]
       let cpIdEnvio = "";
       let cpEnvioEnCurso = false;
+      // Editar pedido (F2b-2) usa el mismo formulario. cpPedidoEditar trae el
+      // número ("" al crear) y cpEdicion el estado que devolvió
+      // obtenerPedidoParaEditar (con lo que bloquea cada sublínea y proceso).
+      let cpPedidoEditar = "";
+      let cpEdicion = null;
 
       function _nuevoIdEnvioCp() {
         cpIdEnvio =
@@ -6800,15 +6827,18 @@
         abrirPedidosPlaneacion();
       }
 
-      function abrirCrearPedido() {
+      // Deja el formulario vacío y lo muestra. pedidoEditar: "" al crear, o
+      // el número del pedido que se va a editar.
+      function _reiniciarFormularioCp(pedidoEditar) {
         document.getElementById("vistaPedidosPlaneacion").style.display =
           "none";
         _abrirVistaPlaneacion("vistaCrearPedido");
         cpDatos = null;
+        cpEdicion = null;
+        cpPedidoEditar = pedidoEditar;
         cpTipo = "pedido";
         cpSublineas = [];
         cpProcesos = [];
-        _nuevoIdEnvioCp();
         [
           "cpUnidades",
           "cpNombre",
@@ -6825,6 +6855,26 @@
         _pintarProcesosCp();
         document.getElementById("cpAviso").innerHTML =
           '<p class="hint">Cargando formulario...</p>';
+      }
+
+      function _llenarListasCp(res) {
+        const opciones = (lista) =>
+          lista
+            .map(
+              (v) =>
+                `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`,
+            )
+            .join("");
+        document.getElementById("cpEvento").innerHTML =
+          '<option value="">Selecciona...</option>' + opciones(res.eventos);
+        document.getElementById("cpClasificacion").innerHTML =
+          '<option value="">Selecciona...</option>' +
+          opciones(res.clasificaciones);
+      }
+
+      function abrirCrearPedido() {
+        _reiniciarFormularioCp("");
+        _nuevoIdEnvioCp();
         const consulta = ++plConsulta;
         llamarAPI("obtenerFormularioPedido", {})
           .then(function (res) {
@@ -6835,18 +6885,7 @@
               return;
             }
             cpDatos = res;
-            const opciones = (lista) =>
-              lista
-                .map(
-                  (v) =>
-                    `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`,
-                )
-                .join("");
-            document.getElementById("cpEvento").innerHTML =
-              '<option value="">Selecciona...</option>' + opciones(res.eventos);
-            document.getElementById("cpClasificacion").innerHTML =
-              '<option value="">Selecciona...</option>' +
-              opciones(res.clasificaciones);
+            _llenarListasCp(res);
             document.getElementById("cpFecha").value = _textoFechaChip(
               res.fecha,
             );
@@ -6879,6 +6918,115 @@
           });
       }
 
+      // Editar: mismo formulario, cargado con el pedido. Lo que tiene EAN
+      // (sublíneas) o registros (procesos) queda fijo.
+      function abrirEditarPedido(pedido) {
+        _reiniciarFormularioCp(pedido);
+        const consulta = ++plConsulta;
+        llamarAPI("obtenerPedidoParaEditar", { pedido })
+          .then(function (res) {
+            if (consulta !== plConsulta || res.sesionVencida) return;
+            if (!res.success) {
+              document.getElementById("cpAviso").innerHTML =
+                `<div class="msg err">${escapeHtml(res.message)}</div>`;
+              return;
+            }
+            const f = res.formulario;
+            const e = res.pedido;
+            cpDatos = f;
+            cpEdicion = e;
+            _llenarListasCp(f);
+            // Un valor fuera de la lista deja el select en "Selecciona...".
+            const deLista = (valor, lista, difiere) =>
+              difiere
+                ? ""
+                : lista.find(
+                    (v) => normalizarPedido(v) === normalizarPedido(valor),
+                  ) || "";
+            document.getElementById("cpEvento").value = deLista(
+              e.evento,
+              f.eventos,
+              e.difieren.evento,
+            );
+            document.getElementById("cpClasificacion").value = deLista(
+              e.clasificacion,
+              f.clasificaciones,
+              e.difieren.clasificacion,
+            );
+            document.getElementById("cpCliente").value = e.difieren.cliente
+              ? ""
+              : e.cliente;
+            document.getElementById("cpUnidades").value =
+              e.unidadesPedidas > 0 ? e.unidadesPedidas : "";
+            document.getElementById("cpFecha").value = e.fecha
+              ? _textoFechaChip(e.fecha)
+              : "Sin fecha";
+            cpSublineas = e.sublineas.map((s) => s.sublinea);
+            cpProcesos = e.procesos.map(function (p) {
+              const c = f.procesos.find(
+                (x) =>
+                  normalizarPedido(x.nombre) === normalizarPedido(p.nombre),
+              );
+              return {
+                nombre: p.nombre,
+                estandar: String(p.estandar),
+                link: p.link || "",
+                nuevo: false,
+                estandares: (c && c.estandares) || [],
+                registros: p.registros,
+              };
+            });
+            _pintarTipoCp();
+            _pintarSublineasCp();
+            _pintarProcesosCp();
+
+            const avisos = [];
+            if (!f.edicionHabilitada)
+              avisos.push(
+                '<div class="msg warn">Hasta el corte los pedidos se editan en la hoja "Numero pedidos". Puedes ver el formulario, pero no guardar.</div>',
+              );
+            const varios = [];
+            if (e.difieren.cliente) varios.push("clientes");
+            if (e.difieren.evento) varios.push("eventos");
+            if (e.difieren.clasificacion) varios.push("clasificaciones");
+            if (varios.length)
+              avisos.push(
+                `<div class="msg warn">Sus sublíneas tienen ${varios.join(", ")} distintos: elige uno y se aplicará a todas.</div>`,
+              );
+            if (!e.difieren.evento && e.evento && !deLista(e.evento, f.eventos))
+              avisos.push(
+                `<div class="msg warn">El evento "${escapeHtml(e.evento)}" no está en la lista: elige uno para guardar.</div>`,
+              );
+            if (
+              !e.difieren.clasificacion &&
+              e.clasificacion &&
+              !deLista(e.clasificacion, f.clasificaciones)
+            )
+              avisos.push(
+                `<div class="msg warn">La clasificación "${escapeHtml(e.clasificacion)}" no está en la lista: elige una para guardar.</div>`,
+              );
+            if (
+              !e.difieren.cliente &&
+              e.cliente &&
+              !f.clientes.some((c) => c === e.cliente)
+            )
+              avisos.push(
+                `<p class="hint">El cliente "${escapeHtml(e.cliente)}" no está así en la lista de activos: se conserva si no lo cambias.</p>`,
+              );
+            avisos.push(
+              '<p class="hint">Cliente, evento y clasificación se aplican a todas las sublíneas y a los registros del pedido. Las sublíneas con EAN y los procesos con registros no se pueden quitar ni cambiar.</p>',
+            );
+            document.getElementById("cpAviso").innerHTML = avisos.join("");
+            document.getElementById("btnCrearPedido").disabled =
+              !f.edicionHabilitada;
+          })
+          .catch(function (err) {
+            if (consulta !== plConsulta) return;
+            document.getElementById("cpAviso").innerHTML =
+              `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
+          });
+      }
+
       function cambiarTipoCrearPedido(tipo) {
         cpTipo = tipo;
         _pintarTipoCp();
@@ -6886,22 +7034,45 @@
 
       function _pintarTipoCp() {
         _marcarChipsPl("data-tipo-cp", cpTipo);
-        const interna = cpTipo === "interna";
-        document.getElementById("cpBloquePedido").style.display = interna
+        const editar = cpPedidoEditar !== "";
+        const interna = cpTipo === "interna" && !editar;
+        // Al editar, las unidades solo se muestran si el pedido ya las tiene
+        // (fijas) o si viene de la hoja sin ellas (se pueden poner una vez).
+        const unidadesEditables =
+          !editar || (cpEdicion && cpEdicion.unidadesEditables);
+        const unidadesVisibles =
+          !editar ||
+          (cpEdicion &&
+            (cpEdicion.unidadesEditables || cpEdicion.unidadesPedidas > 0));
+        document.getElementById("cpTipoGrupo").style.display = editar
           ? "none"
           : "";
+        document.getElementById("cpBloquePedido").style.display =
+          interna || !unidadesVisibles ? "none" : "";
+        document.getElementById("cpUnidades").disabled = !unidadesEditables;
+        document.getElementById("cpUnidadesEtiqueta").textContent =
+          editar && unidadesEditables
+            ? "Unidades pedidas (opcional; luego no se cambian)"
+            : "Unidades pedidas";
         document.getElementById("cpBloqueInterna").style.display = interna
           ? ""
           : "none";
         document.getElementById("cpNumeroBloque").style.display = interna
           ? "none"
           : "";
-        document.querySelector("#vistaCrearPedido h1").textContent = interna
-          ? "Crear actividad interna"
-          : "Crear pedido";
-        document.getElementById("btnCrearPedido").textContent = interna
-          ? "Crear actividad"
-          : "Crear pedido";
+        document.getElementById("cpNumeroHint").textContent = editar
+          ? "El número no se edita: si está mal, se elimina el pedido y se crea de nuevo."
+          : "Unidades y una letra por cada proceso con estándar. El sistema lo confirma al crear.";
+        document.querySelector("#vistaCrearPedido h1").textContent = editar
+          ? "Editar pedido " + cpPedidoEditar
+          : interna
+            ? "Crear actividad interna"
+            : "Crear pedido";
+        document.getElementById("btnCrearPedido").textContent = editar
+          ? "Guardar cambios"
+          : interna
+            ? "Crear actividad"
+            : "Crear pedido";
         _pintarNumeroCp();
       }
 
@@ -6916,6 +7087,10 @@
 
       function _pintarNumeroCp() {
         const el = document.getElementById("cpNumero");
+        if (cpPedidoEditar) {
+          el.textContent = cpPedidoEditar;
+          return;
+        }
         const unidades = Number(document.getElementById("cpUnidades").value);
         if (!Number.isInteger(unidades) || unidades < 1) {
           el.textContent = "—";
@@ -6941,13 +7116,24 @@
         .addEventListener("input", _pintarNumeroCp);
 
       // Sublíneas: texto libre con sugerencias de las ya usadas.
+      // Al editar, cuántos EAN tiene la sublínea (con EAN no se quita).
+      function _eanesSublineaCp(sublinea) {
+        if (!cpEdicion) return 0;
+        const s = cpEdicion.sublineas.find(
+          (x) => normalizarPedido(x.sublinea) === normalizarPedido(sublinea),
+        );
+        return s ? s.eanes : 0;
+      }
+
       function _pintarSublineasCp() {
         document.getElementById("cpSublineas").innerHTML = cpSublineas.length
           ? cpSublineas
-              .map(
-                (s, i) =>
-                  `<span class="pl-sublinea">${escapeHtml(s)}<button type="button" aria-label="Quitar ${escapeHtml(s)}" data-quitar-sub="${i}">×</button></span>`,
-              )
+              .map(function (s, i) {
+                const eanes = _eanesSublineaCp(s);
+                return eanes > 0
+                  ? `<span class="pl-sublinea cp-fija" title="Tiene EAN: no se puede quitar">${escapeHtml(s)} · ${eanes} EAN</span>`
+                  : `<span class="pl-sublinea">${escapeHtml(s)}<button type="button" aria-label="Quitar ${escapeHtml(s)}" data-quitar-sub="${i}">×</button></span>`;
+              })
               .join("")
           : '<span class="hint" style="margin: 0">Sin sublíneas todavía.</span>';
       }
@@ -6995,23 +7181,34 @@
         }
         cont.innerHTML = cpProcesos
           .map(function (p, i) {
+            // Al editar, un proceso con registros queda fijo.
+            const fijo = p.registros > 0;
             const etiquetas =
               (p.nuevo ? '<span class="pl-distintivo">Nuevo</span>' : "") +
               (Number(p.estandar) > 0
                 ? ""
-                : '<span class="pl-distintivo">Sin estándar</span>');
+                : '<span class="pl-distintivo">Sin estándar</span>') +
+              (fijo
+                ? `<span class="pl-distintivo">${p.registros} ${p.registros === 1 ? "registro" : "registros"}</span>`
+                : "");
             const otros = p.estandares.filter((e) => e !== Number(p.estandar));
+            const bloqueo = fijo ? " disabled" : "";
             return (
               `<div class="cp-proceso">` +
               `<div class="cp-proceso-cabecera"><strong>${escapeHtml(p.nombre)}</strong>${etiquetas}` +
-              `<button type="button" aria-label="Quitar ${escapeHtml(p.nombre)}" data-quitar-proc="${i}">×</button></div>` +
-              `<div class="row2">` +
-              `<div><label>Estándar (unds/h)</label><input type="number" inputmode="decimal" min="0" step="any" data-proc="${i}" data-campo="estandar" value="${escapeHtml(p.estandar)}" /></div>` +
-              `<div><label>Link</label><input type="url" data-proc="${i}" data-campo="link" value="${escapeHtml(p.link)}" placeholder="https://..." /></div>` +
+              (fijo
+                ? ""
+                : `<button type="button" aria-label="Quitar ${escapeHtml(p.nombre)}" data-quitar-proc="${i}">×</button>`) +
               `</div>` +
-              (otros.length
-                ? `<p class="hint">Otros estándares usados: ${otros.map((e) => escapeHtml(String(e))).join(", ")}</p>`
-                : "") +
+              `<div class="row2">` +
+              `<div><label>Estándar (unds/h)</label><input type="number" inputmode="decimal" min="0" step="any" data-proc="${i}" data-campo="estandar" value="${escapeHtml(p.estandar)}"${bloqueo} /></div>` +
+              `<div><label>Link</label><input type="url" data-proc="${i}" data-campo="link" value="${escapeHtml(p.link)}" placeholder="https://..."${bloqueo} /></div>` +
+              `</div>` +
+              (fijo
+                ? '<p class="hint">Tiene registros: no se puede cambiar ni quitar.</p>'
+                : otros.length
+                  ? `<p class="hint">Otros estándares usados: ${otros.map((e) => escapeHtml(String(e))).join(", ")}</p>`
+                  : "") +
               `</div>`
             );
           })
@@ -7128,12 +7325,12 @@
       );
 
       // Arma el envío y revisa lo básico en el navegador; el Worker vuelve a
-      // validar todo. Devuelve { datos } o { error }.
+      // validar todo. Sirve para crear y para editar. Devuelve { datos } o
+      // { error }.
       function _datosCrearPedido() {
-        const interna = cpTipo === "interna";
+        const editar = cpPedidoEditar !== "";
+        const interna = cpTipo === "interna" && !editar;
         const datos = {
-          idEnvio: cpIdEnvio,
-          tipo: interna ? "interna" : "pedido",
           cliente: document.getElementById("cpCliente").value.trim(),
           sublineas: cpSublineas.slice(),
           evento: document.getElementById("cpEvento").value,
@@ -7144,23 +7341,49 @@
             link: p.link.trim(),
           })),
         };
-        if (interna) {
-          datos.nombre = document.getElementById("cpNombre").value.trim();
-          datos.sinLimite = document.getElementById("cpSinLimite").checked;
-          if (!datos.nombre)
-            return { error: "Escribe el nombre de la actividad." };
+        if (editar) {
+          if (!cpEdicion) return { error: "El pedido todavía está cargando." };
+          datos.pedido = cpEdicion.pedido;
+          datos.huella = cpEdicion.huella;
+          // Unidades: solo un pedido de la hoja sin ellas, y son opcionales.
+          const texto = document.getElementById("cpUnidades").value.trim();
+          if (cpEdicion.unidadesEditables && texto) {
+            const u = Number(texto);
+            if (!Number.isInteger(u) || u < 1)
+              return {
+                error: "Las unidades pedidas deben ser un entero mayor que 0.",
+              };
+            datos.unidades = u;
+          }
         } else {
-          const u = Number(document.getElementById("cpUnidades").value);
-          if (!Number.isInteger(u) || u < 1)
-            return {
-              error: "Las unidades pedidas deben ser un entero mayor que 0.",
-            };
-          datos.unidades = u;
+          datos.idEnvio = cpIdEnvio;
+          datos.tipo = interna ? "interna" : "pedido";
+          if (interna) {
+            datos.nombre = document.getElementById("cpNombre").value.trim();
+            datos.sinLimite = document.getElementById("cpSinLimite").checked;
+            if (!datos.nombre)
+              return { error: "Escribe el nombre de la actividad." };
+          } else {
+            const u = Number(document.getElementById("cpUnidades").value);
+            if (!Number.isInteger(u) || u < 1)
+              return {
+                error: "Las unidades pedidas deben ser un entero mayor que 0.",
+              };
+            datos.unidades = u;
+          }
         }
+        // Cliente de la lista de activos. Al editar también vale el que ya
+        // tenía el pedido, aunque esté inactivo o escrito distinto.
         const clientes = (cpDatos && cpDatos.clientes) || [];
-        const cliente = clientes.find(
-          (c) => normalizarPedido(c) === normalizarPedido(datos.cliente),
-        );
+        const claveCliente = normalizarPedido(datos.cliente);
+        const cliente =
+          clientes.find((c) => normalizarPedido(c) === claveCliente) ||
+          (editar &&
+          !cpEdicion.difieren.cliente &&
+          cpEdicion.cliente &&
+          normalizarPedido(cpEdicion.cliente) === claveCliente
+            ? cpEdicion.cliente
+            : "");
         if (!cliente) return { error: "Elige un cliente de la lista." };
         datos.cliente = cliente;
         if (!datos.sublineas.length) {
@@ -7198,6 +7421,10 @@
         }
         resultado.innerHTML = "";
         const d = armado.datos;
+        if (cpPedidoEditar) {
+          _confirmarEditarPedidoCp(d);
+          return;
+        }
         const interna = d.tipo === "interna";
         const texto =
           (interna
@@ -7265,6 +7492,133 @@
             cpEnvioEnCurso = false;
             boton.disabled = false;
             resultado.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}. Puedes reintentar: no se duplicará.</div>`;
+          });
+      }
+
+      // Lo que cambia respecto al pedido abierto, para la confirmación. El
+      // Worker vuelve a calcularlo.
+      function _cambiosEdicionCp(d) {
+        const e = cpEdicion;
+        const n = normalizarPedido;
+        const r2 = (x) => Math.round(Number(x) * 100) / 100;
+        const lineas = [];
+        let tocaRegistros = false;
+        [
+          ["cliente", "Cliente"],
+          ["evento", "Evento"],
+          ["clasificacion", "Clasificación"],
+        ].forEach(function ([campo, nombre]) {
+          if (!e.difieren[campo] && n(d[campo]) === n(e[campo])) return;
+          tocaRegistros = true;
+          const antes = e.difieren[campo] ? "varios" : e[campo] || "vacío";
+          lineas.push(nombre + ": " + antes + " → " + d[campo]);
+        });
+        if (d.unidades !== undefined && d.unidades !== e.unidadesPedidas)
+          lineas.push("Unidades pedidas: " + d.unidades);
+        const subAntes = new Set(e.sublineas.map((s) => n(s.sublinea)));
+        const subDespues = new Set(d.sublineas.map(n));
+        const subNuevas = d.sublineas.filter((s) => !subAntes.has(n(s)));
+        const subQuitadas = e.sublineas
+          .filter((s) => !subDespues.has(n(s.sublinea)))
+          .map((s) => s.sublinea);
+        if (subNuevas.length)
+          lineas.push("Sublíneas nuevas: " + subNuevas.join(", "));
+        if (subQuitadas.length)
+          lineas.push("Sublíneas que se quitan: " + subQuitadas.join(", "));
+        const procAntes = new Map(e.procesos.map((p) => [n(p.nombre), p]));
+        const procDespues = new Set(d.procesos.map((p) => n(p.nombre)));
+        const nuevos = [];
+        const ajustados = [];
+        d.procesos.forEach(function (p) {
+          const a = procAntes.get(n(p.nombre));
+          if (!a) nuevos.push(p.nombre);
+          else if (r2(p.estandar) !== r2(a.estandar) || p.link !== a.link)
+            ajustados.push(p.nombre);
+        });
+        const quitados = e.procesos
+          .filter((p) => !procDespues.has(n(p.nombre)))
+          .map((p) => p.nombre);
+        if (nuevos.length) lineas.push("Procesos nuevos: " + nuevos.join(", "));
+        if (ajustados.length)
+          lineas.push("Procesos ajustados: " + ajustados.join(", "));
+        if (quitados.length)
+          lineas.push("Procesos que se quitan: " + quitados.join(", "));
+        return { lineas, tocaRegistros };
+      }
+
+      function _confirmarEditarPedidoCp(d) {
+        const { lineas, tocaRegistros } = _cambiosEdicionCp(d);
+        if (!lineas.length) {
+          document.getElementById("cpResultado").innerHTML =
+            '<div class="msg info">No hay cambios por guardar.</div>';
+          return;
+        }
+        const conRegistros =
+          cpEdicion.procesos.some((p) => p.registros > 0) ||
+          plPedidos.some((p) => p.pedido === d.pedido && p.conRegistros);
+        const texto =
+          "Pedido " +
+          d.pedido +
+          "\n\n• " +
+          lineas.join("\n• ") +
+          (tocaRegistros && conRegistros
+            ? '\n\nLos registros del pedido también tomarán estos datos. La hoja "Registros" se pone al día en los próximos minutos.'
+            : "");
+        pedirConfirmarPl(
+          "¿Guardar los cambios?",
+          texto,
+          "Guardar",
+          false,
+          function () {
+            editarPedidoPl(d);
+          },
+        );
+      }
+
+      function editarPedidoPl(datos) {
+        const boton = document.getElementById("btnCrearPedido");
+        const resultado = document.getElementById("cpResultado");
+        cpEnvioEnCurso = true;
+        boton.disabled = true;
+        resultado.innerHTML = '<p class="hint">Guardando...</p>';
+        llamarAPI("editarPedido", datos)
+          .then(function (res) {
+            cpEnvioEnCurso = false;
+            boton.disabled = false;
+            if (res.sesionVencida) return;
+            if (!res.success) {
+              resultado.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
+              return;
+            }
+            resultado.innerHTML = "";
+            const c = res.cambios;
+            mostrarModalAviso(
+              res.sinCambios
+                ? "El pedido " + datos.pedido + " ya tenía estos datos."
+                : "Pedido " +
+                    res.pedido +
+                    " actualizado." +
+                    (c.registrosActualizados
+                      ? "\nSe actualizaron " +
+                        c.registrosActualizados +
+                        (c.registrosActualizados === 1
+                          ? " registro"
+                          : " registros") +
+                        ': la hoja "Registros" los toma en los próximos minutos.'
+                      : "") +
+                    (res.seguimientoActualizado
+                      ? '\nSe actualizó su fila de "Seguimiento paquetes".'
+                      : ""),
+              "Pedido actualizado",
+            );
+            volverAPedidosPlaneacion();
+          })
+          .catch(function (err) {
+            // Sin respuesta no se sabe si se guardó: reintentar es seguro,
+            // porque si ya quedó el Worker responde que no hay cambios.
+            cpEnvioEnCurso = false;
+            boton.disabled = false;
+            resultado.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}. Puedes reintentar.</div>`;
           });
       }
 

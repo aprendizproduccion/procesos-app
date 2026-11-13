@@ -29,6 +29,8 @@ const PERMISOS_POR_ACCION = {
   crearPedido: ["planeacion"],
   eliminarPedido: ["planeacion"],
   guardarCliente: ["planeacion"],
+  obtenerPedidoParaEditar: ["planeacion"],
+  editarPedido: ["planeacion"],
 };
 
 export default {

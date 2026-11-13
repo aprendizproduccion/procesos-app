@@ -5,6 +5,8 @@
 // F2b-1: crear y eliminar pedidos, y crear/desactivar/reactivar clientes. Las
 // escrituras exigen el interruptor (_exigirCatalogoEnApp): hasta el corte F4
 // quedan bloqueadas y las hojas siguen mandando.
+// F2b-2: editar pedido (cliente, evento, clasificación, sublíneas y procesos;
+// el número y la fecha no se editan).
 
 import {
   _normalizarPedido,
@@ -15,7 +17,9 @@ import {
   _liberarIdempotencia,
   _fechaHoyBogota,
   _ahoraISO,
+  _actualizarSeguimientoPedido,
 } from "./d1-negocio.js";
+import { _pushSeguimientoYMarcar } from "./push-sheets.js";
 
 // Procesos sin estándar que llevan casi todos los pedidos: el formulario los
 // trae ya marcados (se pueden quitar). No cuentan para el número del pedido.
@@ -210,6 +214,169 @@ function _auditoriaConGuarda(env, fila, condicionSql, binds) {
 
 function _auditoria(env, fila) {
   return _auditoriaConGuarda(env, fila, "0", []);
+}
+
+function _redondear2(n) {
+  return Math.round(Number(n) * 100) / 100;
+}
+
+// Valida un proceso del formulario: nombre, estándar (obligatorio, desde 0) y
+// link (vacío o http(s)://). Si el nombre ya está en el catálogo devuelve su
+// escritura. La repetición dentro del pedido la revisa quien llama.
+function _procesoValidado(p, catalogo) {
+  const texto = _limpiar(p && p.nombre);
+  const clave = _normalizarPedido(texto);
+  if (!clave) throw new Error("Hay un proceso sin nombre.");
+  if (texto.length > 300)
+    throw new Error("Un nombre de proceso pasa de 300 caracteres.");
+  const estandar = _redondear2(p.estandar);
+  if (
+    p.estandar === "" ||
+    p.estandar === null ||
+    !Number.isFinite(estandar) ||
+    estandar < 0 ||
+    estandar > 100000
+  )
+    throw new Error(
+      'El estándar de "' + texto + '" debe ser un número desde 0.',
+    );
+  const link = String((p && p.link) || "").trim();
+  if (link && (!/^https?:\/\/\S+$/i.test(link) || link.length > 1000))
+    throw new Error(
+      'El link de "' + texto + '" debe empezar por http:// o https://.',
+    );
+  const enCatalogo = catalogo.get(clave);
+  return {
+    clave,
+    nombre: enCatalogo ? enCatalogo.nombre : texto,
+    estandar,
+    link,
+    nuevo: !enCatalogo,
+  };
+}
+
+// Valor de una lista fija. Si equivale al que ya tiene el pedido (y no difiere
+// entre sublíneas), se conserva su escritura para no reescribir registros por
+// una mayúscula.
+function _valorDeLista(valor, lista, actual, difiere, mensaje) {
+  const elegido = lista.find(
+    (v) => _normalizarPedido(v) === _normalizarPedido(valor),
+  );
+  if (!elegido) throw new Error(mensaje);
+  return !difiere && _normalizarPedido(actual) === _normalizarPedido(elegido)
+    ? actual
+    : elegido;
+}
+
+// Estado actual de un pedido para editarlo: sus filas de pedidos, sus
+// procesos, cuántos EAN tiene cada sublínea y cuántos registros (anulados
+// incluidos) cada proceso. La huella resume filas y procesos: si cambia entre
+// abrir el formulario y guardar, alguien más editó el pedido.
+async function _estadoPedido(env, pedido) {
+  const { results: filas } = await env.DB.prepare(
+    "SELECT sublinea, cliente, evento, clasificacion_proceso AS clasificacion, fecha, " +
+      "unidades_pedidas AS unidades FROM pedidos WHERE numero_pedido = ? ORDER BY sublinea",
+  )
+    .bind(pedido)
+    .all();
+  const { results: procesos } = await env.DB.prepare(
+    "SELECT nombre_proceso AS nombre, unidades_hora_estandar AS estandar, " +
+      "COALESCE(link_procesos, '') AS link FROM procesos WHERE numero_pedido = ? ORDER BY id",
+  )
+    .bind(pedido)
+    .all();
+  const { results: eanes } = await env.DB.prepare(
+    "SELECT sublinea, COUNT(*) AS n FROM validacion_eanes WHERE numero_pedido = ? GROUP BY sublinea",
+  )
+    .bind(pedido)
+    .all();
+  const { results: usos } = await env.DB.prepare(
+    "SELECT proceso, COUNT(*) AS n FROM registros WHERE numero_pedido = ? GROUP BY proceso",
+  )
+    .bind(pedido)
+    .all();
+  // Un pedido creado en la app ya nació con sus unidades (o es una actividad
+  // interna): sus unidades pedidas no se editan.
+  const creado = await env.DB.prepare(
+    "SELECT 1 AS si FROM auditoria_catalogos WHERE tabla = 'pedidos' AND llave = ? " +
+      "AND accion = 'crear' LIMIT 1",
+  )
+    .bind(pedido)
+    .first();
+
+  const _contar = (lista, campo) => {
+    const m = new Map();
+    lista.forEach((x) => {
+      const clave = _normalizarPedido(x[campo]);
+      m.set(clave, (m.get(clave) || 0) + x.n);
+    });
+    return m;
+  };
+  const eanesPorSub = _contar(eanes, "sublinea");
+  const registrosPorProc = _contar(usos, "proceso");
+
+  const filasLimpias = filas.map((f) => ({
+    sublinea: String(f.sublinea),
+    cliente: String(f.cliente || ""),
+    evento: String(f.evento || ""),
+    clasificacion: String(f.clasificacion || ""),
+    fecha: String(f.fecha || ""),
+    unidades: Number(f.unidades) || 0,
+  }));
+  const procesosLimpios = procesos.map((p) => ({
+    nombre: String(p.nombre),
+    estandar: Number(p.estandar) || 0,
+    link: String(p.link || "").trim(),
+  }));
+  const base = filasLimpias[0] || {};
+  const difiere = (campo) =>
+    _distintos(filasLimpias.map((f) => f[campo])).length > 1;
+  const unidadesPedidas = Math.max(0, ...filasLimpias.map((f) => f.unidades));
+
+  return {
+    existe: filasLimpias.length > 0,
+    soloEnValidacion: filasLimpias.length === 0 && eanes.length > 0,
+    filas: filasLimpias,
+    cliente: base.cliente || "",
+    evento: base.evento || "",
+    clasificacion: base.clasificacion || "",
+    difieren: {
+      cliente: difiere("cliente"),
+      evento: difiere("evento"),
+      clasificacion: difiere("clasificacion"),
+    },
+    fecha:
+      filasLimpias
+        .map((f) => f.fecha)
+        .filter(Boolean)
+        .sort()[0] || "",
+    unidadesPedidas,
+    unidadesEditables: !creado && unidadesPedidas === 0,
+    sublineas: filasLimpias.map((f) => ({
+      sublinea: f.sublinea,
+      eanes: eanesPorSub.get(_normalizarPedido(f.sublinea)) || 0,
+    })),
+    procesos: procesosLimpios.map((p) => ({
+      ...p,
+      registros: registrosPorProc.get(_normalizarPedido(p.nombre)) || 0,
+    })),
+    huella: await _huellaPayload("estadoPedido", {
+      estado: JSON.stringify({
+        filas: filasLimpias,
+        procesos: procesosLimpios,
+      }),
+    }),
+  };
+}
+
+function _errorPedidoNoEditable(pedido, estado) {
+  return new Error(
+    estado.soloEnValidacion
+      ? "El pedido " +
+          pedido +
+          ' solo existe en Validación eanes: corrígelo en la hoja "Numero pedidos" antes del corte.'
+      : "El pedido " + pedido + " no existe.",
+  );
 }
 
 export const accionesPlaneacion = {
@@ -572,36 +739,18 @@ export const accionesPlaneacion = {
       const procesos = [];
       const vistosProc = new Set();
       (Array.isArray(datos.procesos) ? datos.procesos : []).forEach((p) => {
-        const texto = _limpiar(p && p.nombre);
-        const clave = _normalizarPedido(texto);
-        if (!clave) throw new Error("Hay un proceso sin nombre.");
-        if (texto.length > 300)
-          throw new Error("Un nombre de proceso pasa de 300 caracteres.");
-        if (vistosProc.has(clave))
-          throw new Error('El proceso "' + texto + '" está repetido.');
-        vistosProc.add(clave);
-        const estandar = Math.round(Number(p.estandar) * 100) / 100;
-        if (
-          p.estandar === "" ||
-          p.estandar === null ||
-          !Number.isFinite(estandar) ||
-          estandar < 0 ||
-          estandar > 100000
-        )
+        const clave = _normalizarPedido(_limpiar(p && p.nombre));
+        if (clave && vistosProc.has(clave))
           throw new Error(
-            'El estándar de "' + texto + '" debe ser un número desde 0.',
+            'El proceso "' + _limpiar(p.nombre) + '" está repetido.',
           );
-        const link = String((p && p.link) || "").trim();
-        if (link && (!/^https?:\/\/\S+$/i.test(link) || link.length > 1000))
-          throw new Error(
-            'El link de "' + texto + '" debe empezar por http:// o https://.',
-          );
-        const enCatalogo = catalogo.get(clave);
+        const v = _procesoValidado(p, catalogo);
+        vistosProc.add(v.clave);
         procesos.push({
-          nombre: enCatalogo ? enCatalogo.nombre : texto,
-          estandar,
-          link,
-          nuevo: !enCatalogo,
+          nombre: v.nombre,
+          estandar: v.estandar,
+          link: v.link,
+          nuevo: v.nuevo,
         });
       });
       if (procesos.length === 0) throw new Error("Agrega al menos un proceso.");
@@ -898,5 +1047,469 @@ export const accionesPlaneacion = {
     }
 
     throw new Error("Acción de cliente no válida.");
+  },
+
+  // F2b-2: datos para editar un pedido (su estado actual con lo que bloquea
+  // cada sublínea y proceso) más los catálogos del formulario de crear.
+  async obtenerPedidoParaEditar(datos, env) {
+    const pedido = String(datos.pedido || "").trim();
+    if (!pedido) throw new Error("Falta el número de pedido.");
+    const estado = await _estadoPedido(env, pedido);
+    if (!estado.existe) throw _errorPedidoNoEditable(pedido, estado);
+    const formulario = await accionesPlaneacion.obtenerFormularioPedido(
+      {},
+      env,
+    );
+    delete formulario.success;
+    return {
+      success: true,
+      formulario,
+      pedido: {
+        pedido,
+        cliente: estado.cliente,
+        evento: estado.evento,
+        clasificacion: estado.clasificacion,
+        difieren: estado.difieren,
+        fecha: estado.fecha,
+        unidadesPedidas: estado.unidadesPedidas,
+        unidadesEditables: estado.unidadesEditables,
+        sublineas: estado.sublineas,
+        procesos: estado.procesos,
+        huella: estado.huella,
+      },
+    };
+  },
+
+  // Edita un pedido. Recibe cómo debe quedar y el Worker calcula qué cambió:
+  // - cliente, evento y clasificación van a todas las sublíneas y a sus
+  //   registros (la hoja Registros se pone al día con la reconciliación);
+  // - sublíneas: se agregan siempre; se quitan solo sin EAN;
+  // - procesos: se agregan siempre; se ajustan o quitan solo sin registros;
+  // - unidades pedidas: solo si el pedido viene de la hoja y las tiene en 0.
+  // Sin cambios responde éxito (sirve también para un reintento tras un error
+  // de red). Si el pedido cambió desde que se abrió (huella distinta), no
+  // guarda. Si el pedido está cerrado y cambió el cliente, refresca su fila de
+  // "Seguimiento paquetes".
+  // datos: { pedido, huella, cliente, evento, clasificacion, unidades,
+  //   sublineas[], procesos[{nombre, estandar, link}] }
+  async editarPedido(datos, env, ctx, ip, sesion) {
+    const pedido = String(datos.pedido || "").trim();
+    if (!pedido) throw new Error("Falta el número de pedido.");
+    await _exigirCatalogoEnApp(env, "pedidos");
+    await _exigirCatalogoEnApp(env, "procesos");
+
+    const actual = await _estadoPedido(env, pedido);
+    if (!actual.existe) throw _errorPedidoNoEditable(pedido, actual);
+
+    // --- Cliente: si no cambia se conserva (aunque esté inactivo o escrito
+    // distinto); si cambia, debe ser un cliente activo de la tabla ---
+    const claveCliente = _normalizarPedido(datos.cliente);
+    if (!claveCliente) throw new Error("Selecciona el cliente.");
+    let cliente = actual.cliente;
+    if (
+      actual.difieren.cliente ||
+      !actual.cliente ||
+      claveCliente !== _normalizarPedido(actual.cliente)
+    ) {
+      const { results: activos } = await env.DB.prepare(
+        "SELECT nombre FROM clientes WHERE activo = 1",
+      ).all();
+      const elegido = activos.find(
+        (c) => _normalizarPedido(c.nombre) === claveCliente,
+      );
+      if (!elegido)
+        throw new Error(
+          'El cliente "' +
+            _limpiar(datos.cliente) +
+            '" no está en la lista de clientes activos.',
+        );
+      cliente = elegido.nombre;
+    }
+
+    // --- Evento y clasificación: siempre de las listas fijas ---
+    const evento = _valorDeLista(
+      datos.evento,
+      EVENTOS_PEDIDO,
+      actual.evento,
+      actual.difieren.evento,
+      "Selecciona un evento de la lista.",
+    );
+    const clasificacion = _valorDeLista(
+      datos.clasificacion,
+      CLASIFICACIONES_PEDIDO,
+      actual.clasificacion,
+      actual.difieren.clasificacion,
+      "Selecciona una clasificación de la lista.",
+    );
+
+    // --- Unidades pedidas ---
+    let unidades = actual.unidadesPedidas;
+    const pideUnidades =
+      datos.unidades !== undefined &&
+      datos.unidades !== null &&
+      datos.unidades !== "";
+    if (pideUnidades && Number(datos.unidades) !== actual.unidadesPedidas) {
+      if (!actual.unidadesEditables)
+        throw new Error(
+          "Las unidades pedidas de este pedido no se pueden cambiar.",
+        );
+      unidades = Number(datos.unidades);
+      if (
+        !Number.isInteger(unidades) ||
+        unidades < 1 ||
+        unidades > MAX_UNIDADES_PEDIDO
+      )
+        throw new Error(
+          "Las unidades pedidas deben ser un número entero mayor que 0.",
+        );
+    }
+
+    // --- Sublíneas ---
+    const usadas = await _sublineasUsadas(env);
+    const subActuales = new Map(
+      actual.sublineas.map((s) => [_normalizarPedido(s.sublinea), s]),
+    );
+    const sublineas = [];
+    const vistasSub = new Set();
+    (Array.isArray(datos.sublineas) ? datos.sublineas : []).forEach((s) => {
+      const texto = _limpiar(s);
+      const clave = _normalizarPedido(texto);
+      if (!clave || vistasSub.has(clave)) return;
+      vistasSub.add(clave);
+      const existente = subActuales.get(clave);
+      if (existente) {
+        sublineas.push(existente.sublinea);
+        return;
+      }
+      if (texto.length > 60)
+        throw new Error('La sublínea "' + texto + '" pasa de 60 caracteres.');
+      sublineas.push(usadas.has(clave) ? usadas.get(clave).nombre : texto);
+    });
+    if (sublineas.length === 0)
+      throw new Error("El pedido debe tener al menos una sublínea.");
+    if (sublineas.length > MAX_SUBLINEAS)
+      throw new Error("Máximo " + MAX_SUBLINEAS + " sublíneas por pedido.");
+    const subNuevas = sublineas.filter(
+      (s) => !subActuales.has(_normalizarPedido(s)),
+    );
+    const subQuitadas = actual.sublineas.filter(
+      (s) => !vistasSub.has(_normalizarPedido(s.sublinea)),
+    );
+    const subConEan = subQuitadas.find((s) => s.eanes > 0);
+    if (subConEan)
+      throw new Error(
+        'La sublínea "' +
+          subConEan.sublinea +
+          '" tiene EAN: no se puede quitar.',
+      );
+
+    // --- Procesos ---
+    // Uno que ya está en el pedido y llega igual se deja tal cual, sin
+    // revalidar (puede traer un link viejo de la hoja).
+    const catalogo = await _catalogoProcesos(env);
+    const procActuales = new Map(
+      actual.procesos.map((p) => [_normalizarPedido(p.nombre), p]),
+    );
+    const procesos = []; // { nombre, estandar, link, estado, antes }
+    const vistosProc = new Set();
+    (Array.isArray(datos.procesos) ? datos.procesos : []).forEach((p) => {
+      const clave = _normalizarPedido(_limpiar(p && p.nombre));
+      if (clave && vistosProc.has(clave))
+        throw new Error(
+          'El proceso "' + _limpiar(p.nombre) + '" está repetido.',
+        );
+      const existente = clave && procActuales.get(clave);
+      if (existente) {
+        vistosProc.add(clave);
+        const link = String(p.link || "").trim();
+        const igual =
+          link === existente.link &&
+          p.estandar !== "" &&
+          p.estandar !== null &&
+          _redondear2(p.estandar) === _redondear2(existente.estandar);
+        if (igual) {
+          procesos.push({ ...existente, estado: "igual" });
+          return;
+        }
+        if (existente.registros > 0)
+          throw new Error(
+            'El proceso "' +
+              existente.nombre +
+              '" tiene registros: no se puede cambiar su estándar ni su link.',
+          );
+        const v = _procesoValidado(p, catalogo);
+        procesos.push({
+          nombre: existente.nombre,
+          estandar: v.estandar,
+          link: v.link,
+          estado: "ajustado",
+          antes: existente,
+        });
+        return;
+      }
+      const v = _procesoValidado(p, catalogo);
+      vistosProc.add(v.clave);
+      procesos.push({
+        nombre: v.nombre,
+        estandar: v.estandar,
+        link: v.link,
+        estado: "nuevo",
+      });
+    });
+    if (procesos.length === 0)
+      throw new Error("El pedido debe tener al menos un proceso.");
+    if (procesos.length > MAX_PROCESOS)
+      throw new Error("Máximo " + MAX_PROCESOS + " procesos por pedido.");
+    const procNuevos = procesos.filter((p) => p.estado === "nuevo");
+    const procAjustados = procesos.filter((p) => p.estado === "ajustado");
+    const procQuitados = actual.procesos.filter(
+      (p) => !vistosProc.has(_normalizarPedido(p.nombre)),
+    );
+    const procConRegistros = procQuitados.find((p) => p.registros > 0);
+    if (procConRegistros)
+      throw new Error(
+        'El proceso "' +
+          procConRegistros.nombre +
+          '" tiene registros: no se puede quitar.',
+      );
+
+    // --- Qué cambió ---
+    const datosCambian = actual.filas.some(
+      (f) =>
+        f.cliente !== cliente ||
+        f.evento !== evento ||
+        f.clasificacion !== clasificacion ||
+        f.unidades !== unidades,
+    );
+    // Cliente, evento y clasificación también viajan en cada registro.
+    const registrosCambian = actual.filas.some(
+      (f) =>
+        f.cliente !== cliente ||
+        f.evento !== evento ||
+        f.clasificacion !== clasificacion,
+    );
+    const clienteCambia = actual.filas.some((f) => f.cliente !== cliente);
+    const hayCambios =
+      datosCambian ||
+      subNuevas.length > 0 ||
+      subQuitadas.length > 0 ||
+      procNuevos.length > 0 ||
+      procAjustados.length > 0 ||
+      procQuitados.length > 0;
+    if (!hayCambios) return { success: true, pedido, sinCambios: true };
+
+    if (String(datos.huella || "") !== actual.huella)
+      throw new Error(
+        "El pedido cambió mientras lo editabas. Vuelve a abrirlo para ver los datos actuales.",
+      );
+
+    // --- Auditoría: solo lo que cambió ---
+    const antes = {};
+    const despues = {};
+    if (datosCambian) {
+      antes.filas = actual.filas.map((f) => ({
+        sublinea: f.sublinea,
+        cliente: f.cliente,
+        evento: f.evento,
+        clasificacion: f.clasificacion,
+        unidadesPedidas: f.unidades,
+      }));
+      despues.datos = {
+        cliente,
+        evento,
+        clasificacion,
+        unidadesPedidas: unidades,
+      };
+    }
+    if (subNuevas.length) despues.sublineasAgregadas = subNuevas;
+    if (subQuitadas.length)
+      antes.sublineasQuitadas = subQuitadas.map((s) => s.sublinea);
+    const _proc = (p) => ({
+      nombre: p.nombre,
+      estandar: p.estandar,
+      link: p.link,
+    });
+    if (procNuevos.length) despues.procesosAgregados = procNuevos.map(_proc);
+    if (procAjustados.length) {
+      antes.procesosAjustados = procAjustados.map((p) => _proc(p.antes));
+      despues.procesosAjustados = procAjustados.map(_proc);
+    }
+    if (procQuitados.length) antes.procesosQuitados = procQuitados.map(_proc);
+
+    // --- Guarda: el pedido sigue existiendo, ninguna sublínea que se quita
+    // recibió un EAN y ningún proceso que se quita o ajusta recibió un
+    // registro entre la lectura y el batch ---
+    const subJson = JSON.stringify(subQuitadas.map((s) => s.sublinea));
+    const procBloqueables = procQuitados
+      .map((p) => p.nombre)
+      .concat(procAjustados.map((p) => p.nombre));
+    const procJson = JSON.stringify(procBloqueables);
+    let condicion = "NOT EXISTS(SELECT 1 FROM pedidos WHERE numero_pedido = ?)";
+    const binds = [pedido];
+    if (subQuitadas.length) {
+      condicion +=
+        " OR EXISTS(SELECT 1 FROM validacion_eanes WHERE numero_pedido = ? " +
+        "AND sublinea IN (SELECT value FROM json_each(?)))";
+      binds.push(pedido, subJson);
+    }
+    if (procBloqueables.length) {
+      condicion +=
+        " OR EXISTS(SELECT 1 FROM registros WHERE numero_pedido = ? " +
+        "AND proceso IN (SELECT value FROM json_each(?)))";
+      binds.push(pedido, procJson);
+    }
+
+    const lote = [
+      _auditoriaConGuarda(
+        env,
+        {
+          tabla: "pedidos",
+          llave: pedido,
+          accion: "editar",
+          antes,
+          despues,
+          cedula: sesion.cedula,
+          nombre: sesion.nombre || "",
+          hechoEn: _ahoraISO(),
+        },
+        condicion,
+        binds,
+      ),
+    ];
+    if (subQuitadas.length)
+      lote.push(
+        env.DB.prepare(
+          "DELETE FROM pedidos WHERE numero_pedido = ? AND sublinea IN (SELECT value FROM json_each(?))",
+        ).bind(pedido, subJson),
+      );
+    if (datosCambian)
+      lote.push(
+        env.DB.prepare(
+          "UPDATE pedidos SET cliente = ?, evento = ?, clasificacion_proceso = ?, unidades_pedidas = ? " +
+            "WHERE numero_pedido = ?",
+        ).bind(cliente, evento, clasificacion, unidades, pedido),
+      );
+    // Las sublíneas nuevas toman la fecha del pedido (la más antigua).
+    subNuevas.forEach((s) =>
+      lote.push(
+        env.DB.prepare(
+          "INSERT INTO pedidos (numero_pedido, cliente, sublinea, evento, clasificacion_proceso, fecha, unidades_pedidas) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ).bind(
+          pedido,
+          cliente,
+          s,
+          evento,
+          clasificacion,
+          actual.fecha,
+          unidades,
+        ),
+      ),
+    );
+    if (procQuitados.length)
+      lote.push(
+        env.DB.prepare(
+          "DELETE FROM procesos WHERE numero_pedido = ? AND nombre_proceso IN (SELECT value FROM json_each(?))",
+        ).bind(pedido, JSON.stringify(procQuitados.map((p) => p.nombre))),
+      );
+    procAjustados.forEach((p) =>
+      lote.push(
+        env.DB.prepare(
+          "UPDATE procesos SET unidades_hora_estandar = ?, link_procesos = ? " +
+            "WHERE numero_pedido = ? AND nombre_proceso = ?",
+        ).bind(p.estandar, p.link, pedido, p.nombre),
+      ),
+    );
+    procNuevos.forEach((p) =>
+      lote.push(
+        env.DB.prepare(
+          "INSERT INTO procesos (nombre_proceso, unidades_hora_estandar, numero_pedido, link_procesos) " +
+            "VALUES (?, ?, ?, ?)",
+        ).bind(p.nombre, p.estandar, pedido, p.link),
+      ),
+    );
+    // Los registros se reescriben en la hoja con la reconciliación de 10 min
+    // (anulado_sincronizado_sheets = 0), sin envío inmediato.
+    let indiceRegistros = -1;
+    if (registrosCambian) {
+      indiceRegistros = lote.length;
+      lote.push(
+        env.DB.prepare(
+          "UPDATE registros SET cliente = ?, evento = ?, clasificacion_proceso = ?, " +
+            "anulado_sincronizado_sheets = 0 WHERE numero_pedido = ? " +
+            "AND (cliente IS NOT ? OR evento IS NOT ? OR clasificacion_proceso IS NOT ?)",
+        ).bind(
+          cliente,
+          evento,
+          clasificacion,
+          pedido,
+          cliente,
+          evento,
+          clasificacion,
+        ),
+      );
+    }
+
+    let resultados;
+    try {
+      resultados = await env.DB.batch(lote);
+    } catch (errLote) {
+      const guarda = await env.DB.prepare(
+        "SELECT CASE WHEN " + condicion + " THEN 1 ELSE 0 END AS bloqueado",
+      )
+        .bind(...binds)
+        .first();
+      if (guarda && guarda.bloqueado === 1)
+        throw new Error(
+          "El pedido cambió mientras lo editabas (llegaron EAN o registros, o se eliminó). Vuelve a abrirlo.",
+        );
+      throw errLote;
+    }
+    const registrosActualizados =
+      indiceRegistros >= 0
+        ? (resultados[indiceRegistros].meta &&
+            resultados[indiceRegistros].meta.changes) ||
+          0
+        : 0;
+
+    // Pedido cerrado: su fila de "Seguimiento paquetes" muestra
+    // "Sublínea - Cliente". Si falla, el cambio del pedido ya quedó.
+    let seguimientoActualizado = false;
+    if (clienteCambia) {
+      try {
+        const seg = await env.DB.prepare(
+          "SELECT vigente FROM seguimiento_paquetes WHERE numero_pedido = ?",
+        )
+          .bind(pedido)
+          .first();
+        if (seg && seg.vigente === 1) {
+          await _actualizarSeguimientoPedido(env, pedido, true);
+          ctx.waitUntil(_pushSeguimientoYMarcar(env, pedido));
+          seguimientoActualizado = true;
+        }
+      } catch (err) {
+        console.error(
+          "editarPedido: no se pudo refrescar Seguimiento paquetes de " +
+            pedido +
+            ": " +
+            err.message,
+        );
+      }
+    }
+
+    return {
+      success: true,
+      pedido,
+      cambios: {
+        datos: datosCambian,
+        sublineasAgregadas: subNuevas,
+        sublineasQuitadas: subQuitadas.map((s) => s.sublinea),
+        procesosAgregados: procNuevos.map((p) => p.nombre),
+        procesosAjustados: procAjustados.map((p) => p.nombre),
+        procesosQuitados: procQuitados.map((p) => p.nombre),
+        registrosActualizados,
+      },
+      seguimientoActualizado,
+    };
   },
 };
