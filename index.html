@@ -427,6 +427,73 @@
         font-weight: 400;
         color: var(--gv-texto-suave);
       }
+      .pl-acciones {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 8px;
+      }
+      .pl-acciones button {
+        width: auto;
+        min-height: 40px;
+        margin: 0;
+      }
+      .pl-sublinea button {
+        background: none;
+        border: none;
+        padding: 0 0 0 6px;
+        font-size: 16px;
+        line-height: 1;
+        color: var(--gv-jet);
+        cursor: pointer;
+      }
+      .cp-proceso {
+        border: 1px solid var(--gv-borde);
+        border-radius: 8px;
+        padding: 10px;
+        margin-bottom: 8px;
+        background: var(--gv-white);
+      }
+      .cp-proceso-cabecera {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .cp-proceso-cabecera strong {
+        flex: 1;
+        word-break: break-word;
+      }
+      .cp-proceso-cabecera button {
+        background: none;
+        border: none;
+        font-size: 20px;
+        line-height: 1;
+        padding: 0 4px;
+        cursor: pointer;
+        color: var(--gv-jet);
+      }
+      .cp-proceso .row2 input {
+        margin-bottom: 0;
+      }
+      .cp-proceso .hint {
+        margin: 6px 0 0;
+      }
+      .cp-numero {
+        font-size: 18px;
+        font-weight: 700;
+        word-break: break-word;
+      }
+      .cp-casilla {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .cp-casilla input {
+        width: auto;
+        margin: 0;
+      }
 
       /* ===== Botones — Manual de marca, sección 07 ===== */
       /* Base "con caja": 48 px de alto, 14 px, ancho completo. */
@@ -1776,10 +1843,15 @@
       </button>
       <h1>Pedidos</h1>
       <div class="card">
-        <p class="hint" style="margin-top: 0">
-          Solo lectura: hasta el corte, los pedidos se siguen montando en la
-          hoja "Numero pedidos".
-        </p>
+        <p class="hint" style="margin-top: 0" id="plPedidosNota"></p>
+        <button
+          type="button"
+          class="btn-submit"
+          style="margin-bottom: 14px"
+          onclick="abrirCrearPedido()"
+        >
+          + Crear pedido
+        </button>
         <input
           id="plPedidoBuscar"
           placeholder="Buscar por pedido o cliente..."
@@ -1834,6 +1906,155 @@
       </div>
     </div>
 
+    <div id="vistaCrearPedido" style="display: none">
+      <button
+        type="button"
+        class="btn-submit btn-gv-contorno"
+        style="margin-bottom: 14px"
+        onclick="volverAPedidosPlaneacion()"
+      >
+        ← Volver a Pedidos
+      </button>
+      <h1>Crear pedido</h1>
+      <div class="card">
+        <div id="cpAviso"></div>
+        <div
+          class="filtro-estado-seg"
+          role="group"
+          aria-label="Tipo"
+          style="margin-bottom: 14px"
+        >
+          <button
+            type="button"
+            class="chip-estado"
+            data-tipo-cp="pedido"
+            aria-pressed="true"
+            onclick="cambiarTipoCrearPedido('pedido')"
+          >
+            Pedido
+          </button>
+          <button
+            type="button"
+            class="chip-estado"
+            data-tipo-cp="interna"
+            aria-pressed="false"
+            onclick="cambiarTipoCrearPedido('interna')"
+          >
+            Actividad interna
+          </button>
+        </div>
+        <div id="cpBloquePedido">
+          <label for="cpUnidades">Unidades pedidas</label>
+          <input
+            id="cpUnidades"
+            type="number"
+            inputmode="numeric"
+            min="1"
+            step="1"
+            placeholder="Ej: 2000"
+          />
+        </div>
+        <div id="cpBloqueInterna" style="display: none">
+          <label for="cpNombre">Nombre de la actividad</label>
+          <input
+            id="cpNombre"
+            maxlength="60"
+            autocomplete="off"
+            placeholder="Ej: Inventario bodega 3"
+          />
+          <label class="cp-casilla">
+            <input id="cpSinLimite" type="checkbox" />
+            Marcar como sin límite
+          </label>
+          <p class="hint" style="margin-top: 0">
+            Crea el EAN 0 sin tope de unidades, para registrar trabajo sin
+            unidades estimadas.
+          </p>
+        </div>
+        <label for="cpCliente">Cliente</label>
+        <div class="campo-sugerencias">
+          <input
+            id="cpCliente"
+            autocomplete="off"
+            placeholder="Busca el cliente..."
+          />
+          <div id="sugCpCliente" class="lista-sugerencias" role="listbox"></div>
+        </div>
+        <label for="cpSublinea">Sublíneas</label>
+        <div
+          id="cpSublineas"
+          class="pl-sublineas"
+          style="margin: 0 0 8px"
+        ></div>
+        <div class="add-row" style="margin-bottom: 14px">
+          <div class="campo-sugerencias">
+            <input
+              id="cpSublinea"
+              autocomplete="off"
+              enterkeyhint="done"
+              placeholder="Ej: Ninguna"
+            />
+            <div
+              id="sugCpSublinea"
+              class="lista-sugerencias"
+              role="listbox"
+            ></div>
+          </div>
+          <button type="button" onclick="agregarSublineaCrearPedido()">
+            Agregar
+          </button>
+        </div>
+        <div class="row2">
+          <div>
+            <label for="cpEvento">Evento</label>
+            <select id="cpEvento"></select>
+          </div>
+          <div>
+            <label for="cpClasificacion">Clasificación</label>
+            <select id="cpClasificacion"></select>
+          </div>
+        </div>
+        <label for="cpProceso">Procesos</label>
+        <div id="cpProcesos"></div>
+        <div class="add-row" style="margin-bottom: 14px">
+          <div class="campo-sugerencias">
+            <input
+              id="cpProceso"
+              autocomplete="off"
+              enterkeyhint="done"
+              placeholder="Busca o escribe un proceso..."
+            />
+            <div
+              id="sugCpProceso"
+              class="lista-sugerencias"
+              role="listbox"
+            ></div>
+          </div>
+          <button type="button" onclick="agregarProcesoCrearPedido()">
+            Agregar
+          </button>
+        </div>
+        <label for="cpFecha">Fecha de creación</label>
+        <input id="cpFecha" readonly />
+        <div id="cpNumeroBloque" class="msg info">
+          Número del pedido: <span id="cpNumero" class="cp-numero">—</span>
+          <div class="hint" style="margin: 4px 0 0">
+            Unidades y una letra por cada proceso con estándar. El sistema lo
+            confirma al crear.
+          </div>
+        </div>
+        <div id="cpResultado"></div>
+        <button
+          type="button"
+          id="btnCrearPedido"
+          class="btn-submit"
+          onclick="pedirConfirmarCrearPedido()"
+        >
+          Crear pedido
+        </button>
+      </div>
+    </div>
+
     <div id="vistaClientesPlaneacion" style="display: none">
       <button
         type="button"
@@ -1846,6 +2067,19 @@
       <h1>Clientes</h1>
       <div class="card">
         <p class="hint" style="margin-top: 0" id="plClientesNota"></p>
+        <div id="plClienteNuevoBloque" style="display: none">
+          <label for="plClienteNuevo">Nuevo cliente</label>
+          <div class="add-row" style="margin-bottom: 14px">
+            <input id="plClienteNuevo" maxlength="80" autocomplete="off" />
+            <button
+              type="button"
+              id="btnPlClienteNuevo"
+              onclick="crearClientePlaneacion()"
+            >
+              Agregar
+            </button>
+          </div>
+        </div>
         <input
           id="plClienteBuscar"
           placeholder="Buscar cliente..."
@@ -2501,6 +2735,27 @@
           >
             Eliminar
           </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="modalConfirmarPl" class="modal-overlay">
+      <div class="modal-box">
+        <h3 id="modalConfirmarPlTitulo"></h3>
+        <p id="modalConfirmarPlTexto" style="white-space: pre-line"></p>
+        <div class="row2" style="margin-top: 8px">
+          <button
+            type="button"
+            class="btn-gv-contorno"
+            onclick="cerrarConfirmarPl()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            id="btnConfirmarPl"
+            onclick="aceptarConfirmarPl()"
+          ></button>
         </div>
       </div>
     </div>
@@ -4779,6 +5034,7 @@
           "vistaSeguimientoPaquetes",
           "vistaControlTiempos",
           "vistaPedidosPlaneacion",
+          "vistaCrearPedido",
           "vistaClientesPlaneacion",
         ].forEach((id) => {
           document.getElementById(id).style.display = "none";
@@ -4850,10 +5106,12 @@
           "vistaSeguimientoPaquetes",
           "vistaControlTiempos",
           "vistaPedidosPlaneacion",
+          "vistaCrearPedido",
           "vistaClientesPlaneacion",
         ].forEach((id) => {
           document.getElementById(id).style.display = "none";
         });
+        cerrarConfirmarPl();
 
         // 2. Vaciar inputs, textareas y selects simples
         const camposAVaciar = [
@@ -6215,7 +6473,7 @@
         );
       }
 
-      // ---------------- PLANEACIÓN: PEDIDOS Y CLIENTES (F2a, solo lectura) ----------------
+      // ---------------- PLANEACIÓN: PEDIDOS Y CLIENTES (F2a lectura, F2b escrituras) ----------------
       // Los datos se piden cada vez que se abre la vista: el pull de la hoja
       // puede haber cambiado algo. El buscador filtra la lista en vivo con la
       // misma normalización de pedidos (sin tildes, mayúsculas ni espacios).
@@ -6226,6 +6484,10 @@
       let plClientes = [];
       let plFiltroClientes = "";
       let plConsulta = 0; // una respuesta vieja no pinta
+      // Lo decide el interruptor del Worker (catalogos_en_app). Hasta el corte
+      // es false: se ve todo, pero no se crea ni se elimina.
+      let plEdicionPedidos = false;
+      let plEdicionClientes = false;
 
       function _abrirVistaPlaneacion(idVista) {
         document.getElementById("vistaDashboard").style.display = "none";
@@ -6261,6 +6523,7 @@
           (id) => (document.getElementById(id).textContent = ""),
         );
         document.getElementById("plPedidosLista").innerHTML = "";
+        document.getElementById("plPedidosNota").textContent = "";
         document.getElementById("btnPlPedidosMas").style.display = "none";
         document.getElementById("plPedidosAlerta").innerHTML =
           '<p class="hint">Cargando pedidos...</p>';
@@ -6273,6 +6536,11 @@
               return;
             }
             plPedidos = res.pedidos || [];
+            plEdicionPedidos = res.edicionHabilitada === true;
+            document.getElementById("plPedidosNota").textContent =
+              plEdicionPedidos
+                ? "Solo se pueden eliminar los pedidos sin registros."
+                : 'Hasta el corte, los pedidos se siguen montando en la hoja "Numero pedidos": puedes ver el formulario, pero no crear ni eliminar.';
             document.getElementById("plConteoTodos").textContent =
               "(" + plPedidos.length + ")";
             document.getElementById("plConteoAlertas").textContent =
@@ -6306,7 +6574,7 @@
         });
       }
 
-      function _tarjetaPlPedido(p) {
+      function _tarjetaPlPedido(p, indice) {
         // Un campo que difiere entre sublíneas sale como "Varios" en la
         // cabecera y con su valor en cada sublínea.
         const dif = p.difieren || {};
@@ -6344,6 +6612,10 @@
         const alertas = p.alertas
           .map((a) => `<div class="msg warn">${escapeHtml(a)}</div>`)
           .join("");
+        const acciones =
+          plEdicionPedidos && !p.conRegistros
+            ? `<div class="pl-acciones"><button type="button" class="btn-gv-mini btn-gv-contorno" data-eliminar-pl="${indice}">Eliminar</button></div>`
+            : "";
         return (
           `<div class="pl-tarjeta">` +
           `<div class="pl-cabecera"><strong>Pedido ${escapeHtml(p.pedido)}</strong>` +
@@ -6355,6 +6627,7 @@
           datos +
           `<div class="pl-sublineas">${sublineas}</div>` +
           alertas +
+          acciones +
           `</div>`
         );
       }
@@ -6365,7 +6638,7 @@
         const btnMas = document.getElementById("btnPlPedidosMas");
         const visibles = lista.slice(0, plPedidosMostrados);
         document.getElementById("plPedidosLista").innerHTML = visibles
-          .map(_tarjetaPlPedido)
+          .map((p) => _tarjetaPlPedido(p, plPedidos.indexOf(p)))
           .join("");
         if (!lista.length) {
           alerta.innerHTML = plPedidos.length
@@ -6401,6 +6674,600 @@
           renderPlPedidos();
         });
 
+      document
+        .getElementById("plPedidosLista")
+        .addEventListener("click", function (e) {
+          const boton = e.target.closest("[data-eliminar-pl]");
+          if (!boton) return;
+          const p = plPedidos[Number(boton.dataset.eliminarPl)];
+          if (p) pedirEliminarPedidoPl(p.pedido, boton);
+        });
+
+      // ---- Confirmación genérica de Planeación ----
+      let plAlConfirmar = null;
+
+      function pedirConfirmarPl(
+        titulo,
+        texto,
+        textoBoton,
+        peligro,
+        alConfirmar,
+      ) {
+        document.getElementById("modalConfirmarPlTitulo").textContent = titulo;
+        document.getElementById("modalConfirmarPlTexto").textContent = texto;
+        const boton = document.getElementById("btnConfirmarPl");
+        boton.textContent = textoBoton;
+        boton.className = peligro ? "btn-gv-peligro" : "";
+        plAlConfirmar = alConfirmar;
+        document.getElementById("modalConfirmarPl").classList.add("visible");
+      }
+
+      function cerrarConfirmarPl() {
+        plAlConfirmar = null;
+        document.getElementById("modalConfirmarPl").classList.remove("visible");
+      }
+
+      function aceptarConfirmarPl() {
+        const accion = plAlConfirmar;
+        cerrarConfirmarPl();
+        if (accion) accion();
+      }
+
+      // ---- Eliminar pedido: primero el resumen, luego la confirmación ----
+      function pedirEliminarPedidoPl(pedido, boton) {
+        boton.disabled = true;
+        llamarAPI("eliminarPedido", { pedido, soloResumen: true })
+          .then(function (res) {
+            boton.disabled = false;
+            if (res.sesionVencida) return;
+            if (!res.success) {
+              mostrarModalAviso(res.message, "No se pudo eliminar");
+              return;
+            }
+            const r = res.resumen;
+            if (r.bloqueo) {
+              mostrarModalAviso(r.bloqueo, "No se puede eliminar");
+              return;
+            }
+            const texto =
+              "Se borrará el pedido " +
+              r.pedido +
+              " con:\n• " +
+              r.sublineas.length +
+              (r.sublineas.length === 1 ? " sublínea" : " sublíneas") +
+              (r.sublineas.length ? " (" + r.sublineas.join(", ") + ")" : "") +
+              "\n• " +
+              r.procesos +
+              (r.procesos === 1 ? " proceso" : " procesos") +
+              "\n• " +
+              r.eanes +
+              " EAN\n\nEsta acción no se puede deshacer.";
+            pedirConfirmarPl(
+              "Eliminar pedido",
+              texto,
+              "Eliminar",
+              true,
+              function () {
+                eliminarPedidoPl(r.pedido);
+              },
+            );
+          })
+          .catch(function (err) {
+            boton.disabled = false;
+            mostrarModalAviso("Error de conexión: " + err.message, "Error");
+          });
+      }
+
+      function eliminarPedidoPl(pedido) {
+        llamarAPI("eliminarPedido", { pedido })
+          .then(function (res) {
+            if (res.sesionVencida) return;
+            if (!res.success) {
+              mostrarModalAviso(res.message, "No se pudo eliminar");
+              return;
+            }
+            mostrarModalAviso(
+              "El pedido " + pedido + " se eliminó.",
+              "Pedido eliminado",
+            );
+            abrirPedidosPlaneacion();
+          })
+          .catch(function (err) {
+            mostrarModalAviso("Error de conexión: " + err.message, "Error");
+          });
+      }
+
+      // ---- Crear pedido ----
+      // El número lo genera el Worker; la vista previa repite la regla solo
+      // para mostrarlo (unidades + inicial de cada proceso con estándar, y 2,
+      // 3... si ya existe).
+      let cpDatos = null; // respuesta de obtenerFormularioPedido
+      let cpTipo = "pedido";
+      let cpSublineas = [];
+      let cpProcesos = []; // [{ nombre, estandar (texto), link, nuevo, estandares }]
+      let cpIdEnvio = "";
+      let cpEnvioEnCurso = false;
+
+      function _nuevoIdEnvioCp() {
+        cpIdEnvio =
+          window.crypto && crypto.randomUUID
+            ? crypto.randomUUID()
+            : Date.now() + "-" + Math.random().toString(36).slice(2);
+      }
+
+      function volverAPedidosPlaneacion() {
+        document.getElementById("vistaCrearPedido").style.display = "none";
+        abrirPedidosPlaneacion();
+      }
+
+      function abrirCrearPedido() {
+        document.getElementById("vistaPedidosPlaneacion").style.display =
+          "none";
+        _abrirVistaPlaneacion("vistaCrearPedido");
+        cpDatos = null;
+        cpTipo = "pedido";
+        cpSublineas = [];
+        cpProcesos = [];
+        _nuevoIdEnvioCp();
+        [
+          "cpUnidades",
+          "cpNombre",
+          "cpCliente",
+          "cpSublinea",
+          "cpProceso",
+          "cpFecha",
+        ].forEach((id) => (document.getElementById(id).value = ""));
+        document.getElementById("cpSinLimite").checked = false;
+        document.getElementById("cpResultado").innerHTML = "";
+        document.getElementById("btnCrearPedido").disabled = true;
+        _pintarTipoCp();
+        _pintarSublineasCp();
+        _pintarProcesosCp();
+        document.getElementById("cpAviso").innerHTML =
+          '<p class="hint">Cargando formulario...</p>';
+        const consulta = ++plConsulta;
+        llamarAPI("obtenerFormularioPedido", {})
+          .then(function (res) {
+            if (consulta !== plConsulta || res.sesionVencida) return;
+            if (!res.success) {
+              document.getElementById("cpAviso").innerHTML =
+                `<div class="msg err">${escapeHtml(res.message)}</div>`;
+              return;
+            }
+            cpDatos = res;
+            const opciones = (lista) =>
+              lista
+                .map(
+                  (v) =>
+                    `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`,
+                )
+                .join("");
+            document.getElementById("cpEvento").innerHTML =
+              '<option value="">Selecciona...</option>' + opciones(res.eventos);
+            document.getElementById("cpClasificacion").innerHTML =
+              '<option value="">Selecciona...</option>' +
+              opciones(res.clasificaciones);
+            document.getElementById("cpFecha").value = _textoFechaChip(
+              res.fecha,
+            );
+            // Los generales vienen marcados; se pueden quitar.
+            cpProcesos = res.generales.map((g) => ({
+              nombre: g.nombre,
+              estandar: String(g.estandar),
+              link: g.link || "",
+              nuevo: !res.procesos.some(
+                (p) =>
+                  normalizarPedido(p.nombre) === normalizarPedido(g.nombre),
+              ),
+              estandares: [],
+            }));
+            _pintarProcesosCp();
+            document.getElementById("cpAviso").innerHTML =
+              (res.edicionHabilitada
+                ? ""
+                : '<div class="msg warn">Hasta el corte los pedidos se montan en la hoja "Numero pedidos". Puedes llenar el formulario para conocerlo, pero no se puede crear.</div>') +
+              (res.clientesDesdePedidos
+                ? '<p class="hint">Clientes tomados de "Numero pedidos": la tabla de clientes se carga en el corte.</p>'
+                : "");
+            document.getElementById("btnCrearPedido").disabled =
+              !res.edicionHabilitada;
+          })
+          .catch(function (err) {
+            if (consulta !== plConsulta) return;
+            document.getElementById("cpAviso").innerHTML =
+              `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}</div>`;
+          });
+      }
+
+      function cambiarTipoCrearPedido(tipo) {
+        cpTipo = tipo;
+        _pintarTipoCp();
+      }
+
+      function _pintarTipoCp() {
+        _marcarChipsPl("data-tipo-cp", cpTipo);
+        const interna = cpTipo === "interna";
+        document.getElementById("cpBloquePedido").style.display = interna
+          ? "none"
+          : "";
+        document.getElementById("cpBloqueInterna").style.display = interna
+          ? ""
+          : "none";
+        document.getElementById("cpNumeroBloque").style.display = interna
+          ? "none"
+          : "";
+        document.querySelector("#vistaCrearPedido h1").textContent = interna
+          ? "Crear actividad interna"
+          : "Crear pedido";
+        document.getElementById("btnCrearPedido").textContent = interna
+          ? "Crear actividad"
+          : "Crear pedido";
+        _pintarNumeroCp();
+      }
+
+      function _inicialProcesoCp(nombre) {
+        const m = String(nombre || "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toUpperCase()
+          .match(/[A-Z]/);
+        return m ? m[0] : "";
+      }
+
+      function _pintarNumeroCp() {
+        const el = document.getElementById("cpNumero");
+        const unidades = Number(document.getElementById("cpUnidades").value);
+        if (!Number.isInteger(unidades) || unidades < 1) {
+          el.textContent = "—";
+          return;
+        }
+        const letras = cpProcesos
+          .filter((p) => Number(p.estandar) > 0)
+          .map((p) => _inicialProcesoCp(p.nombre))
+          .join("");
+        const base = unidades + (letras ? "-" + letras : "");
+        const existentes = new Set(
+          plPedidos.map((p) => normalizarPedido(p.pedido)),
+        );
+        let numero = base;
+        for (let n = 2; existentes.has(normalizarPedido(numero)); n++) {
+          numero = base + (letras ? "" : "-") + n;
+        }
+        el.textContent = numero;
+      }
+
+      document
+        .getElementById("cpUnidades")
+        .addEventListener("input", _pintarNumeroCp);
+
+      // Sublíneas: texto libre con sugerencias de las ya usadas.
+      function _pintarSublineasCp() {
+        document.getElementById("cpSublineas").innerHTML = cpSublineas.length
+          ? cpSublineas
+              .map(
+                (s, i) =>
+                  `<span class="pl-sublinea">${escapeHtml(s)}<button type="button" aria-label="Quitar ${escapeHtml(s)}" data-quitar-sub="${i}">×</button></span>`,
+              )
+              .join("")
+          : '<span class="hint" style="margin: 0">Sin sublíneas todavía.</span>';
+      }
+
+      function agregarSublineaCrearPedido() {
+        const input = document.getElementById("cpSublinea");
+        let texto = input.value.trim().replace(/\s+/g, " ");
+        if (!texto) return;
+        const clave = normalizarPedido(texto);
+        if (cpSublineas.some((s) => normalizarPedido(s) === clave)) {
+          input.value = "";
+          return;
+        }
+        const usada = ((cpDatos && cpDatos.sublineas) || []).find(
+          (s) => normalizarPedido(s) === clave,
+        );
+        cpSublineas.push(usada || texto);
+        input.value = "";
+        _pintarSublineasCp();
+      }
+
+      document
+        .getElementById("cpSublineas")
+        .addEventListener("click", function (e) {
+          const b = e.target.closest("[data-quitar-sub]");
+          if (!b) return;
+          cpSublineas.splice(Number(b.dataset.quitarSub), 1);
+          _pintarSublineasCp();
+        });
+      document
+        .getElementById("cpSublinea")
+        .addEventListener("keydown", function (e) {
+          if (e.key === "Enter") agregarSublineaCrearPedido();
+        });
+
+      // Procesos: del catálogo (con su estándar y link más recientes) o
+      // nuevos. El estándar y el link se pueden ajustar para este pedido.
+      function _pintarProcesosCp() {
+        const cont = document.getElementById("cpProcesos");
+        if (!cpProcesos.length) {
+          cont.innerHTML =
+            '<p class="hint" style="margin-top: 0">Agrega al menos un proceso.</p>';
+          _pintarNumeroCp();
+          return;
+        }
+        cont.innerHTML = cpProcesos
+          .map(function (p, i) {
+            const etiquetas =
+              (p.nuevo ? '<span class="pl-distintivo">Nuevo</span>' : "") +
+              (Number(p.estandar) > 0
+                ? ""
+                : '<span class="pl-distintivo">Sin estándar</span>');
+            const otros = p.estandares.filter((e) => e !== Number(p.estandar));
+            return (
+              `<div class="cp-proceso">` +
+              `<div class="cp-proceso-cabecera"><strong>${escapeHtml(p.nombre)}</strong>${etiquetas}` +
+              `<button type="button" aria-label="Quitar ${escapeHtml(p.nombre)}" data-quitar-proc="${i}">×</button></div>` +
+              `<div class="row2">` +
+              `<div><label>Estándar (unds/h)</label><input type="number" inputmode="decimal" min="0" step="any" data-proc="${i}" data-campo="estandar" value="${escapeHtml(p.estandar)}" /></div>` +
+              `<div><label>Link</label><input type="url" data-proc="${i}" data-campo="link" value="${escapeHtml(p.link)}" placeholder="https://..." /></div>` +
+              `</div>` +
+              (otros.length
+                ? `<p class="hint">Otros estándares usados: ${otros.map((e) => escapeHtml(String(e))).join(", ")}</p>`
+                : "") +
+              `</div>`
+            );
+          })
+          .join("");
+        _pintarNumeroCp();
+      }
+
+      function agregarProcesoCrearPedido() {
+        const input = document.getElementById("cpProceso");
+        const texto = input.value.trim().replace(/\s+/g, " ");
+        if (!texto) return;
+        const clave = normalizarPedido(texto);
+        if (cpProcesos.some((p) => normalizarPedido(p.nombre) === clave)) {
+          mostrarModalAviso(
+            'El proceso "' + texto + '" ya está en la lista.',
+            "Proceso repetido",
+          );
+          return;
+        }
+        const enCatalogo = ((cpDatos && cpDatos.procesos) || []).find(
+          (p) => normalizarPedido(p.nombre) === clave,
+        );
+        cpProcesos.push(
+          enCatalogo
+            ? {
+                nombre: enCatalogo.nombre,
+                estandar: String(enCatalogo.estandar),
+                link: enCatalogo.link || "",
+                nuevo: false,
+                estandares: enCatalogo.estandares || [],
+              }
+            : {
+                nombre: texto,
+                estandar: "",
+                link: "",
+                nuevo: true,
+                estandares: [],
+              },
+        );
+        input.value = "";
+        _pintarProcesosCp();
+      }
+
+      document
+        .getElementById("cpProcesos")
+        .addEventListener("click", function (e) {
+          const b = e.target.closest("[data-quitar-proc]");
+          if (!b) return;
+          cpProcesos.splice(Number(b.dataset.quitarProc), 1);
+          _pintarProcesosCp();
+        });
+      document
+        .getElementById("cpProcesos")
+        .addEventListener("input", function (e) {
+          const campo = e.target.dataset.campo;
+          const p = cpProcesos[Number(e.target.dataset.proc)];
+          if (!campo || !p) return;
+          p[campo] = e.target.value;
+          if (campo === "estandar") {
+            // Solo cambia la etiqueta "Sin estándar" y el número: repintar
+            // todo haría perder el foco del campo.
+            const tarjeta = e.target.closest(".cp-proceso");
+            const tieneEtiqueta = Array.from(
+              tarjeta.querySelectorAll(".pl-distintivo"),
+            ).find((x) => x.textContent === "Sin estándar");
+            if (Number(p.estandar) > 0 && tieneEtiqueta) tieneEtiqueta.remove();
+            if (!(Number(p.estandar) > 0) && !tieneEtiqueta) {
+              tarjeta
+                .querySelector(".cp-proceso-cabecera button")
+                .insertAdjacentHTML(
+                  "beforebegin",
+                  '<span class="pl-distintivo">Sin estándar</span>',
+                );
+            }
+            _pintarNumeroCp();
+          }
+        });
+      document
+        .getElementById("cpProceso")
+        .addEventListener("keydown", function (e) {
+          if (e.key === "Enter") agregarProcesoCrearPedido();
+        });
+
+      activarSugerenciasPedido(
+        "cpCliente",
+        "sugCpCliente",
+        null,
+        () =>
+          ((cpDatos && cpDatos.clientes) || []).map((c) => ({
+            valor: c,
+            clave: normalizarPedido(c),
+          })),
+        true,
+      );
+      activarSugerenciasPedido(
+        "cpSublinea",
+        "sugCpSublinea",
+        agregarSublineaCrearPedido,
+        () =>
+          ((cpDatos && cpDatos.sublineas) || []).map((s) => ({
+            valor: s,
+            clave: normalizarPedido(s),
+          })),
+      );
+      activarSugerenciasPedido(
+        "cpProceso",
+        "sugCpProceso",
+        agregarProcesoCrearPedido,
+        () =>
+          ((cpDatos && cpDatos.procesos) || []).map((p) => ({
+            valor: p.nombre,
+            clave: normalizarPedido(p.nombre),
+          })),
+      );
+
+      // Arma el envío y revisa lo básico en el navegador; el Worker vuelve a
+      // validar todo. Devuelve { datos } o { error }.
+      function _datosCrearPedido() {
+        const interna = cpTipo === "interna";
+        const datos = {
+          idEnvio: cpIdEnvio,
+          tipo: interna ? "interna" : "pedido",
+          cliente: document.getElementById("cpCliente").value.trim(),
+          sublineas: cpSublineas.slice(),
+          evento: document.getElementById("cpEvento").value,
+          clasificacion: document.getElementById("cpClasificacion").value,
+          procesos: cpProcesos.map((p) => ({
+            nombre: p.nombre,
+            estandar: p.estandar === "" ? "" : Number(p.estandar),
+            link: p.link.trim(),
+          })),
+        };
+        if (interna) {
+          datos.nombre = document.getElementById("cpNombre").value.trim();
+          datos.sinLimite = document.getElementById("cpSinLimite").checked;
+          if (!datos.nombre)
+            return { error: "Escribe el nombre de la actividad." };
+        } else {
+          const u = Number(document.getElementById("cpUnidades").value);
+          if (!Number.isInteger(u) || u < 1)
+            return {
+              error: "Las unidades pedidas deben ser un entero mayor que 0.",
+            };
+          datos.unidades = u;
+        }
+        const clientes = (cpDatos && cpDatos.clientes) || [];
+        const cliente = clientes.find(
+          (c) => normalizarPedido(c) === normalizarPedido(datos.cliente),
+        );
+        if (!cliente) return { error: "Elige un cliente de la lista." };
+        datos.cliente = cliente;
+        if (!datos.sublineas.length) {
+          // Lo escrito sin pulsar "Agregar" también cuenta.
+          agregarSublineaCrearPedido();
+          datos.sublineas = cpSublineas.slice();
+        }
+        if (!datos.sublineas.length)
+          return { error: "Agrega al menos una sublínea." };
+        if (!datos.evento) return { error: "Selecciona el evento." };
+        if (!datos.clasificacion)
+          return { error: "Selecciona la clasificación." };
+        if (!datos.procesos.length)
+          return { error: "Agrega al menos un proceso." };
+        const sinEstandar = datos.procesos.find(
+          (p) => p.estandar === "" || !(p.estandar >= 0),
+        );
+        if (sinEstandar)
+          return {
+            error:
+              'Escribe el estándar de "' +
+              sinEstandar.nombre +
+              '" (0 si no tiene).',
+          };
+        return { datos };
+      }
+
+      function pedirConfirmarCrearPedido() {
+        if (cpEnvioEnCurso || !cpDatos || !cpDatos.edicionHabilitada) return;
+        const resultado = document.getElementById("cpResultado");
+        const armado = _datosCrearPedido();
+        if (armado.error) {
+          resultado.innerHTML = `<div class="msg err">${escapeHtml(armado.error)}</div>`;
+          return;
+        }
+        resultado.innerHTML = "";
+        const d = armado.datos;
+        const interna = d.tipo === "interna";
+        const texto =
+          (interna
+            ? "Actividad: " + d.nombre + (d.sinLimite ? " (sin límite)" : "")
+            : "Número: " +
+              document.getElementById("cpNumero").textContent +
+              " (" +
+              d.unidades +
+              " unidades)") +
+          "\nCliente: " +
+          d.cliente +
+          "\nSublíneas: " +
+          d.sublineas.join(", ") +
+          "\n" +
+          d.evento +
+          " · " +
+          d.clasificacion +
+          "\nProcesos: " +
+          d.procesos.length +
+          "\n\nEl número no se puede cambiar después: si hay un error, se elimina y se crea de nuevo.";
+        pedirConfirmarPl(
+          interna ? "¿Crear la actividad?" : "¿Crear el pedido?",
+          texto,
+          "Crear",
+          false,
+          function () {
+            crearPedidoPl(d);
+          },
+        );
+      }
+
+      function crearPedidoPl(datos) {
+        const boton = document.getElementById("btnCrearPedido");
+        const resultado = document.getElementById("cpResultado");
+        cpEnvioEnCurso = true;
+        boton.disabled = true;
+        resultado.innerHTML = '<p class="hint">Creando...</p>';
+        llamarAPI("crearPedido", datos)
+          .then(function (res) {
+            cpEnvioEnCurso = false;
+            boton.disabled = false;
+            if (res.sesionVencida) return;
+            if (!res.success) {
+              resultado.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
+              return;
+            }
+            resultado.innerHTML = "";
+            mostrarModalAviso(
+              (datos.tipo === "interna" ? "Actividad " : "Pedido ") +
+                res.pedido +
+                " creado con " +
+                res.sublineas.length +
+                (res.sublineas.length === 1 ? " sublínea" : " sublíneas") +
+                " y " +
+                res.procesos +
+                (res.procesos === 1 ? " proceso." : " procesos.") +
+                (res.sinLimite ? "\nTiene el EAN 0 sin límite." : ""),
+              datos.tipo === "interna" ? "Actividad creada" : "Pedido creado",
+            );
+            volverAPedidosPlaneacion();
+          })
+          .catch(function (err) {
+            // Sin respuesta no se sabe si se creó: el mismo idEnvio hace que
+            // un reintento devuelva el pedido ya creado en vez de duplicarlo.
+            cpEnvioEnCurso = false;
+            boton.disabled = false;
+            resultado.innerHTML = `<div class="msg err">Error de conexión: ${escapeHtml(err.message)}. Puedes reintentar: no se duplicará.</div>`;
+          });
+      }
+
       function abrirClientesPlaneacion() {
         _abrirVistaPlaneacion("vistaClientesPlaneacion");
         document.getElementById("plClienteBuscar").value = "";
@@ -6411,6 +7278,8 @@
           (id) => (document.getElementById(id).textContent = ""),
         );
         document.getElementById("plClientesNota").textContent = "";
+        document.getElementById("plClienteNuevo").value = "";
+        document.getElementById("plClienteNuevoBloque").style.display = "none";
         document.getElementById("plClientesLista").innerHTML = "";
         document.getElementById("plClientesAlerta").innerHTML =
           '<p class="hint">Cargando clientes...</p>';
@@ -6423,10 +7292,16 @@
               return;
             }
             plClientes = res.clientes || [];
+            plEdicionClientes = res.edicionHabilitada === true;
+            document.getElementById("plClienteNuevoBloque").style.display =
+              plEdicionClientes ? "" : "none";
             document.getElementById("plClientesNota").textContent =
+              (plEdicionClientes
+                ? "Un cliente con pedidos no se borra: se desactiva y deja de salir al crear pedidos. "
+                : "Solo lectura. ") +
               (res.tablaCargada
-                ? "Solo lectura. "
-                : 'Solo lectura. La tabla de clientes se carga en el corte; por ahora la lista sale de los clientes que usan los pedidos de "Numero pedidos". ') +
+                ? ""
+                : 'La tabla de clientes se carga en el corte; por ahora la lista sale de los clientes que usan los pedidos de "Numero pedidos". ') +
               (res.pedidosSinCliente
                 ? res.pedidosSinCliente +
                   (res.pedidosSinCliente === 1
@@ -6459,8 +7334,11 @@
           if (plFiltroClientes === "duplicados" && c.variantes.length < 2)
             return false;
           if (!clave) return true;
-          return c.variantes.some((v) =>
-            normalizarPedido(v.nombre).includes(clave),
+          // El nombre cuenta aparte: un cliente de la tabla sin pedidos no
+          // tiene variantes.
+          return (
+            normalizarPedido(c.nombre).includes(clave) ||
+            c.variantes.some((v) => normalizarPedido(v.nombre).includes(clave))
           );
         });
         document.getElementById("plClientesAlerta").innerHTML = lista.length
@@ -6483,6 +7361,10 @@
               c.enTabla && c.activo === false
                 ? '<span class="pl-distintivo">Inactivo</span>'
                 : "";
+            const acciones =
+              plEdicionClientes && c.enTabla
+                ? `<div class="pl-acciones"><button type="button" class="btn-gv-mini btn-gv-contorno" data-cliente-pl="${plClientes.indexOf(c)}">${c.activo === false ? "Reactivar" : "Desactivar"}</button></div>`
+                : "";
             return (
               `<div class="pl-tarjeta">` +
               `<div class="pl-cabecera"><strong>${escapeHtml(c.nombre)}</strong>` +
@@ -6490,6 +7372,7 @@
               estado +
               `</div>` +
               variantes +
+              acciones +
               `</div>`
             );
           })
@@ -6505,6 +7388,74 @@
       document
         .getElementById("plClienteBuscar")
         .addEventListener("input", renderPlClientes);
+
+      function _guardarClientePl(datos, boton, alTerminar) {
+        boton.disabled = true;
+        llamarAPI("guardarCliente", datos)
+          .then(function (res) {
+            boton.disabled = false;
+            if (res.sesionVencida) return;
+            if (!res.success) {
+              mostrarModalAviso(res.message, "No se pudo guardar");
+              return;
+            }
+            if (alTerminar) alTerminar(res);
+            abrirClientesPlaneacion();
+          })
+          .catch(function (err) {
+            boton.disabled = false;
+            mostrarModalAviso("Error de conexión: " + err.message, "Error");
+          });
+      }
+
+      function crearClientePlaneacion() {
+        const input = document.getElementById("plClienteNuevo");
+        const nombre = input.value.trim().replace(/\s+/g, " ");
+        if (!nombre) return;
+        _guardarClientePl(
+          { accion: "crear", nombre },
+          document.getElementById("btnPlClienteNuevo"),
+          function (res) {
+            mostrarModalAviso(
+              'Cliente "' + res.nombre + '" agregado.',
+              "Cliente agregado",
+            );
+          },
+        );
+      }
+
+      document
+        .getElementById("plClienteNuevo")
+        .addEventListener("keydown", function (e) {
+          if (e.key === "Enter") crearClientePlaneacion();
+        });
+
+      document
+        .getElementById("plClientesLista")
+        .addEventListener("click", function (e) {
+          const boton = e.target.closest("[data-cliente-pl]");
+          if (!boton) return;
+          const c = plClientes[Number(boton.dataset.clientePl)];
+          if (!c) return;
+          if (c.activo === false) {
+            _guardarClientePl({ accion: "reactivar", nombre: c.nombre }, boton);
+            return;
+          }
+          pedirConfirmarPl(
+            "Desactivar cliente",
+            '"' +
+              c.nombre +
+              '" dejará de salir al crear pedidos. Sus pedidos no cambian y se puede reactivar.',
+            "Desactivar",
+            true,
+            function () {
+              _guardarClientePl(
+                { accion: "desactivar", nombre: c.nombre },
+                boton,
+              );
+            },
+          );
+        });
 
       let opNombreOperario = "";
       let opCedulaConfirmada = "";

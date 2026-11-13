@@ -25,6 +25,10 @@ const ACCIONES_PUBLICAS = new Set([
 const PERMISOS_POR_ACCION = {
   obtenerPedidosPlaneacion: ["planeacion"],
   obtenerClientesPlaneacion: ["planeacion"],
+  obtenerFormularioPedido: ["planeacion"],
+  crearPedido: ["planeacion"],
+  eliminarPedido: ["planeacion"],
+  guardarCliente: ["planeacion"],
 };
 
 export default {
