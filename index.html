@@ -498,6 +498,33 @@
         width: auto;
         margin: 0;
       }
+      #vistaEanesPedido th {
+        color: var(--gv-jet);
+        background: var(--gv-celeste);
+        border-bottom: 2px solid var(--gv-aquamarine);
+        white-space: nowrap;
+      }
+      #vistaEanesPedido tr.pl-fila-aparte td {
+        color: var(--gv-texto-suave);
+        background: var(--gv-superficie-alt);
+      }
+      #vistaEanesPedido tr.pl-fila-titulo td {
+        font-weight: 700;
+        color: var(--gv-jet);
+        background: var(--gv-platinum);
+        border-top: 2px solid var(--gv-borde);
+      }
+      #vistaEanesPedido td.pl-celda-aviso {
+        background: #fffbeb;
+        color: #92400e;
+      }
+      .pl-exceso {
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .pl-operarios {
+        min-width: 160px;
+      }
 
       /* ===== Botones — Manual de marca, sección 07 ===== */
       /* Base "con caja": 48 px de alto, 14 px, ancho completo. */
@@ -1907,6 +1934,50 @@
         >
           Ver más
         </button>
+      </div>
+    </div>
+
+    <div id="vistaEanesPedido" style="display: none">
+      <button
+        type="button"
+        class="btn-submit btn-gv-contorno"
+        style="margin-bottom: 14px"
+        onclick="volverDeEanesPl()"
+      >
+        ← Volver a Pedidos
+      </button>
+      <h1 id="plEanesTitulo">EAN del pedido</h1>
+      <div class="card">
+        <div id="plEanesCabecera"></div>
+        <p class="hint" style="margin-top: 0" id="plEanesNota"></p>
+        <div class="seguimiento-kpi-grid" id="plEanesKpi"></div>
+        <div id="plEanesAlertas"></div>
+        <input
+          id="plEanBuscar"
+          placeholder="Buscar o escanear un EAN..."
+          autocomplete="off"
+          enterkeyhint="search"
+        />
+        <div id="plEanesMsg"></div>
+        <div id="plEanesTablaWrap" style="overflow-x: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Sub línea</th>
+                <th>EAN</th>
+                <th>Uni. totales</th>
+                <th>Procesadas</th>
+                <th>Sobrantes</th>
+                <th>Justificado</th>
+                <th>Pendientes</th>
+                <th>Estado</th>
+                <th>Registros</th>
+                <th>Operarios</th>
+              </tr>
+            </thead>
+            <tbody id="plEanesBody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -5041,6 +5112,7 @@
           "vistaSeguimientoPaquetes",
           "vistaControlTiempos",
           "vistaPedidosPlaneacion",
+          "vistaEanesPedido",
           "vistaCrearPedido",
           "vistaClientesPlaneacion",
         ].forEach((id) => {
@@ -5113,6 +5185,7 @@
           "vistaSeguimientoPaquetes",
           "vistaControlTiempos",
           "vistaPedidosPlaneacion",
+          "vistaEanesPedido",
           "vistaCrearPedido",
           "vistaClientesPlaneacion",
         ].forEach((id) => {
@@ -6318,9 +6391,7 @@
           .map((nombre, i) => {
             const unidades = i === 0 ? base + resto : base;
             const ritmoReal =
-              durHoras > 0
-                ? Math.round((unidades / durHoras) * 100) / 100
-                : 0;
+              durHoras > 0 ? Math.round((unidades / durHoras) * 100) / 100 : 0;
             const efic =
               esperado > 0 ? Math.round((unidades / esperado) * 100) : null;
             return `<tr><td>${nombre}</td><td>${unidades}</td><td>${ritmoReal}</td><td>${efic !== null ? efic + "%" : "—"}</td></tr>`;
@@ -6615,7 +6686,9 @@
         const datos = p.soloEnValidacion
           ? ""
           : `<div>${cliente}</div>` +
-            `<div class="hint" style="margin: 2px 0 0">${evento} · ${clasificacion}</div>`;
+            `<div class="hint" style="margin: 2px 0 0">${evento} · ${clasificacion}` +
+            (p.unidadesPedidas ? ` · ${p.unidadesPedidas} unidades` : "") +
+            `</div>`;
         const alertas = p.alertas
           .map((a) => `<div class="msg warn">${escapeHtml(a)}</div>`)
           .join("");
@@ -6623,6 +6696,7 @@
         // formulario); un pedido que solo está en Validación eanes se corrige
         // en la hoja.
         const botones =
+          `<button type="button" class="btn-gv-mini btn-gv-contorno" data-eanes-pl="${indice}">EAN (${p.eanes})</button>` +
           (p.soloEnValidacion
             ? ""
             : `<button type="button" class="btn-gv-mini btn-gv-contorno" data-editar-pl="${indice}">Editar</button>`) +
@@ -6693,6 +6767,12 @@
       document
         .getElementById("plPedidosLista")
         .addEventListener("click", function (e) {
+          const eanes = e.target.closest("[data-eanes-pl]");
+          if (eanes) {
+            const p = plPedidos[Number(eanes.dataset.eanesPl)];
+            if (p) abrirEanesPedidoPl(p.pedido);
+            return;
+          }
           const editar = e.target.closest("[data-editar-pl]");
           if (editar) {
             const p = plPedidos[Number(editar.dataset.editarPl)];
@@ -6703,6 +6783,193 @@
           if (!boton) return;
           const p = plPedidos[Number(boton.dataset.eliminarPl)];
           if (p) pedirEliminarPedidoPl(p.pedido, boton);
+        });
+
+      // ---- EAN de un pedido (F3a, solo lectura) ----
+      // Cifras, estados y alertas vienen calculados del Worker
+      // (obtenerEanesPedido): aquí solo se pintan. Volver deja la lista de
+      // Pedidos como estaba (filtro, búsqueda y posición), sin recargarla.
+      let plEanes = null; // respuesta de obtenerEanesPedido
+      let plEanesConsulta = 0; // una respuesta vieja no pinta
+      let plScrollPedidos = 0;
+
+      function abrirEanesPedidoPl(pedido) {
+        plScrollPedidos = window.scrollY;
+        document.getElementById("vistaPedidosPlaneacion").style.display =
+          "none";
+        _abrirVistaPlaneacion("vistaEanesPedido");
+        plEanes = null;
+        document.getElementById("plEanesTitulo").textContent =
+          "EAN del pedido " + pedido;
+        document.getElementById("plEanBuscar").value = "";
+        [
+          "plEanesCabecera",
+          "plEanesNota",
+          "plEanesKpi",
+          "plEanesAlertas",
+          "plEanesBody",
+        ].forEach((id) => (document.getElementById(id).innerHTML = ""));
+        document.getElementById("plEanesTablaWrap").style.display = "none";
+        document.getElementById("plEanesMsg").innerHTML =
+          '<p class="hint">Cargando EAN...</p>';
+        const consulta = ++plEanesConsulta;
+        llamarAPI("obtenerEanesPedido", { pedido })
+          .then(function (res) {
+            if (consulta !== plEanesConsulta || res.sesionVencida) return;
+            if (!res.success) {
+              document.getElementById("plEanesMsg").innerHTML =
+                `<div class="msg err">${escapeHtml(res.message)}</div>`;
+              return;
+            }
+            plEanes = res;
+            _pintarResumenEanesPl();
+            renderPlEanes();
+          })
+          .catch(function (err) {
+            if (consulta !== plEanesConsulta) return;
+            document.getElementById("plEanesMsg").innerHTML =
+              `<div class="msg err">${escapeHtml("Error de conexión: " + err.message)}</div>`;
+          });
+      }
+
+      function volverDeEanesPl() {
+        plEanesConsulta++;
+        document.getElementById("vistaEanesPedido").style.display = "none";
+        document.getElementById("vistaPedidosPlaneacion").style.display =
+          "block";
+        window.scrollTo(0, plScrollPedidos);
+      }
+
+      function _pintarResumenEanesPl() {
+        const r = plEanes;
+        const k = r.resumen;
+        document.getElementById("plEanesCabecera").innerHTML =
+          `<div class="pl-cabecera"><strong>Pedido ${escapeHtml(r.pedido)}</strong>` +
+          `<span class="pl-distintivo">${escapeHtml(r.estadoPedido)}</span></div>` +
+          `<p class="hint" style="margin: 2px 0 10px">` +
+          (k.eanes === 1 ? "1 EAN" : k.eanes + " EAN") +
+          (k.aparte
+            ? ` · ${k.referentes} ${k.referentes === 1 ? "cuenta" : "cuentan"} para el cierre` +
+              ` y ${k.aparte} ${k.aparte === 1 ? "va" : "van"} aparte`
+            : "") +
+          `</p>`;
+
+        const notas = [];
+        if (r.conJustificacion)
+          notas.push(
+            "Este pedido se cerró con justificación: sus EAN quedan en solo lectura.",
+          );
+        else if (!r.edicionHabilitada)
+          notas.push(
+            'Hasta el corte, los EAN se asignan en la hoja "Validacion eanes": aquí ves cómo va cada uno.',
+          );
+        if (!r.soloEnValidacion && !r.unidadesPedidas)
+          notas.push(
+            "El pedido no tiene unidades pedidas, así que no hay con qué comparar la suma de los EAN.",
+          );
+        document.getElementById("plEanesNota").textContent = notas.join(" ");
+
+        const kpi = (valor, etiqueta) =>
+          `<div class="seguimiento-kpi"><span class="seguimiento-kpi-valor">${valor}</span>` +
+          `<span class="seguimiento-kpi-label">${etiqueta}</span></div>`;
+        document.getElementById("plEanesKpi").innerHTML =
+          kpi(
+            r.unidadesPedidas ? _fmtUnidades(r.unidadesPedidas) : "—",
+            "Unidades pedidas",
+          ) +
+          kpi(_fmtUnidades(k.unidadesEan), "Suma de EAN") +
+          kpi(_fmtUnidades(k.procesadas), "Procesadas") +
+          kpi(_fmtUnidades(k.pendientes), "Pendientes") +
+          (k.justificado
+            ? kpi(_fmtUnidades(k.justificado), "Justificado")
+            : "");
+
+        document.getElementById("plEanesAlertas").innerHTML = r.alertas
+          .map((a) => `<div class="msg warn">${escapeHtml(a)}</div>`)
+          .join("");
+      }
+
+      // Busca por EAN o sublínea. El escáner puede anteponer un 0 (preámbulo
+      // UPC-A): también se prueba sin él.
+      function _coincideEanPl(e, clave) {
+        if (!clave) return true;
+        const ean = normalizarPedido(e.ean);
+        const sinCero =
+          clave.length === 13 && clave.charAt(0) === "0"
+            ? clave.slice(1)
+            : clave;
+        return (
+          ean.includes(clave) ||
+          ean.includes(sinCero) ||
+          normalizarPedido(e.sublinea).includes(clave)
+        );
+      }
+
+      function _filaEanPl(e) {
+        const aviso = (titulo) =>
+          ` class="pl-celda-aviso" title="${escapeHtml(titulo)}"`;
+        const pendientes = e.sinLimite
+          ? "—"
+          : e.exceso > 0
+            ? `0 <span class="pl-exceso">(+${_fmtUnidades(e.exceso)} de más)</span>`
+            : _fmtUnidades(e.pendientes);
+        return (
+          `<tr${e.referente ? "" : ' class="pl-fila-aparte"'}>` +
+          `<td${e.sublineaEnPedido ? "" : aviso("No está en Numero pedidos")}>${escapeHtml(e.sublinea)}</td>` +
+          `<td style="white-space:nowrap">${escapeHtml(e.ean)}</td>` +
+          `<td>${e.sinLimite ? "Sin límite" : _fmtUnidades(e.totales)}</td>` +
+          `<td>${_fmtUnidades(e.procesadas)}</td>` +
+          `<td>${_fmtUnidades(e.sobrantes)}</td>` +
+          `<td>${e.justificado ? _fmtUnidades(e.justificado) : "—"}</td>` +
+          `<td${e.exceso > 0 ? aviso("Tiene más unidades registradas que su total") : ""}>${pendientes}</td>` +
+          `<td${e.desfasado ? aviso("El estado no corresponde a sus unidades") : ""}>` +
+          `${escapeHtml(e.estado)}${e.desfasado ? " ⚠" : ""}</td>` +
+          `<td>${e.registros}</td>` +
+          `<td class="pl-operarios">${e.operarios ? escapeHtml(e.operarios) : "—"}</td>` +
+          `</tr>`
+        );
+      }
+
+      function renderPlEanes() {
+        if (!plEanes) return;
+        const clave = normalizarPedido(
+          document.getElementById("plEanBuscar").value,
+        );
+        const visibles = plEanes.eanes.filter((e) => _coincideEanPl(e, clave));
+        const cuentan = visibles.filter((e) => e.referente);
+        const aparte = visibles.filter((e) => !e.referente);
+        document.getElementById("plEanesBody").innerHTML =
+          cuentan.map(_filaEanPl).join("") +
+          (aparte.length
+            ? '<tr class="pl-fila-titulo"><td colspan="10">Aparte: EAN 0 sin unidades y sin límite (no cuentan para el cierre)</td></tr>' +
+              aparte.map(_filaEanPl).join("")
+            : "");
+        document.getElementById("plEanesTablaWrap").style.display =
+          visibles.length ? "" : "none";
+        const msg = document.getElementById("plEanesMsg");
+        if (!plEanes.eanes.length)
+          msg.innerHTML =
+            '<p class="hint">Este pedido no tiene EAN todavía.</p>';
+        else if (!visibles.length)
+          msg.innerHTML =
+            '<p class="hint">Ningún EAN coincide con la búsqueda.</p>';
+        else
+          msg.innerHTML = clave
+            ? `<p class="hint">Mostrando ${visibles.length} de ${plEanes.eanes.length} EAN.</p>`
+            : "";
+      }
+
+      document
+        .getElementById("plEanBuscar")
+        .addEventListener("input", renderPlEanes);
+      // El escáner termina con Enter: se selecciona lo escaneado para que el
+      // siguiente escaneo lo reemplace.
+      document
+        .getElementById("plEanBuscar")
+        .addEventListener("keydown", function (e) {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          this.select();
         });
 
       // ---- Confirmación genérica de Planeación ----

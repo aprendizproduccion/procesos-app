@@ -7,6 +7,8 @@
 // quedan bloqueadas y las hojas siguen mandando.
 // F2b-2: editar pedido (cliente, evento, clasificación, sublíneas y procesos;
 // el número y la fecha no se editan).
+// F3a: EAN de un pedido (Validación eanes) en solo lectura, y el aviso cuando
+// la suma de sus EAN no coincide con las unidades pedidas.
 
 import {
   _normalizarPedido,
@@ -18,6 +20,7 @@ import {
   _fechaHoyBogota,
   _ahoraISO,
   _actualizarSeguimientoPedido,
+  _sqlEanReferente,
 } from "./d1-negocio.js";
 import { _pushSeguimientoYMarcar } from "./push-sheets.js";
 
@@ -220,6 +223,21 @@ function _redondear2(n) {
   return Math.round(Number(n) * 100) / 100;
 }
 
+// Aviso de F3: los EAN que cuentan para el cierre no suman las unidades que
+// pidió el cliente. Sin unidades pedidas (pedidos de la hoja que no las tienen)
+// no hay con qué comparar. Lo usan la lista de Pedidos y la vista de EAN.
+function _alertaSumaEan(unidadesEan, unidadesPedidas) {
+  const suma = _redondear2(unidadesEan);
+  if (!unidadesPedidas || suma === unidadesPedidas) return "";
+  return (
+    "Los EAN suman " +
+    suma +
+    " unidades y el pedido pide " +
+    unidadesPedidas +
+    "."
+  );
+}
+
 // Valida un proceso del formulario: nombre, estándar (obligatorio, desde 0) y
 // link (vacío o http(s)://). Si el nombre ya está en el catálogo devuelve su
 // escritura. La repetición dentro del pedido la revisa quien llama.
@@ -386,12 +404,15 @@ export const accionesPlaneacion = {
   async obtenerPedidosPlaneacion(datos, env) {
     const { results: filas } = await env.DB.prepare(
       "SELECT p.numero_pedido AS pedido, p.sublinea, p.cliente, p.evento, " +
-        "p.clasificacion_proceso AS clasificacion, p.fecha, " +
+        "p.clasificacion_proceso AS clasificacion, p.fecha, p.unidades_pedidas AS unidadesPedidas, " +
         "EXISTS(SELECT 1 FROM registros r WHERE r.numero_pedido = p.numero_pedido) AS conRegistros " +
         "FROM pedidos p",
     ).all();
     const { results: eanes } = await env.DB.prepare(
       "SELECT v.numero_pedido AS pedido, v.sublinea, COUNT(*) AS eanes, " +
+        "SUM(CASE WHEN " +
+        _sqlEanReferente("v.") +
+        " THEN v.unidades_totales ELSE 0 END) AS unidadesEan, " +
         "EXISTS(SELECT 1 FROM registros r WHERE r.numero_pedido = v.numero_pedido) AS conRegistros " +
         "FROM validacion_eanes v GROUP BY v.numero_pedido, v.sublinea",
     ).all();
@@ -403,6 +424,8 @@ export const accionesPlaneacion = {
           pedido,
           sublineas: [],
           conRegistros: false,
+          unidadesPedidas: 0,
+          unidadesEan: 0,
         });
       }
       return porPedido.get(pedido);
@@ -411,6 +434,10 @@ export const accionesPlaneacion = {
     filas.forEach((f) => {
       const e = _entrada(f.pedido);
       e.conRegistros = e.conRegistros || f.conRegistros === 1;
+      e.unidadesPedidas = Math.max(
+        e.unidadesPedidas,
+        Number(f.unidadesPedidas) || 0,
+      );
       e.sublineas.push({
         sublinea: f.sublinea,
         cliente: String(f.cliente || ""),
@@ -425,6 +452,7 @@ export const accionesPlaneacion = {
     eanes.forEach((v) => {
       const e = _entrada(v.pedido);
       e.conRegistros = e.conRegistros || v.conRegistros === 1;
+      e.unidadesEan += Number(v.unidadesEan) || 0;
       const s = e.sublineas.find((x) => x.sublinea === v.sublinea);
       if (s) s.eanes = v.eanes;
       else
@@ -447,6 +475,7 @@ export const accionesPlaneacion = {
       );
       const reales = e.sublineas.filter((s) => s.enPedidos);
       const huerfanas = e.sublineas.filter((s) => !s.enPedidos);
+      const nEanes = e.sublineas.reduce((s, x) => s + x.eanes, 0);
       const alertas = [];
       // Campos que deberían ser del pedido y difieren entre sus sublíneas
       // (pasa cuando dos clientes comparten número, como el 936).
@@ -487,6 +516,10 @@ export const accionesPlaneacion = {
           .forEach((v) =>
             alertas.push('Clasificación fuera de la lista: "' + v + '".'),
           );
+        const sumaEan = nEanes
+          ? _alertaSumaEan(e.unidadesEan, e.unidadesPedidas)
+          : "";
+        if (sumaEan) alertas.push(sumaEan);
       }
 
       // Datos del pedido: los de su primera sublínea. Los campos que difieren
@@ -505,7 +538,9 @@ export const accionesPlaneacion = {
         clasificacion: base.clasificacion || "",
         difieren,
         sublineas: e.sublineas,
-        eanes: e.sublineas.reduce((s, x) => s + x.eanes, 0),
+        eanes: nEanes,
+        unidadesPedidas: e.unidadesPedidas,
+        unidadesEan: _redondear2(e.unidadesEan),
         conRegistros: e.conRegistros,
         soloEnValidacion: reales.length === 0,
         alertas,
@@ -1510,6 +1545,176 @@ export const accionesPlaneacion = {
         registrosActualizados,
       },
       seguimientoActualizado,
+    };
+  },
+
+  // F3a: los EAN de un pedido y cómo va cada uno, en solo lectura. Las cifras
+  // salen de aquí; el frontend no repite ninguna regla.
+  // - referente: cuenta para el cierre (_sqlEanReferente). Los demás (EAN 0
+  //   sin unidades y sin límite) van aparte.
+  // - pendientes: totales − procesadas − sobrantes − justificado, igual que el
+  //   techo de la reserva; null si es sin límite. exceso: lo que pasa del total.
+  // - desfasado: el estado no corresponde a las unidades (pasa cuando se
+  //   cambian las unidades totales en la hoja después de registrar).
+  // - registros: todos, anulados incluidos.
+  async obtenerEanesPedido(datos, env) {
+    const pedido = String(datos.pedido || "").trim();
+    if (!pedido) throw new Error("Falta el número de pedido.");
+
+    const { results: filasPedido } = await env.DB.prepare(
+      "SELECT sublinea, unidades_pedidas AS unidades FROM pedidos WHERE numero_pedido = ?",
+    )
+      .bind(pedido)
+      .all();
+    const { results: filas } = await env.DB.prepare(
+      "SELECT v.ean_producto AS ean, v.sublinea, v.unidades_totales AS totales, " +
+        "v.sin_limite AS sinLimite, v.unidades_procesadas AS procesadas, " +
+        "v.codigos_sobrantes AS sobrantes, COALESCE(v.estado, '') AS estado, " +
+        "COALESCE(v.operarios, '') AS operarios, CASE WHEN " +
+        _sqlEanReferente("v.") +
+        " THEN 1 ELSE 0 END AS referente, " +
+        "(SELECT COALESCE(SUM(j.faltante), 0) FROM justificaciones j " +
+        "WHERE j.pedido = v.numero_pedido AND j.ean = v.ean_producto) AS justificado, " +
+        "(SELECT COUNT(*) FROM registros r WHERE r.numero_pedido = v.numero_pedido " +
+        "AND r.ean = v.ean_producto) AS registros " +
+        "FROM validacion_eanes v WHERE v.numero_pedido = ?",
+    )
+      .bind(pedido)
+      .all();
+    const just = await env.DB.prepare(
+      "SELECT COALESCE(SUM(faltante), 0) AS total FROM justificaciones WHERE pedido = ?",
+    )
+      .bind(pedido)
+      .first();
+
+    if (filasPedido.length === 0 && filas.length === 0)
+      throw new Error("El pedido " + pedido + " no existe.");
+
+    const sublineas = _distintos(filasPedido.map((f) => String(f.sublinea)));
+    const enPedido = new Set(sublineas.map((s) => _normalizarPedido(s)));
+    const unidadesPedidas = Math.max(
+      0,
+      ...filasPedido.map((f) => Number(f.unidades) || 0),
+    );
+    const _orden = (a, b) =>
+      String(a).localeCompare(String(b), "es", { numeric: true });
+    sublineas.sort(_orden);
+
+    const eanes = filas.map((f) => {
+      const sinLimite = f.sinLimite === 1;
+      const totales = Number(f.totales) || 0;
+      const procesadas = Number(f.procesadas) || 0;
+      const sobrantes = Number(f.sobrantes) || 0;
+      const justificado = Number(f.justificado) || 0;
+      const ocupado = procesadas + sobrantes + justificado;
+      const lleno = ocupado >= totales;
+      const referente = f.referente === 1;
+      // Mismo criterio que Seguimiento: un estado vacío (EAN que llegó de la
+      // hoja y aún no se tocó) se muestra según sus unidades.
+      const estado =
+        String(f.estado) ||
+        (procesadas + sobrantes > 0 ? "En proceso" : "Pendiente");
+      return {
+        ean: String(f.ean),
+        sublinea: String(f.sublinea || ""),
+        sublineaEnPedido: enPedido.has(_normalizarPedido(f.sublinea)),
+        referente,
+        sinLimite,
+        totales,
+        procesadas: _redondear2(procesadas),
+        sobrantes,
+        justificado: _redondear2(justificado),
+        pendientes: sinLimite
+          ? null
+          : _redondear2(Math.max(0, totales - ocupado)),
+        exceso: sinLimite ? 0 : _redondear2(Math.max(0, ocupado - totales)),
+        estado,
+        desfasado:
+          referente && !sinLimite && (estado === "Completado") !== lleno,
+        registros: Number(f.registros) || 0,
+        operarios: String(f.operarios),
+      };
+    });
+    eanes.sort(
+      (a, b) => _orden(a.sublinea, b.sublinea) || _orden(a.ean, b.ean),
+    );
+
+    const referentes = eanes.filter((e) => e.referente);
+    const _suma = (campo) =>
+      _redondear2(referentes.reduce((s, e) => s + (e[campo] || 0), 0));
+    const justificado = _redondear2(Number(just && just.total) || 0);
+    const cerrado =
+      referentes.length > 0 &&
+      referentes.every((e) => e.estado === "Completado");
+
+    const alertas = [];
+    if (filasPedido.length === 0)
+      alertas.push("Existe solo en Validación eanes: falta en Numero pedidos.");
+    else
+      _distintos(
+        eanes.filter((e) => !e.sublineaEnPedido).map((e) => e.sublinea),
+      ).forEach((s) =>
+        alertas.push(
+          'Hay EAN con la sublínea "' + s + '", que no está en Numero pedidos.',
+        ),
+      );
+    if (eanes.length) {
+      const sumaEan = _alertaSumaEan(_suma("totales"), unidadesPedidas);
+      if (sumaEan) alertas.push(sumaEan);
+    }
+    const desfasados = eanes.filter((e) => e.desfasado).length;
+    if (desfasados)
+      alertas.push(
+        (desfasados === 1
+          ? "1 EAN tiene un estado que no corresponde"
+          : desfasados + " EAN tienen un estado que no corresponde") +
+          " a sus unidades (cambiaron las unidades totales después de registrar).",
+      );
+    const conExceso = eanes.filter((e) => e.exceso > 0).length;
+    if (conExceso)
+      alertas.push(
+        (conExceso === 1 ? "1 EAN tiene" : conExceso + " EAN tienen") +
+          " más unidades registradas que su total.",
+      );
+    eanes
+      .filter((e) => e.sinLimite && /[^0]/.test(e.ean))
+      .forEach((e) =>
+        alertas.push(
+          "El EAN " +
+            e.ean +
+            " es sin límite: no cuenta para el cierre. Revisa si es un olvido.",
+        ),
+      );
+
+    return {
+      success: true,
+      pedido,
+      soloEnValidacion: filasPedido.length === 0,
+      sublineas,
+      unidadesPedidas,
+      resumen: {
+        eanes: eanes.length,
+        referentes: referentes.length,
+        aparte: eanes.length - referentes.length,
+        unidadesEan: _suma("totales"),
+        procesadas: _suma("procesadas"),
+        pendientes: _suma("pendientes"),
+        justificado,
+      },
+      cerrado,
+      // Con justificación el pedido quedó en "No cumple": sus EAN no se
+      // cambian desde la app (F3b), porque la justificación ya no cuadraría.
+      conJustificacion: justificado > 0,
+      estadoPedido: cerrado
+        ? justificado > 0
+          ? "No cumple"
+          : "Cumple"
+        : _suma("procesadas") + _suma("sobrantes") > 0
+          ? "En proceso"
+          : "Pendiente",
+      eanes,
+      alertas,
+      edicionHabilitada: await _edicionHabilitada(env, ["pedidos"]),
     };
   },
 };

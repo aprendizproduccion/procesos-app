@@ -31,6 +31,7 @@ const PERMISOS_POR_ACCION = {
   guardarCliente: ["planeacion"],
   obtenerPedidoParaEditar: ["planeacion"],
   editarPedido: ["planeacion"],
+  obtenerEanesPedido: ["planeacion"],
 };
 
 export default {
