@@ -32,6 +32,9 @@ const PERMISOS_POR_ACCION = {
   obtenerPedidoParaEditar: ["planeacion"],
   editarPedido: ["planeacion"],
   obtenerEanesPedido: ["planeacion"],
+  guardarEan: ["planeacion"],
+  eliminarEan: ["planeacion"],
+  corregirEan: ["planeacion"],
 };
 
 export default {

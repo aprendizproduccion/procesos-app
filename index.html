@@ -525,6 +525,15 @@
       .pl-operarios {
         min-width: 160px;
       }
+      .pl-col-acciones {
+        white-space: nowrap;
+      }
+      .pl-col-acciones .btn-gv-mini + .btn-gv-mini {
+        margin-left: 6px;
+      }
+      #plEanesTabla.pl-solo-lectura .pl-col-acciones {
+        display: none;
+      }
 
       /* ===== Botones — Manual de marca, sección 07 ===== */
       /* Base "con caja": 48 px de alto, 14 px, ancho completo. */
@@ -1952,6 +1961,16 @@
         <p class="hint" style="margin-top: 0" id="plEanesNota"></p>
         <div class="seguimiento-kpi-grid" id="plEanesKpi"></div>
         <div id="plEanesAlertas"></div>
+        <div id="plEanesResultado"></div>
+        <button
+          type="button"
+          id="btnPlAgregarEan"
+          class="btn-submit btn-gv-contorno"
+          style="display: none"
+          onclick="abrirEanPl(-1)"
+        >
+          + Agregar EAN
+        </button>
         <input
           id="plEanBuscar"
           placeholder="Buscar o escanear un EAN..."
@@ -1960,7 +1979,7 @@
         />
         <div id="plEanesMsg"></div>
         <div id="plEanesTablaWrap" style="overflow-x: auto">
-          <table>
+          <table id="plEanesTabla">
             <thead>
               <tr>
                 <th>Sub línea</th>
@@ -1973,6 +1992,7 @@
                 <th>Estado</th>
                 <th>Registros</th>
                 <th>Operarios</th>
+                <th class="pl-col-acciones">Acciones</th>
               </tr>
             </thead>
             <tbody id="plEanesBody"></tbody>
@@ -2812,6 +2832,45 @@
             onclick="confirmarEliminarRegistro()"
           >
             Eliminar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="modalEanPl" class="modal-overlay">
+      <div class="modal-box">
+        <h3 id="modalEanPlTitulo">Agregar EAN</h3>
+        <div id="eanPlAlerta"></div>
+        <label for="eanPlCodigo">EAN</label>
+        <input
+          id="eanPlCodigo"
+          maxlength="30"
+          autocomplete="off"
+          enterkeyhint="next"
+          placeholder="Escanea o escribe el EAN"
+        />
+        <label for="eanPlSublinea">Sublínea</label>
+        <select id="eanPlSublinea"></select>
+        <label for="eanPlUnidades">Unidades totales</label>
+        <input
+          id="eanPlUnidades"
+          type="number"
+          min="0"
+          step="1"
+          inputmode="numeric"
+          enterkeyhint="done"
+        />
+        <label class="cp-casilla">
+          <input id="eanPlSinLimite" type="checkbox" />
+          Sin límite (no cuenta para el cierre)
+        </label>
+        <p class="hint" style="margin-top: 0" id="eanPlNota"></p>
+        <div class="row2" style="margin-top: 8px">
+          <button type="button" class="btn-gv-contorno" onclick="cerrarEanPl()">
+            Cancelar
+          </button>
+          <button type="button" id="btnGuardarEanPl" onclick="guardarEanPl()">
+            Guardar
           </button>
         </div>
       </div>
@@ -5192,6 +5251,7 @@
           document.getElementById(id).style.display = "none";
         });
         cerrarConfirmarPl();
+        cerrarEanPl();
 
         // 2. Vaciar inputs, textareas y selects simples
         const camposAVaciar = [
@@ -6566,6 +6626,9 @@
       // es false: se ve todo, pero no se crea ni se elimina.
       let plEdicionPedidos = false;
       let plEdicionClientes = false;
+      // F3b: un cambio en los EAN deja la lista vieja (suma, avisos); volver
+      // a Pedidos la recarga.
+      let plPedidosDesactualizados = false;
 
       function _abrirVistaPlaneacion(idVista) {
         document.getElementById("vistaDashboard").style.display = "none";
@@ -6605,6 +6668,7 @@
         document.getElementById("btnPlPedidosMas").style.display = "none";
         document.getElementById("plPedidosAlerta").innerHTML =
           '<p class="hint">Cargando pedidos...</p>';
+        plPedidosDesactualizados = false;
         const consulta = ++plConsulta;
         llamarAPI("obtenerPedidosPlaneacion", {})
           .then(function (res) {
@@ -6613,19 +6677,7 @@
               _errorPl("plPedidosAlerta", "plPedidosLista", res.message);
               return;
             }
-            plPedidos = res.pedidos || [];
-            plEdicionPedidos = res.edicionHabilitada === true;
-            document.getElementById("plPedidosNota").textContent =
-              plEdicionPedidos
-                ? "Al editar, lo que ya tiene EAN o registros no se puede quitar. Solo se pueden eliminar los pedidos sin registros."
-                : 'Hasta el corte, los pedidos se siguen montando en la hoja "Numero pedidos": puedes ver los formularios, pero no crear, editar ni eliminar.';
-            document.getElementById("plConteoTodos").textContent =
-              "(" + plPedidos.length + ")";
-            document.getElementById("plConteoAlertas").textContent =
-              "(" + plPedidos.filter((p) => p.alertas.length).length + ")";
-            document.getElementById("plConteoSinEan").textContent =
-              "(" + plPedidos.filter((p) => p.eanes === 0).length + ")";
-            renderPlPedidos();
+            _aplicarPedidosPl(res);
           })
           .catch(function (err) {
             if (consulta !== plConsulta) return;
@@ -6634,6 +6686,43 @@
               "plPedidosLista",
               "Error de conexión: " + err.message,
             );
+          });
+      }
+
+      function _aplicarPedidosPl(res) {
+        plPedidos = res.pedidos || [];
+        plEdicionPedidos = res.edicionHabilitada === true;
+        document.getElementById("plPedidosNota").textContent = plEdicionPedidos
+          ? "Al editar, lo que ya tiene EAN o registros no se puede quitar. Solo se pueden eliminar los pedidos sin registros."
+          : 'Hasta el corte, los pedidos se siguen montando en la hoja "Numero pedidos": puedes ver los formularios, pero no crear, editar ni eliminar.';
+        document.getElementById("plConteoTodos").textContent =
+          "(" + plPedidos.length + ")";
+        document.getElementById("plConteoAlertas").textContent =
+          "(" + plPedidos.filter((p) => p.alertas.length).length + ")";
+        document.getElementById("plConteoSinEan").textContent =
+          "(" + plPedidos.filter((p) => p.eanes === 0).length + ")";
+        renderPlPedidos();
+      }
+
+      // Recarga en segundo plano tras un cambio en los EAN: conserva el
+      // filtro, la búsqueda, cuántos se muestran y la posición. Si falla, se
+      // reintenta la próxima vez que se vuelva a la lista.
+      function _recargarPedidosPl() {
+        plPedidosDesactualizados = false;
+        const consulta = ++plConsulta;
+        llamarAPI("obtenerPedidosPlaneacion", {})
+          .then(function (res) {
+            if (consulta !== plConsulta || res.sesionVencida) return;
+            if (!res.success) {
+              plPedidosDesactualizados = true;
+              return;
+            }
+            const y = window.scrollY;
+            _aplicarPedidosPl(res);
+            window.scrollTo(0, y);
+          })
+          .catch(function () {
+            if (consulta === plConsulta) plPedidosDesactualizados = true;
           });
       }
 
@@ -6807,8 +6896,10 @@
           "plEanesNota",
           "plEanesKpi",
           "plEanesAlertas",
+          "plEanesResultado",
           "plEanesBody",
         ].forEach((id) => (document.getElementById(id).innerHTML = ""));
+        document.getElementById("btnPlAgregarEan").style.display = "none";
         document.getElementById("plEanesTablaWrap").style.display = "none";
         document.getElementById("plEanesMsg").innerHTML =
           '<p class="hint">Cargando EAN...</p>';
@@ -6838,6 +6929,7 @@
         document.getElementById("vistaPedidosPlaneacion").style.display =
           "block";
         window.scrollTo(0, plScrollPedidos);
+        if (plPedidosDesactualizados) _recargarPedidosPl();
       }
 
       function _pintarResumenEanesPl() {
@@ -6861,8 +6953,14 @@
           );
         else if (!r.edicionHabilitada)
           notas.push(
-            'Hasta el corte, los EAN se asignan en la hoja "Validacion eanes": aquí ves cómo va cada uno.',
+            'Hasta el corte, los EAN se asignan en la hoja "Validacion eanes": aquí ves cómo va cada uno y puedes usar Corregir; el formulario se puede abrir, pero no guarda.',
           );
+        document.getElementById("btnPlAgregarEan").style.display = r.editable
+          ? ""
+          : "none";
+        document
+          .getElementById("plEanesTabla")
+          .classList.toggle("pl-solo-lectura", !r.editable);
         if (!r.soloEnValidacion && !r.unidadesPedidas)
           notas.push(
             "El pedido no tiene unidades pedidas, así que no hay con qué comparar la suma de los EAN.",
@@ -6918,7 +7016,8 @@
           `<td${e.sublineaEnPedido ? "" : aviso("No está en Numero pedidos")}>${escapeHtml(e.sublinea)}</td>` +
           `<td style="white-space:nowrap">${escapeHtml(e.ean)}</td>` +
           `<td>${e.sinLimite ? "Sin límite" : _fmtUnidades(e.totales)}</td>` +
-          `<td>${_fmtUnidades(e.procesadas)}</td>` +
+          `<td${e.descuadrado ? aviso("No coincide con sus registros: Corregir lo recalcula") : ""}>` +
+          `${_fmtUnidades(e.procesadas)}${e.descuadrado ? " ⚠" : ""}</td>` +
           `<td>${_fmtUnidades(e.sobrantes)}</td>` +
           `<td>${e.justificado ? _fmtUnidades(e.justificado) : "—"}</td>` +
           `<td${e.exceso > 0 ? aviso("Tiene más unidades registradas que su total") : ""}>${pendientes}</td>` +
@@ -6926,7 +7025,25 @@
           `${escapeHtml(e.estado)}${e.desfasado ? " ⚠" : ""}</td>` +
           `<td>${e.registros}</td>` +
           `<td class="pl-operarios">${e.operarios ? escapeHtml(e.operarios) : "—"}</td>` +
+          `<td class="pl-col-acciones">${_accionesEanPl(e)}</td>` +
           `</tr>`
+        );
+      }
+
+      // F3b: Editar siempre (hasta el corte, solo para conocer el
+      // formulario); Corregir en las filas con ⚠; Eliminar sin registros y
+      // con el interruptor. Las reglas las vuelve a aplicar el Worker.
+      function _accionesEanPl(e) {
+        if (!plEanes.editable) return "";
+        const i = plEanes.eanes.indexOf(e);
+        return (
+          `<button type="button" class="btn-gv-mini btn-gv-contorno" data-ean-editar="${i}">Editar</button>` +
+          (e.corregible
+            ? `<button type="button" class="btn-gv-mini" data-ean-corregir="${i}">Corregir</button>`
+            : "") +
+          (plEanes.edicionHabilitada && !e.registros
+            ? `<button type="button" class="btn-gv-mini btn-gv-contorno" data-ean-eliminar="${i}">Eliminar</button>`
+            : "")
         );
       }
 
@@ -6941,7 +7058,7 @@
         document.getElementById("plEanesBody").innerHTML =
           cuentan.map(_filaEanPl).join("") +
           (aparte.length
-            ? '<tr class="pl-fila-titulo"><td colspan="10">Aparte: EAN 0 sin unidades y sin límite (no cuentan para el cierre)</td></tr>' +
+            ? '<tr class="pl-fila-titulo"><td colspan="11">Aparte: EAN 0 sin unidades y sin límite (no cuentan para el cierre)</td></tr>' +
               aparte.map(_filaEanPl).join("")
             : "");
         document.getElementById("plEanesTablaWrap").style.display =
@@ -6970,6 +7087,361 @@
           if (e.key !== "Enter") return;
           e.preventDefault();
           this.select();
+        });
+
+      // ---- EAN de un pedido (F3b: agregar, editar, eliminar y corregir) ----
+      // El Worker valida todo y calcula si el cambio cierra o reabre el
+      // pedido; aquí solo se arma el formulario, se avisa y se pinta la vista
+      // que devuelve.
+      let plEanIndice = -1; // fila en edición (-1 = agregar)
+      let plEanEnCurso = false;
+
+      function _textoEfectoPl(efecto, pedido) {
+        return efecto === "cierra"
+          ? "Con este cambio todos los EAN que cuentan para el cierre quedan completos: el pedido " +
+              pedido +
+              " se cerrará como Cumple y pasará a Seguimiento paquetes."
+          : "El pedido " +
+              pedido +
+              " está cerrado como Cumple. Con este cambio vuelve a quedar abierto y sale de Seguimiento paquetes hasta que se complete de nuevo.";
+      }
+
+      function _notaEanPl() {
+        const e = plEanIndice >= 0 ? plEanes.eanes[plEanIndice] : null;
+        const notas = [];
+        if (!plEanes.edicionHabilitada)
+          notas.push(
+            "Hasta el corte solo puedes ver el formulario: los EAN se asignan en la hoja.",
+          );
+        if (e && e.registros)
+          notas.push(
+            "Tiene registros: el código y la sublínea no se cambian, y las unidades no pueden quedar por debajo de " +
+              e.ocupadoRegistros +
+              ".",
+          );
+        if (document.getElementById("eanPlSinLimite").checked)
+          notas.push("Sin límite: no cuenta para el cierre del pedido.");
+        else if (document.getElementById("eanPlCodigo").value.trim() === "0")
+          notas.push(
+            "EAN 0: 0 unidades para inducciones o explicaciones; más de 0 si es un producto sin código.",
+          );
+        document.getElementById("eanPlNota").textContent = notas.join(" ");
+      }
+
+      function abrirEanPl(indice) {
+        if (!plEanes || !plEanes.editable) return;
+        const e = indice >= 0 ? plEanes.eanes[indice] : null;
+        plEanIndice = e ? indice : -1;
+        document.getElementById("modalEanPlTitulo").textContent = e
+          ? "Editar EAN " + e.ean
+          : "Agregar EAN al pedido " + plEanes.pedido;
+        document.getElementById("eanPlAlerta").innerHTML = "";
+        const conRegistros = !!(e && e.registros);
+        const codigo = document.getElementById("eanPlCodigo");
+        codigo.value = e ? e.ean : "";
+        codigo.readOnly = conRegistros;
+        const sub = document.getElementById("eanPlSublinea");
+        sub.innerHTML =
+          '<option value="">Elige una sublínea</option>' +
+          plEanes.sublineas
+            .map((s) => `<option>${escapeHtml(s)}</option>`)
+            .join("");
+        sub.value = e
+          ? plEanes.sublineas.find(
+              (s) => normalizarPedido(s) === normalizarPedido(e.sublinea),
+            ) || ""
+          : plEanes.sublineas.length === 1
+            ? plEanes.sublineas[0]
+            : "";
+        sub.disabled = conRegistros;
+        const sinLimite = document.getElementById("eanPlSinLimite");
+        sinLimite.checked = !!(e && e.sinLimite);
+        const unidades = document.getElementById("eanPlUnidades");
+        unidades.value = e && !e.sinLimite ? e.totales : "";
+        unidades.disabled = sinLimite.checked;
+        document.getElementById("btnGuardarEanPl").disabled =
+          !plEanes.edicionHabilitada;
+        _notaEanPl();
+        document.getElementById("modalEanPl").classList.add("visible");
+        (conRegistros ? unidades : codigo).focus();
+      }
+
+      function cerrarEanPl() {
+        plEanIndice = -1;
+        document.getElementById("modalEanPl").classList.remove("visible");
+      }
+
+      // efectoAceptado: el aviso de cierre o reapertura ya se confirmó.
+      function guardarEanPl(efectoAceptado) {
+        if (plEanEnCurso || !plEanes || !plEanes.edicionHabilitada) return;
+        const e = plEanIndice >= 0 ? plEanes.eanes[plEanIndice] : null;
+        const alerta = document.getElementById("eanPlAlerta");
+        const sinLimite = document.getElementById("eanPlSinLimite").checked;
+        const unidades = document.getElementById("eanPlUnidades").value.trim();
+        if (!sinLimite && !_esUnidadEntera(unidades)) {
+          alerta.innerHTML = `<div class="msg err">${escapeHtml(MSG_UNIDADES_ENTERAS)}</div>`;
+          return;
+        }
+        const datos = {
+          pedido: plEanes.pedido,
+          eanOriginal: e ? e.ean : "",
+          ean: document.getElementById("eanPlCodigo").value.trim(),
+          sublinea: document.getElementById("eanPlSublinea").value,
+          unidades: sinLimite ? "" : Number(unidades),
+          sinLimite,
+        };
+        if (efectoAceptado) datos.efectoAceptado = efectoAceptado;
+        const boton = document.getElementById("btnGuardarEanPl");
+        const consulta = plEanesConsulta;
+        plEanEnCurso = true;
+        boton.disabled = true;
+        alerta.innerHTML = '<p class="hint">Guardando...</p>';
+        llamarAPI("guardarEan", datos)
+          .then(function (res) {
+            plEanEnCurso = false;
+            boton.disabled = false;
+            if (res.sesionVencida) return;
+            if (!res.success) {
+              alerta.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
+              return;
+            }
+            alerta.innerHTML = "";
+            if (res.confirmar) {
+              pedirConfirmarPl(
+                "Confirmar cambio",
+                _textoEfectoPl(res.confirmar, datos.pedido),
+                "Guardar",
+                false,
+                function () {
+                  guardarEanPl(res.confirmar);
+                },
+              );
+              return;
+            }
+            cerrarEanPl();
+            _trasCambioEanPl(
+              res,
+              consulta,
+              res.sinCambios
+                ? "Sin cambios: el EAN ya estaba así."
+                : "EAN " + res.ean + (e ? " guardado." : " agregado."),
+            );
+          })
+          .catch(function (err) {
+            plEanEnCurso = false;
+            boton.disabled = false;
+            alerta.innerHTML = `<div class="msg err">${escapeHtml("Error de conexión: " + err.message)}</div>`;
+          });
+      }
+
+      // Pinta la vista que devolvió el Worker. Si ya se volvió a Pedidos, la
+      // lista se recarga.
+      function _trasCambioEanPl(res, consulta, texto) {
+        plPedidosDesactualizados = true;
+        if (consulta !== plEanesConsulta || !res.vista) {
+          if (
+            document.getElementById("vistaPedidosPlaneacion").style.display ===
+            "block"
+          )
+            _recargarPedidosPl();
+          return;
+        }
+        plEanes = res.vista;
+        _pintarResumenEanesPl();
+        renderPlEanes();
+        const efecto =
+          res.efecto === "cierra"
+            ? " El pedido quedó cerrado como Cumple."
+            : res.efecto === "reabre"
+              ? " El pedido quedó abierto de nuevo."
+              : "";
+        document.getElementById("plEanesResultado").innerHTML =
+          `<div class="msg ok">${escapeHtml(texto + efecto)}</div>`;
+      }
+
+      // Eliminar y Corregir: primero se simula (validaciones y efecto en el
+      // cierre), luego se confirma y se ejecuta.
+      function _simularEanPl(accion, e, boton, alSimular) {
+        if (plEanEnCurso) return;
+        plEanEnCurso = true;
+        boton.disabled = true;
+        const pedido = plEanes.pedido;
+        const consulta = plEanesConsulta;
+        llamarAPI(accion, { pedido, ean: e.ean, soloSimular: true })
+          .then(function (res) {
+            plEanEnCurso = false;
+            boton.disabled = false;
+            if (res.sesionVencida) return;
+            if (!res.success) {
+              mostrarModalAviso(res.message, "No se pudo hacer el cambio");
+              return;
+            }
+            alSimular(res, pedido, consulta);
+          })
+          .catch(function (err) {
+            plEanEnCurso = false;
+            boton.disabled = false;
+            mostrarModalAviso("Error de conexión: " + err.message, "Error");
+          });
+      }
+
+      function _ejecutarEanPl(accion, datos, consulta, textoOk) {
+        plEanEnCurso = true;
+        llamarAPI(accion, datos)
+          .then(function (res) {
+            plEanEnCurso = false;
+            if (res.sesionVencida) return;
+            if (!res.success) {
+              mostrarModalAviso(res.message, "No se pudo hacer el cambio");
+              return;
+            }
+            _trasCambioEanPl(res, consulta, textoOk);
+          })
+          .catch(function (err) {
+            plEanEnCurso = false;
+            mostrarModalAviso("Error de conexión: " + err.message, "Error");
+          });
+      }
+
+      function pedirEliminarEanPl(e, boton) {
+        _simularEanPl(
+          "eliminarEan",
+          e,
+          boton,
+          function (res, pedido, consulta) {
+            pedirConfirmarPl(
+              "Eliminar EAN",
+              "Se eliminará el EAN " +
+                e.ean +
+                " (sublínea " +
+                e.sublinea +
+                ", " +
+                (e.sinLimite ? "sin límite" : e.totales + " unidades") +
+                ")." +
+                (res.efecto
+                  ? "\n\n" + _textoEfectoPl(res.efecto, pedido)
+                  : "") +
+                "\n\nEsta acción no se puede deshacer.",
+              "Eliminar",
+              true,
+              function () {
+                _ejecutarEanPl(
+                  "eliminarEan",
+                  { pedido, ean: e.ean },
+                  consulta,
+                  "EAN " + e.ean + " eliminado.",
+                );
+              },
+            );
+          },
+        );
+      }
+
+      function pedirCorregirEanPl(e, boton) {
+        _simularEanPl(
+          "corregirEan",
+          e,
+          boton,
+          function (res, pedido, consulta) {
+            if (res.sinCambios) {
+              _trasCambioEanPl(
+                res,
+                consulta,
+                "El EAN " + e.ean + " ya coincide con sus registros.",
+              );
+              return;
+            }
+            const a = res.antes;
+            const d = res.despues;
+            const lineas = [];
+            if (a.procesadas !== d.procesadas)
+              lineas.push(
+                "• Procesadas: " +
+                  _fmtUnidades(a.procesadas) +
+                  " → " +
+                  _fmtUnidades(d.procesadas),
+              );
+            if (a.sobrantes !== d.sobrantes)
+              lineas.push(
+                "• Sobrantes: " +
+                  _fmtUnidades(a.sobrantes) +
+                  " → " +
+                  _fmtUnidades(d.sobrantes),
+              );
+            if (a.estado !== d.estado)
+              lineas.push(
+                "• Estado: " + (a.estado || "sin estado") + " → " + d.estado,
+              );
+            pedirConfirmarPl(
+              "Corregir EAN",
+              "Se recalculará el EAN " +
+                e.ean +
+                " con sus registros:\n" +
+                lineas.join("\n") +
+                (res.efecto ? "\n\n" + _textoEfectoPl(res.efecto, pedido) : ""),
+              "Corregir",
+              false,
+              function () {
+                _ejecutarEanPl(
+                  "corregirEan",
+                  { pedido, ean: e.ean },
+                  consulta,
+                  "EAN " + e.ean + " corregido.",
+                );
+              },
+            );
+          },
+        );
+      }
+
+      document
+        .getElementById("plEanesBody")
+        .addEventListener("click", function (ev) {
+          if (!plEanes) return;
+          const editar = ev.target.closest("[data-ean-editar]");
+          if (editar) {
+            abrirEanPl(Number(editar.dataset.eanEditar));
+            return;
+          }
+          const corregir = ev.target.closest("[data-ean-corregir]");
+          if (corregir) {
+            const e = plEanes.eanes[Number(corregir.dataset.eanCorregir)];
+            if (e) pedirCorregirEanPl(e, corregir);
+            return;
+          }
+          const eliminar = ev.target.closest("[data-ean-eliminar]");
+          if (!eliminar) return;
+          const e = plEanes.eanes[Number(eliminar.dataset.eanEliminar)];
+          if (e) pedirEliminarEanPl(e, eliminar);
+        });
+
+      // El escáner termina con Enter: del código se pasa a la sublínea (o a
+      // las unidades), y Enter en las unidades guarda.
+      document
+        .getElementById("eanPlCodigo")
+        .addEventListener("keydown", function (e) {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          const sub = document.getElementById("eanPlSublinea");
+          const unidades = document.getElementById("eanPlUnidades");
+          if (!sub.disabled && !sub.value) sub.focus();
+          else if (!unidades.disabled) unidades.focus();
+        });
+      document
+        .getElementById("eanPlUnidades")
+        .addEventListener("keydown", function (e) {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          guardarEanPl();
+        });
+      document
+        .getElementById("eanPlCodigo")
+        .addEventListener("input", _notaEanPl);
+      document
+        .getElementById("eanPlSinLimite")
+        .addEventListener("change", function () {
+          document.getElementById("eanPlUnidades").disabled = this.checked;
+          _notaEanPl();
         });
 
       // ---- Confirmación genérica de Planeación ----

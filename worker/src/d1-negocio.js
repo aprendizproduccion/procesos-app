@@ -285,6 +285,12 @@ export function _sqlEanReferente(alias) {
   );
 }
 
+// La misma regla que _sqlEanReferente, para un EAN ya leído (la simulación de
+// F3b). Si cambia una, cambia la otra.
+export function _esEanReferente(ean, sinLimite, totales) {
+  return !sinLimite && (/[^0]/.test(String(ean)) || Number(totales) > 0);
+}
+
 // Registros que cuentan para las cifras del pedido: todos menos los de un EAN
 // no referente. NOT EXISTS (y no IN) para conservar los registros cuyo EAN ya
 // no está en validacion_eanes. alias: nombre o alias de la tabla registros,
@@ -528,9 +534,25 @@ export async function _revertirReserva(
 // delta a mano. Excluye registros anulados. Se usa SOLO desde edición/anulación
 // de registros — submitRegistro y submitRegistroOperario NO usan esta función;
 // su reserva atómica sigue exactamente igual.
+// Lo ocupado se redondea al entero al decidir el estado: el reparto con
+// decimales de antes del 12-11 deja sumas como 2906,97 de 2907, y ese 0,03 no
+// se puede registrar (las unidades son enteras). _estadoContador repite la
+// regla en JS para la simulación de F3b.
+// _sentenciaRecalcularContador devuelve la sentencia sin ejecutarla, para
+// meterla en un batch (F3b).
 export async function _recalcularContadorValidacion(env, pedido, ean) {
+  await _sentenciaRecalcularContador(env, pedido, ean).run();
+}
+
+export function _estadoContador(ocupado, totales, sinLimite) {
+  if (!sinLimite && Math.round(ocupado) >= totales) return "Completado";
+  if (ocupado <= 0) return "Pendiente";
+  return "En proceso";
+}
+
+export function _sentenciaRecalcularContador(env, pedido, ean) {
   const ahora = _ahoraISO();
-  await env.DB.prepare(
+  return env.DB.prepare(
     "WITH agregados AS (" +
       "SELECT COALESCE(SUM(unidades_procesadas_operario),0) AS procesado, " +
       "COALESCE(SUM(codigos_sobrantes),0) AS sobrantes " +
@@ -548,14 +570,12 @@ export async function _recalcularContadorValidacion(env, pedido, ean) {
       "codigos_sobrantes = (SELECT sobrantes FROM agregados), " +
       "operarios = COALESCE((SELECT nombres FROM operarios_activos), ''), " +
       "estado = CASE " +
-      "WHEN sin_limite = 0 AND ((SELECT procesado FROM agregados) + (SELECT sobrantes FROM agregados) + (SELECT justificado FROM justif)) >= unidades_totales THEN 'Completado' " +
+      "WHEN sin_limite = 0 AND ROUND((SELECT procesado FROM agregados) + (SELECT sobrantes FROM agregados) + (SELECT justificado FROM justif), 0) >= unidades_totales THEN 'Completado' " +
       "WHEN ((SELECT procesado FROM agregados) + (SELECT sobrantes FROM agregados) + (SELECT justificado FROM justif)) <= 0 THEN 'Pendiente' " +
       "ELSE 'En proceso' END, " +
       "actualizado_en = ? " +
       "WHERE numero_pedido = ? AND ean_producto = ?",
-  )
-    .bind(pedido, ean, pedido, ean, pedido, ean, ahora, pedido, ean)
-    .run();
+  ).bind(pedido, ean, pedido, ean, pedido, ean, ahora, pedido, ean);
 }
 
 const PATRON_HORA = /^([01]\d|2[0-3]):([0-5]\d)$/;

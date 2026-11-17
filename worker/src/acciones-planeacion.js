@@ -9,6 +9,9 @@
 // el número y la fecha no se editan).
 // F3a: EAN de un pedido (Validación eanes) en solo lectura, y el aviso cuando
 // la suma de sus EAN no coincide con las unidades pedidas.
+// F3b: agregar, editar y eliminar un EAN (con el interruptor, como F2b) y
+// "Corregir" su contador desde los registros (sin interruptor: el contador es
+// de D1 y la hoja solo lo recibe por el espejo).
 
 import {
   _normalizarPedido,
@@ -21,6 +24,11 @@ import {
   _ahoraISO,
   _actualizarSeguimientoPedido,
   _sqlEanReferente,
+  _formasEan,
+  _esEanReferente,
+  _estadoContador,
+  _sentenciaRecalcularContador,
+  _sincronizarEstadoPedido,
 } from "./d1-negocio.js";
 import { _pushSeguimientoYMarcar } from "./push-sheets.js";
 
@@ -37,6 +45,7 @@ export const PROCESOS_GENERALES = [
 const MAX_SUBLINEAS = 20;
 const MAX_PROCESOS = 40;
 const MAX_UNIDADES_PEDIDO = 10000000;
+const MAX_LARGO_EAN = 30;
 
 // Listas fijas de "Numero pedidos". El frontend las recibe de aquí para usar
 // exactamente las mismas; F2b validará contra ellas.
@@ -395,6 +404,153 @@ function _errorPedidoNoEditable(pedido, estado) {
           ' solo existe en Validación eanes: corrígelo en la hoja "Numero pedidos" antes del corte.'
       : "El pedido " + pedido + " no existe.",
   );
+}
+
+// ---------------- F3b: escribir en los EAN de un pedido ----------------
+
+// EAN tal como se escribió o escaneó: sin espacios, máximo 30 caracteres, y
+// el EAN 0 siempre como "0".
+function _eanValidado(texto) {
+  const ean = String(texto == null ? "" : texto).trim();
+  if (!ean) throw new Error("Escribe o escanea el EAN.");
+  if (/\s/.test(ean)) throw new Error("El EAN no puede tener espacios.");
+  if (ean.length > MAX_LARGO_EAN)
+    throw new Error("El EAN pasa de " + MAX_LARGO_EAN + " caracteres.");
+  if (/^0+$/.test(ean) && ean !== "0")
+    throw new Error('El EAN 0 se escribe "0", sin más ceros.');
+  return ean;
+}
+
+// Dos EAN son el mismo si coinciden en alguna de sus dos formas (con y sin el
+// 0 del preámbulo UPC-A) sin distinguir mayúsculas. El envío busca el texto
+// exacto, así que esas variantes no pueden convivir en un pedido.
+function _mismoEan(a, b) {
+  const claves = _formasEan(a).map((f) => f.toUpperCase());
+  return _formasEan(b).some((f) => claves.includes(f.toUpperCase()));
+}
+
+// Lo que necesitan las escrituras de F3b. Bloquea los pedidos que solo están
+// en Validación eanes (se corrigen en la hoja) y los que tienen justificación
+// (decisión del 17-11: la justificación ya no cuadraría). Lo ocupado sale de
+// los registros activos, igual que el recálculo del contador.
+async function _estadoEanesPedido(env, pedido) {
+  const { results: filasPedido } = await env.DB.prepare(
+    "SELECT sublinea FROM pedidos WHERE numero_pedido = ?",
+  )
+    .bind(pedido)
+    .all();
+  const { results: filas } = await env.DB.prepare(
+    "SELECT v.ean_producto AS ean, v.sublinea, v.unidades_totales AS totales, " +
+      "v.sin_limite AS sinLimite, COALESCE(v.estado, '') AS estado, " +
+      "v.unidades_procesadas AS procesadas, v.codigos_sobrantes AS sobrantes, " +
+      "(SELECT COUNT(*) FROM registros r WHERE r.numero_pedido = v.numero_pedido " +
+      "AND r.ean = v.ean_producto) AS registros, " +
+      "(SELECT COALESCE(SUM(r.unidades_procesadas_operario), 0) FROM registros r " +
+      "WHERE r.numero_pedido = v.numero_pedido AND r.ean = v.ean_producto AND r.anulado = 0) AS procesadoReg, " +
+      "(SELECT COALESCE(SUM(r.codigos_sobrantes), 0) FROM registros r " +
+      "WHERE r.numero_pedido = v.numero_pedido AND r.ean = v.ean_producto AND r.anulado = 0) AS sobrantesReg, " +
+      "(SELECT COALESCE(SUM(j.faltante), 0) FROM justificaciones j " +
+      "WHERE j.pedido = v.numero_pedido AND j.ean = v.ean_producto) AS justificado " +
+      "FROM validacion_eanes v WHERE v.numero_pedido = ?",
+  )
+    .bind(pedido)
+    .all();
+  const just = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM justificaciones WHERE pedido = ?",
+  )
+    .bind(pedido)
+    .first();
+
+  if (filasPedido.length === 0)
+    throw new Error(
+      filas.length
+        ? "El pedido " +
+            pedido +
+            ' solo existe en Validación eanes: corrígelo en la hoja "Numero pedidos" antes del corte.'
+        : "El pedido " + pedido + " no existe.",
+    );
+  if (just.n > 0)
+    throw new Error(
+      "El pedido " +
+        pedido +
+        " se cerró con justificación: sus EAN quedan en solo lectura.",
+    );
+
+  return {
+    sublineas: _distintos(filasPedido.map((f) => String(f.sublinea))),
+    eanes: filas.map((f) => {
+      const procesadoReg = Number(f.procesadoReg) || 0;
+      const sobrantesReg = Number(f.sobrantesReg) || 0;
+      const justificado = Number(f.justificado) || 0;
+      return {
+        ean: String(f.ean),
+        sublinea: String(f.sublinea || ""),
+        totales: Number(f.totales) || 0,
+        sinLimite: f.sinLimite === 1,
+        estado: String(f.estado),
+        procesadas: Number(f.procesadas) || 0,
+        sobrantes: Number(f.sobrantes) || 0,
+        registros: Number(f.registros) || 0,
+        procesadoReg,
+        sobrantesReg,
+        ocupado: procesadoReg + sobrantesReg + justificado,
+      };
+    }),
+  };
+}
+
+// Mismo criterio que _pedidoEstaCompleto: tiene EAN referentes y todos están
+// en Completado (un estado vacío cuenta como abierto).
+function _pedidoCerrado(eanes) {
+  const referentes = eanes.filter((e) =>
+    _esEanReferente(e.ean, e.sinLimite, e.totales),
+  );
+  return (
+    referentes.length > 0 && referentes.every((e) => e.estado === "Completado")
+  );
+}
+
+// "cierra", "reabre" o "" al pasar de un estado del pedido al otro.
+function _efectoCierre(antes, despues) {
+  if (antes === despues) return "";
+  return despues ? "cierra" : "reabre";
+}
+
+// Después de escribir: estado del pedido y su fila de "Seguimiento paquetes".
+// Si algo falla aquí, el cambio del EAN ya quedó; el cron de Seguimiento pone
+// la fila al día. Devuelve si el pedido quedó cerrado, o null si falló.
+async function _trasCambioEan(env, ctx, pedido) {
+  try {
+    const completo = await _sincronizarEstadoPedido(env, pedido);
+    if (await _actualizarSeguimientoPedido(env, pedido, completo))
+      ctx.waitUntil(_pushSeguimientoYMarcar(env, pedido));
+    return completo;
+  } catch (err) {
+    console.error(
+      "F3b: no se actualizó el estado del pedido " +
+        pedido +
+        ": " +
+        err.message,
+    );
+    return null;
+  }
+}
+
+// El batch falló: si fue por la guarda, el pedido cambió entre la lectura y
+// la escritura.
+async function _errorBatchEan(env, errLote, condicion, binds, mensajeUnico) {
+  const guarda = await env.DB.prepare(
+    "SELECT CASE WHEN " + condicion + " THEN 1 ELSE 0 END AS bloqueado",
+  )
+    .bind(...binds)
+    .first();
+  if (guarda && guarda.bloqueado === 1)
+    return new Error(
+      "El pedido cambió mientras hacías el cambio (llegaron registros, se justificó o alguien más editó el EAN). Vuelve a abrirlo.",
+    );
+  if (mensajeUnico && /UNIQUE/i.test(String(errLote && errLote.message)))
+    return new Error(mensajeUnico);
+  return errLote;
 }
 
 export const accionesPlaneacion = {
@@ -1557,6 +1713,11 @@ export const accionesPlaneacion = {
   // - desfasado: el estado no corresponde a las unidades (pasa cuando se
   //   cambian las unidades totales en la hoja después de registrar).
   // - registros: todos, anulados incluidos.
+  // - Lo ocupado se redondea al entero para decidir si el EAN está lleno,
+  //   igual que _recalcularContadorValidacion (F3b).
+  // - descuadrado: procesadas o sobrantes no coinciden con los registros
+  //   activos (por media unidad o más). desfasado o descuadrado → corregible.
+  // - ocupadoRegistros: el mínimo de unidades al editar (F3b).
   async obtenerEanesPedido(datos, env) {
     const pedido = String(datos.pedido || "").trim();
     if (!pedido) throw new Error("Falta el número de pedido.");
@@ -1576,7 +1737,11 @@ export const accionesPlaneacion = {
         "(SELECT COALESCE(SUM(j.faltante), 0) FROM justificaciones j " +
         "WHERE j.pedido = v.numero_pedido AND j.ean = v.ean_producto) AS justificado, " +
         "(SELECT COUNT(*) FROM registros r WHERE r.numero_pedido = v.numero_pedido " +
-        "AND r.ean = v.ean_producto) AS registros " +
+        "AND r.ean = v.ean_producto) AS registros, " +
+        "(SELECT COALESCE(SUM(r.unidades_procesadas_operario), 0) FROM registros r " +
+        "WHERE r.numero_pedido = v.numero_pedido AND r.ean = v.ean_producto AND r.anulado = 0) AS procesadoReg, " +
+        "(SELECT COALESCE(SUM(r.codigos_sobrantes), 0) FROM registros r " +
+        "WHERE r.numero_pedido = v.numero_pedido AND r.ean = v.ean_producto AND r.anulado = 0) AS sobrantesReg " +
         "FROM validacion_eanes v WHERE v.numero_pedido = ?",
     )
       .bind(pedido)
@@ -1607,13 +1772,20 @@ export const accionesPlaneacion = {
       const sobrantes = Number(f.sobrantes) || 0;
       const justificado = Number(f.justificado) || 0;
       const ocupado = procesadas + sobrantes + justificado;
-      const lleno = ocupado >= totales;
+      const lleno = Math.round(ocupado) >= totales;
+      const procesadoReg = Number(f.procesadoReg) || 0;
+      const sobrantesReg = Number(f.sobrantesReg) || 0;
+      const descuadrado =
+        Math.abs(procesadas - procesadoReg) >= 0.5 ||
+        Math.abs(sobrantes - sobrantesReg) >= 0.5;
       const referente = f.referente === 1;
       // Mismo criterio que Seguimiento: un estado vacío (EAN que llegó de la
       // hoja y aún no se tocó) se muestra según sus unidades.
       const estado =
         String(f.estado) ||
         (procesadas + sobrantes > 0 ? "En proceso" : "Pendiente");
+      const desfasado =
+        referente && !sinLimite && (estado === "Completado") !== lleno;
       return {
         ean: String(f.ean),
         sublinea: String(f.sublinea || ""),
@@ -1626,11 +1798,15 @@ export const accionesPlaneacion = {
         justificado: _redondear2(justificado),
         pendientes: sinLimite
           ? null
-          : _redondear2(Math.max(0, totales - ocupado)),
-        exceso: sinLimite ? 0 : _redondear2(Math.max(0, ocupado - totales)),
+          : lleno
+            ? 0
+            : _redondear2(Math.max(0, totales - ocupado)),
+        exceso: sinLimite ? 0 : Math.max(0, Math.round(ocupado) - totales),
         estado,
-        desfasado:
-          referente && !sinLimite && (estado === "Completado") !== lleno,
+        desfasado,
+        descuadrado,
+        corregible: desfasado || descuadrado,
+        ocupadoRegistros: Math.round(procesadoReg + sobrantesReg + justificado),
         registros: Number(f.registros) || 0,
         operarios: String(f.operarios),
       };
@@ -1669,6 +1845,12 @@ export const accionesPlaneacion = {
           ? "1 EAN tiene un estado que no corresponde"
           : desfasados + " EAN tienen un estado que no corresponde") +
           " a sus unidades (cambiaron las unidades totales después de registrar).",
+      );
+    const descuadrados = eanes.filter((e) => e.descuadrado).length;
+    if (descuadrados)
+      alertas.push(
+        (descuadrados === 1 ? "1 EAN tiene" : descuadrados + " EAN tienen") +
+          " procesadas o sobrantes que no coinciden con sus registros.",
       );
     const conExceso = eanes.filter((e) => e.exceso > 0).length;
     if (conExceso)
@@ -1714,7 +1896,428 @@ export const accionesPlaneacion = {
           : "Pendiente",
       eanes,
       alertas,
+      // F3b: con justificación o solo en Validación no se toca nada.
+      // Agregar, editar y eliminar además esperan el interruptor
+      // (edicionHabilitada); Corregir no.
+      editable: justificado === 0 && filasPedido.length > 0,
       edicionHabilitada: await _edicionHabilitada(env, ["pedidos"]),
+    };
+  },
+
+  // F3b: agrega (eanOriginal vacío) o edita un EAN del pedido.
+  // datos: { pedido, eanOriginal, ean, sublinea, unidades, sinLimite,
+  //   efectoAceptado }
+  // - El EAN se guarda como se escribió o escaneó y no puede repetirse en el
+  //   pedido (ver _mismoEan). El EAN 0 va como "0" y hay uno solo por pedido.
+  // - La sublínea se elige entre las del pedido.
+  // - Unidades enteras: un EAN real lleva 1 o más; el EAN 0, 0 o más. Sin
+  //   límite guarda 0 unidades.
+  // - Con registros (anulados incluidos) no cambian el código ni la sublínea,
+  //   y las unidades no bajan de lo ocupado en los registros activos.
+  // - Si el cambio cierra o reabre el pedido y efectoAceptado no lo dice,
+  //   responde { confirmar: "cierra" | "reabre" } sin escribir: el frontend
+  //   avisa y vuelve a enviar con efectoAceptado.
+  // - Sin cambios (o un agregar repetido con los mismos valores, como un
+  //   reintento tras un error de red) responde éxito sin escribir.
+  // Al editar, el contador se recalcula desde los registros en el mismo
+  // batch. Un EAN nuevo nace sin estado (cuenta como pendiente).
+  async guardarEan(datos, env, ctx, ip, sesion) {
+    const pedido = String(datos.pedido || "").trim();
+    if (!pedido) throw new Error("Falta el número de pedido.");
+    await _exigirCatalogoEnApp(env, "pedidos");
+    const estado = await _estadoEanesPedido(env, pedido);
+
+    const eanOriginal = String(datos.eanOriginal || "").trim();
+    const actual = eanOriginal
+      ? estado.eanes.find((e) => e.ean === eanOriginal)
+      : null;
+    if (eanOriginal && !actual)
+      throw new Error(
+        "El EAN " + eanOriginal + " ya no está en el pedido. Vuelve a abrirlo.",
+      );
+
+    let ean = _eanValidado(datos.ean);
+    // El mismo código en su otra forma conserva el que ya está guardado.
+    if (actual && _mismoEan(ean, actual.ean)) ean = actual.ean;
+    const esCero = ean === "0";
+
+    const sublinea = estado.sublineas.find(
+      (s) => _normalizarPedido(s) === _normalizarPedido(datos.sublinea),
+    );
+    if (!sublinea) throw new Error("Elige una sublínea del pedido.");
+
+    const sinLimite = datos.sinLimite === true;
+    let totales = 0;
+    if (!sinLimite) {
+      totales = Number(datos.unidades);
+      if (
+        datos.unidades === "" ||
+        datos.unidades === null ||
+        datos.unidades === undefined ||
+        !Number.isInteger(totales) ||
+        totales < (esCero ? 0 : 1) ||
+        totales > MAX_UNIDADES_PEDIDO
+      )
+        throw new Error(
+          esCero
+            ? "Las unidades del EAN 0 deben ser un número entero desde 0."
+            : "Las unidades deben ser un número entero mayor que 0.",
+        );
+    }
+
+    const _vista = () => accionesPlaneacion.obtenerEanesPedido({ pedido }, env);
+    const repetido = estado.eanes.find(
+      (e) => e !== actual && _mismoEan(e.ean, ean),
+    );
+    if (repetido) {
+      const reintento =
+        !actual &&
+        repetido.ean === ean &&
+        repetido.sublinea === sublinea &&
+        repetido.totales === totales &&
+        repetido.sinLimite === sinLimite;
+      if (reintento)
+        return {
+          success: true,
+          pedido,
+          ean,
+          sinCambios: true,
+          efecto: "",
+          vista: await _vista(),
+        };
+      throw new Error(
+        esCero
+          ? "El pedido ya tiene un EAN 0: solo puede haber uno."
+          : "El EAN " + repetido.ean + " ya está en el pedido.",
+      );
+    }
+
+    if (actual && actual.registros > 0) {
+      if (ean !== actual.ean)
+        throw new Error(
+          "El EAN " +
+            actual.ean +
+            " tiene registros: no se puede cambiar su código.",
+        );
+      if (sublinea !== actual.sublinea)
+        throw new Error(
+          "El EAN " +
+            actual.ean +
+            " tiene registros: no se puede cambiar su sublínea.",
+        );
+    }
+    const ocupado = actual ? Math.round(actual.ocupado) : 0;
+    if (actual && !sinLimite && totales < ocupado)
+      throw new Error(
+        "El EAN " +
+          actual.ean +
+          " ya tiene " +
+          ocupado +
+          " unidades registradas (procesadas y sobrantes): sus unidades no pueden quedar por debajo.",
+      );
+
+    if (
+      actual &&
+      ean === actual.ean &&
+      sublinea === actual.sublinea &&
+      totales === actual.totales &&
+      sinLimite === actual.sinLimite
+    )
+      return {
+        success: true,
+        pedido,
+        ean,
+        sinCambios: true,
+        efecto: "",
+        vista: await _vista(),
+      };
+
+    const cerradoAntes = _pedidoCerrado(estado.eanes);
+    const nuevo = {
+      ean,
+      totales,
+      sinLimite,
+      estado: actual ? _estadoContador(actual.ocupado, totales, sinLimite) : "",
+    };
+    const efecto = _efectoCierre(
+      cerradoAntes,
+      _pedidoCerrado(estado.eanes.filter((e) => e !== actual).concat([nuevo])),
+    );
+    if (efecto && datos.efectoAceptado !== efecto)
+      return { success: true, pedido, ean, confirmar: efecto };
+
+    // Guarda: no llegó una justificación, la sublínea sigue en el pedido y,
+    // al editar, el EAN sigue como se leyó, no llegó un registro si cambian el
+    // código o la sublínea, y lo ocupado cabe en las unidades nuevas.
+    let condicion =
+      "EXISTS(SELECT 1 FROM justificaciones WHERE pedido = ?) OR " +
+      "NOT EXISTS(SELECT 1 FROM pedidos WHERE numero_pedido = ? AND sublinea = ?)";
+    const binds = [pedido, pedido, sublinea];
+    if (actual) {
+      condicion +=
+        " OR NOT EXISTS(SELECT 1 FROM validacion_eanes WHERE numero_pedido = ? " +
+        "AND ean_producto = ? AND sublinea = ? AND unidades_totales = ? AND sin_limite = ?)";
+      binds.push(
+        pedido,
+        actual.ean,
+        actual.sublinea,
+        actual.totales,
+        actual.sinLimite ? 1 : 0,
+      );
+      if (ean !== actual.ean || sublinea !== actual.sublinea) {
+        condicion +=
+          " OR EXISTS(SELECT 1 FROM registros WHERE numero_pedido = ? AND ean = ?)";
+        binds.push(pedido, actual.ean);
+      }
+      if (!sinLimite) {
+        condicion +=
+          " OR ROUND((SELECT COALESCE(SUM(unidades_procesadas_operario + codigos_sobrantes), 0) " +
+          "FROM registros WHERE numero_pedido = ? AND ean = ? AND anulado = 0), 0) > ?";
+        binds.push(pedido, actual.ean, totales);
+      }
+    }
+
+    const ahora = _ahoraISO();
+    const lote = [
+      _auditoriaConGuarda(
+        env,
+        {
+          tabla: "validacion_eanes",
+          llave: pedido,
+          accion: actual ? "editar" : "crear",
+          antes: actual
+            ? {
+                ean: actual.ean,
+                sublinea: actual.sublinea,
+                unidades: actual.totales,
+                sinLimite: actual.sinLimite,
+              }
+            : undefined,
+          despues: { ean, sublinea, unidades: totales, sinLimite },
+          cedula: sesion.cedula,
+          nombre: sesion.nombre || "",
+          hechoEn: ahora,
+        },
+        condicion,
+        binds,
+      ),
+    ];
+    if (actual) {
+      lote.push(
+        env.DB.prepare(
+          "UPDATE validacion_eanes SET ean_producto = ?, sublinea = ?, unidades_totales = ?, " +
+            "sin_limite = ?, actualizado_en = ? WHERE numero_pedido = ? AND ean_producto = ?",
+        ).bind(
+          ean,
+          sublinea,
+          totales,
+          sinLimite ? 1 : 0,
+          ahora,
+          pedido,
+          actual.ean,
+        ),
+        _sentenciaRecalcularContador(env, pedido, ean),
+      );
+    } else {
+      lote.push(
+        env.DB.prepare(
+          "INSERT INTO validacion_eanes (numero_pedido, ean_producto, sublinea, unidades_totales, " +
+            "sin_limite, actualizado_en) VALUES (?, ?, ?, ?, ?, ?)",
+        ).bind(pedido, ean, sublinea, totales, sinLimite ? 1 : 0, ahora),
+      );
+    }
+
+    try {
+      await env.DB.batch(lote);
+    } catch (errLote) {
+      throw await _errorBatchEan(
+        env,
+        errLote,
+        condicion,
+        binds,
+        "El EAN " + ean + " ya está en el pedido.",
+      );
+    }
+
+    const completo = await _trasCambioEan(env, ctx, pedido);
+    return {
+      success: true,
+      pedido,
+      ean,
+      efecto: completo === null ? "" : _efectoCierre(cerradoAntes, completo),
+      vista: await _vista(),
+    };
+  },
+
+  // F3b: elimina un EAN sin registros (anulados incluidos). Con soloSimular
+  // valida y responde qué pasará con el cierre del pedido, sin borrar.
+  async eliminarEan(datos, env, ctx, ip, sesion) {
+    const pedido = String(datos.pedido || "").trim();
+    if (!pedido) throw new Error("Falta el número de pedido.");
+    await _exigirCatalogoEnApp(env, "pedidos");
+    const estado = await _estadoEanesPedido(env, pedido);
+    const ean = String(datos.ean || "").trim();
+    const actual = estado.eanes.find((e) => e.ean === ean);
+    if (!actual)
+      throw new Error(
+        "El EAN " + ean + " ya no está en el pedido. Vuelve a abrirlo.",
+      );
+    if (actual.registros > 0)
+      throw new Error(
+        "El EAN " +
+          ean +
+          " tiene " +
+          actual.registros +
+          (actual.registros === 1 ? " registro" : " registros") +
+          ": no se puede eliminar.",
+      );
+
+    const cerradoAntes = _pedidoCerrado(estado.eanes);
+    const efecto = _efectoCierre(
+      cerradoAntes,
+      _pedidoCerrado(estado.eanes.filter((e) => e !== actual)),
+    );
+    if (datos.soloSimular === true)
+      return { success: true, pedido, ean, simulacion: true, efecto };
+
+    const condicion =
+      "EXISTS(SELECT 1 FROM justificaciones WHERE pedido = ?) OR " +
+      "EXISTS(SELECT 1 FROM registros WHERE numero_pedido = ? AND ean = ?)";
+    const binds = [pedido, pedido, ean];
+    try {
+      await env.DB.batch([
+        _auditoriaConGuarda(
+          env,
+          {
+            tabla: "validacion_eanes",
+            llave: pedido,
+            accion: "eliminar",
+            antes: {
+              ean,
+              sublinea: actual.sublinea,
+              unidades: actual.totales,
+              sinLimite: actual.sinLimite,
+            },
+            cedula: sesion.cedula,
+            nombre: sesion.nombre || "",
+            hechoEn: _ahoraISO(),
+          },
+          condicion,
+          binds,
+        ),
+        env.DB.prepare(
+          "DELETE FROM validacion_eanes WHERE numero_pedido = ? AND ean_producto = ?",
+        ).bind(pedido, ean),
+      ]);
+    } catch (errLote) {
+      throw await _errorBatchEan(env, errLote, condicion, binds, "");
+    }
+
+    const completo = await _trasCambioEan(env, ctx, pedido);
+    return {
+      success: true,
+      pedido,
+      ean,
+      efecto: completo === null ? "" : _efectoCierre(cerradoAntes, completo),
+      vista: await accionesPlaneacion.obtenerEanesPedido({ pedido }, env),
+    };
+  },
+
+  // F3b: "Corregir" un EAN: vuelve a calcular procesadas, sobrantes,
+  // operarios y estado desde sus registros activos (estados desfasados del
+  // pendiente 14 y contadores que no cuadran con los registros). No exige el
+  // interruptor: el contador es de D1, igual que en Editar registros. Con
+  // soloSimular responde cómo quedaría y qué pasará con el cierre del pedido.
+  async corregirEan(datos, env, ctx, ip, sesion) {
+    const pedido = String(datos.pedido || "").trim();
+    if (!pedido) throw new Error("Falta el número de pedido.");
+    const estado = await _estadoEanesPedido(env, pedido);
+    const ean = String(datos.ean || "").trim();
+    const actual = estado.eanes.find((e) => e.ean === ean);
+    if (!actual)
+      throw new Error(
+        "El EAN " + ean + " ya no está en el pedido. Vuelve a abrirlo.",
+      );
+
+    const antes = {
+      procesadas: _redondear2(actual.procesadas),
+      sobrantes: actual.sobrantes,
+      estado: actual.estado,
+    };
+    const despues = {
+      procesadas: _redondear2(actual.procesadoReg),
+      sobrantes: actual.sobrantesReg,
+      estado: _estadoContador(actual.ocupado, actual.totales, actual.sinLimite),
+    };
+    const _vista = () => accionesPlaneacion.obtenerEanesPedido({ pedido }, env);
+    if (
+      actual.procesadas === actual.procesadoReg &&
+      actual.sobrantes === actual.sobrantesReg &&
+      actual.estado === despues.estado
+    )
+      return {
+        success: true,
+        pedido,
+        ean,
+        sinCambios: true,
+        efecto: "",
+        vista: await _vista(),
+      };
+
+    const cerradoAntes = _pedidoCerrado(estado.eanes);
+    const efecto = _efectoCierre(
+      cerradoAntes,
+      _pedidoCerrado(
+        estado.eanes.map((e) =>
+          e === actual ? { ...e, estado: despues.estado } : e,
+        ),
+      ),
+    );
+    if (datos.soloSimular === true)
+      return {
+        success: true,
+        pedido,
+        ean,
+        simulacion: true,
+        efecto,
+        antes,
+        despues,
+      };
+
+    const condicion =
+      "EXISTS(SELECT 1 FROM justificaciones WHERE pedido = ?) OR " +
+      "NOT EXISTS(SELECT 1 FROM validacion_eanes WHERE numero_pedido = ? AND ean_producto = ?)";
+    const binds = [pedido, pedido, ean];
+    try {
+      await env.DB.batch([
+        _auditoriaConGuarda(
+          env,
+          {
+            tabla: "validacion_eanes",
+            llave: pedido,
+            accion: "corregir",
+            antes: { ean, ...antes },
+            despues: { ean, ...despues },
+            cedula: sesion.cedula,
+            nombre: sesion.nombre || "",
+            hechoEn: _ahoraISO(),
+          },
+          condicion,
+          binds,
+        ),
+        _sentenciaRecalcularContador(env, pedido, ean),
+      ]);
+    } catch (errLote) {
+      throw await _errorBatchEan(env, errLote, condicion, binds, "");
+    }
+
+    const completo = await _trasCambioEan(env, ctx, pedido);
+    return {
+      success: true,
+      pedido,
+      ean,
+      efecto: completo === null ? "" : _efectoCierre(cerradoAntes, completo),
+      vista: await _vista(),
     };
   },
 };
