@@ -415,7 +415,8 @@ export const accionesEscritura = {
       if (!cedula) throw new Error("Falta la cédula del operario.");
 
       const operarioMatch = await env.DB.prepare(
-        "SELECT nombre_operario AS nombre, cedula FROM operarios WHERE cedula = ? AND activo = 1",
+        "SELECT nombre_operario AS nombre, cedula FROM operarios WHERE cedula = ? AND activo = 1 " +
+          "AND es_operario = 1",
       )
         .bind(cedula)
         .first();

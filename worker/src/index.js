@@ -2,6 +2,7 @@ import { accionesLectura } from "./acciones-lectura.js";
 import { accionesAuth } from "./acciones-auth.js";
 import { accionesEscritura } from "./acciones-escritura.js";
 import { accionesPlaneacion } from "./acciones-planeacion.js";
+import { accionesUsuarios } from "./acciones-usuarios.js";
 import { _reconciliarSeguimientoD1 } from "./d1-negocio.js";
 import {
   leerModoAuth,
@@ -36,6 +37,7 @@ const PERMISOS_POR_ACCION = {
   eliminarEan: ["planeacion"],
   corregirEan: ["planeacion"],
   cargarEanes: ["planeacion"],
+  obtenerUsuariosPlaneacion: ["planeacion"],
 };
 
 export default {
@@ -162,6 +164,7 @@ const ACCIONES = {
   ...accionesAuth,
   ...accionesEscritura,
   ...accionesPlaneacion,
+  ...accionesUsuarios,
 };
 
 function json(data, status = 200) {

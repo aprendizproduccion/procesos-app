@@ -245,6 +245,7 @@ export async function _obtenerProcesoValidado(env, nombreProceso, pedido) {
 export async function _buscarCedulaPorNombre(env, nombre) {
   const row = await env.DB.prepare(
     "SELECT cedula FROM operarios WHERE lower(nombre_operario) = lower(?) AND activo = 1 " +
+      "AND es_operario = 1 " +
       "AND cedula IS NOT NULL AND TRIM(cedula) <> '' ORDER BY cedula LIMIT 1",
   )
     .bind(nombre)

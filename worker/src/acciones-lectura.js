@@ -35,9 +35,10 @@ export const accionesLectura = {
 
   async getOperariosData(datos, env) {
     // Sin cédula: el catálogo se descarga en cada carga y en cada
-    // visibilitychange, y el frontend solo usa nombre y equipo.
+    // visibilitychange, y el frontend solo usa nombre y equipo. Solo quienes
+    // tienen el rol de operario (módulo Usuarios): fuera los grupos.
     const { results } = await env.DB.prepare(
-      "SELECT nombre_operario AS nombre, equipo FROM operarios WHERE activo = 1",
+      "SELECT nombre_operario AS nombre, equipo FROM operarios WHERE activo = 1 AND es_operario = 1",
     ).all();
     return { success: true, data: results };
   },
@@ -61,7 +62,7 @@ export const accionesLectura = {
       "SELECT o.nombre_operario AS nombre, o.equipo, o.turno, " +
         "(SELECT MAX(hora_final) FROM registros " +
         "WHERE cedula_operario = ? AND fecha = ? AND anulado = 0) AS ultimoFin " +
-        "FROM operarios o WHERE o.cedula = ? AND o.activo = 1",
+        "FROM operarios o WHERE o.cedula = ? AND o.activo = 1 AND o.es_operario = 1",
     )
       .bind(cedula, fecha, cedula)
       .first();

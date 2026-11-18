@@ -23,9 +23,11 @@ const CUENTA_FICTICIA = {
   iteraciones: ITERACIONES_PBKDF2,
 };
 
+// Los grupos (Calidad, Picking...) no son personas: no entran con ningún rol.
 async function _personaActiva(env, cedula) {
   return env.DB.prepare(
-    "SELECT nombre_operario AS nombre FROM operarios WHERE cedula = ? AND activo = 1",
+    "SELECT nombre_operario AS nombre, es_operario AS esOperario FROM operarios " +
+      "WHERE cedula = ? AND activo = 1 AND es_grupo = 0",
   )
     .bind(cedula)
     .first();
@@ -102,7 +104,8 @@ export const accionesAuth = {
 
     if (rol === "operario") {
       const persona = await _personaActiva(env, cedula);
-      if (!persona) return { success: false, message: MSG_CEDULA_INACTIVA };
+      if (!persona || persona.esOperario !== 1)
+        return { success: false, message: MSG_CEDULA_INACTIVA };
       return _respuestaLogin(env, { rol, cedula, nombre: persona.nombre, v: 0 });
     }
 
@@ -207,10 +210,13 @@ export const accionesAuth = {
     // El nombre y el estado salen de Operarios (ahí están también coordinadores
     // y supernumerarios). Para desactivar no se exige que siga activo.
     const operario = await env.DB.prepare(
-      "SELECT nombre_operario AS nombre, activo FROM operarios WHERE cedula = ?",
+      "SELECT nombre_operario AS nombre, activo, es_grupo AS esGrupo FROM operarios WHERE cedula = ?",
     )
       .bind(cedula)
       .first();
+    if (operario && operario.esGrupo === 1) {
+      return { success: false, message: "Un grupo no puede tener cuenta." };
+    }
     if (activo === 1 && (!operario || operario.activo !== 1)) {
       return {
         success: false,

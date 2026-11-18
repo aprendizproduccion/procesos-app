@@ -1363,6 +1363,14 @@
           <span class="tarjetaApp-icono">🏢</span>
           <span>Clientes</span>
         </button>
+        <button
+          type="button"
+          class="tarjetaApp"
+          onclick="abrirUsuariosPlaneacion()"
+        >
+          <span class="tarjetaApp-icono">👥</span>
+          <span>Usuarios</span>
+        </button>
       </div>
       <button
         type="button"
@@ -2234,6 +2242,84 @@
         </div>
         <div id="plClientesAlerta"></div>
         <div id="plClientesLista"></div>
+      </div>
+    </div>
+
+    <div id="vistaUsuariosPlaneacion" style="display: none">
+      <button
+        type="button"
+        class="btn-submit btn-gv-contorno"
+        style="margin-bottom: 14px"
+        onclick="volverAlDashboard()"
+      >
+        ← Volver al Menú
+      </button>
+      <h1>Usuarios</h1>
+      <div class="card">
+        <p class="hint" style="margin-top: 0" id="plUsuariosNota"></p>
+        <div id="plUsuariosAvisos"></div>
+        <input
+          id="plUsuarioBuscar"
+          placeholder="Buscar por nombre o cédula..."
+          autocomplete="off"
+          enterkeyhint="search"
+        />
+        <div class="row2">
+          <div>
+            <label for="plUsuarioRol">Rol</label>
+            <select id="plUsuarioRol">
+              <option value="">Todos los roles</option>
+              <option value="operario">Operario</option>
+              <option value="supernumerario">Supernumerario</option>
+              <option value="coordinador">Coordinador</option>
+              <option value="administrativo">Administrativo</option>
+              <option value="planeacion">Planeación</option>
+              <option value="grupo">Grupo</option>
+              <option value="sinRol">Sin rol</option>
+            </select>
+          </div>
+          <div>
+            <label for="plUsuarioEstado">Estado</label>
+            <select id="plUsuarioEstado">
+              <option value="activos">Activos</option>
+              <option value="inactivos">Inactivos</option>
+              <option value="">Todos</option>
+            </select>
+          </div>
+        </div>
+        <div class="row2">
+          <div>
+            <label for="plUsuarioTurno">Turno</label>
+            <select id="plUsuarioTurno"></select>
+          </div>
+          <div>
+            <label for="plUsuarioEquipo">Equipo</label>
+            <select id="plUsuarioEquipo"></select>
+          </div>
+        </div>
+        <div id="plUsuariosAlerta"></div>
+        <div id="plUsuariosLista"></div>
+        <button
+          type="button"
+          id="btnPlUsuariosMas"
+          class="btn-submit btn-gv-contorno"
+          style="display: none"
+          onclick="verMasPlUsuarios()"
+        >
+          Ver más
+        </button>
+      </div>
+      <div class="card">
+        <h3 style="margin-top: 0">
+          Coordinadores y supernumerarios sin persona
+        </h3>
+        <p class="hint" style="margin-top: 0">
+          Son los nombres que salen en el registro. Cada uno se vincula a la
+          persona que lo usa; el nombre no cambia, porque es el que guardan sus
+          registros. Los grupos (Calidad, Picking, Maquinas) se crean como
+          persona en el corte.
+        </p>
+        <div id="plRolesSinPersona"></div>
       </div>
     </div>
 
@@ -5242,6 +5328,7 @@
           "vistaEanesPedido",
           "vistaCrearPedido",
           "vistaClientesPlaneacion",
+          "vistaUsuariosPlaneacion",
         ].forEach((id) => {
           document.getElementById(id).style.display = "none";
         });
@@ -5315,6 +5402,7 @@
           "vistaEanesPedido",
           "vistaCrearPedido",
           "vistaClientesPlaneacion",
+          "vistaUsuariosPlaneacion",
         ].forEach((id) => {
           document.getElementById(id).style.display = "none";
         });
@@ -8865,6 +8953,289 @@
             },
           );
         });
+
+      // ---------------- USUARIOS (Planeación, U1: solo lectura) ----------------
+      // Personas con sus roles (Operario, Supernumerario, Coordinador,
+      // Administrativo y Planeación), turno y equipo, y los nombres de
+      // coordinador y supernumerario que aún no tienen persona. Los roles, el
+      // turno y los avisos los calcula el Worker.
+      const PL_USUARIOS_POR_PAGINA = 50;
+      const PL_ETIQUETA_ROL = {
+        operario: "Operario",
+        supernumerario: "Supernumerario",
+        coordinador: "Coordinador",
+        administrativo: "Administrativo",
+        planeacion: "Planeación",
+      };
+      let plUsuarios = null; // última respuesta de obtenerUsuariosPlaneacion
+      let plUsuariosMostrados = PL_USUARIOS_POR_PAGINA;
+
+      function abrirUsuariosPlaneacion() {
+        _abrirVistaPlaneacion("vistaUsuariosPlaneacion");
+        document.getElementById("plUsuarioBuscar").value = "";
+        document.getElementById("plUsuarioRol").value = "";
+        document.getElementById("plUsuarioEstado").value = "activos";
+        ["plUsuarioTurno", "plUsuarioEquipo"].forEach(
+          (id) => (document.getElementById(id).innerHTML = ""),
+        );
+        plUsuarios = null;
+        plUsuariosMostrados = PL_USUARIOS_POR_PAGINA;
+        [
+          "plUsuariosNota",
+          "plUsuariosAvisos",
+          "plUsuariosLista",
+          "plRolesSinPersona",
+        ].forEach((id) => (document.getElementById(id).innerHTML = ""));
+        document.getElementById("btnPlUsuariosMas").style.display = "none";
+        document.getElementById("plUsuariosAlerta").innerHTML =
+          '<p class="hint">Cargando personas...</p>';
+        const consulta = ++plConsulta;
+        llamarAPI("obtenerUsuariosPlaneacion", {})
+          .then(function (res) {
+            if (consulta !== plConsulta || res.sesionVencida) return;
+            if (!res.success) {
+              _errorPl("plUsuariosAlerta", "plUsuariosLista", res.message);
+              return;
+            }
+            _aplicarUsuariosPl(res);
+          })
+          .catch(function (err) {
+            if (consulta !== plConsulta) return;
+            _errorPl(
+              "plUsuariosAlerta",
+              "plUsuariosLista",
+              "Error de conexión: " + err.message,
+            );
+          });
+      }
+
+      function _opcionesPl(primeras, resto) {
+        return primeras
+          .concat(resto)
+          .map(
+            (o) =>
+              `<option value="${escapeHtml(o.valor)}">${escapeHtml(o.texto)}</option>`,
+          )
+          .join("");
+      }
+
+      function _aplicarUsuariosPl(res) {
+        plUsuarios = res;
+        document.getElementById("plUsuariosNota").textContent =
+          res.edicionHabilitada
+            ? "Las personas no se borran de una vez: primero se desactivan."
+            : "Solo lectura. Hasta el corte, las personas salen de la hoja Operarios y los nombres de coordinador y supernumerario de supervisores-supernumerarios; el turno se deduce de la hora.";
+        document.getElementById("plUsuarioTurno").innerHTML = _opcionesPl(
+          [{ valor: "", texto: "Todos los turnos" }],
+          res.turnos
+            .map((t) => ({
+              valor: String(t.id),
+              texto:
+                t.nombre +
+                " (" +
+                t.hora +
+                ")" +
+                (t.activo ? "" : " · inactivo") +
+                " · " +
+                t.personas,
+            }))
+            .concat([{ valor: "sin", texto: "Sin turno" }]),
+        );
+        document.getElementById("plUsuarioEquipo").innerHTML = _opcionesPl(
+          [{ valor: "", texto: "Todos los equipos" }],
+          res.equipos
+            .map((e) => ({
+              valor: "e:" + e.nombre,
+              texto: e.nombre + " · " + e.personas,
+            }))
+            .concat([{ valor: "sin", texto: "Sin equipo" }]),
+        );
+        document.getElementById("plUsuariosAvisos").innerHTML = res.alertas
+          .map((a) => `<div class="msg warn">${escapeHtml(a)}</div>`)
+          .join("");
+        renderPlUsuarios();
+        renderPlRolesSinPersona();
+      }
+
+      function _plUsuariosFiltrados() {
+        if (!plUsuarios) return [];
+        const clave = normalizarPedido(
+          document.getElementById("plUsuarioBuscar").value,
+        );
+        const rol = document.getElementById("plUsuarioRol").value;
+        const estado = document.getElementById("plUsuarioEstado").value;
+        const turno = document.getElementById("plUsuarioTurno").value;
+        const equipo = document.getElementById("plUsuarioEquipo").value;
+        return plUsuarios.personas.filter(function (p) {
+          if (estado === "activos" && !p.activo) return false;
+          if (estado === "inactivos" && p.activo) return false;
+          if (rol === "grupo") {
+            if (!p.esGrupo) return false;
+          } else if (rol === "sinRol") {
+            if (p.esGrupo || p.roles.length) return false;
+          } else if (rol && !p.roles.includes(rol)) return false;
+          if (turno === "sin") {
+            if (p.esGrupo || p.turno) return false;
+          } else if (turno && !(p.turno && String(p.turno.id) === turno))
+            return false;
+          if (equipo === "sin") {
+            if (p.equipo) return false;
+          } else if (equipo && "e:" + p.equipo !== equipo) return false;
+          return (
+            !clave ||
+            normalizarPedido(p.nombre).includes(clave) ||
+            normalizarPedido(p.cedula).includes(clave)
+          );
+        });
+      }
+
+      function _tarjetaPlUsuario(p) {
+        const chips = [];
+        if (p.esOperario) chips.push({ texto: "Operario" });
+        p.nombresRol.forEach((n) =>
+          chips.push({
+            texto:
+              PL_ETIQUETA_ROL[n.tipo] +
+              ': "' +
+              n.nombre +
+              '"' +
+              (n.activo ? "" : " (inactivo)"),
+            apagado: !n.activo,
+          }),
+        );
+        p.cuentas.forEach((c) =>
+          chips.push({
+            texto:
+              (PL_ETIQUETA_ROL[c.rol] || c.rol) +
+              (c.activa ? "" : " (cuenta inactiva)"),
+            apagado: !c.activa,
+          }),
+        );
+        const roles = chips.length
+          ? chips
+              .map(
+                (c) =>
+                  `<span class="pl-sublinea${c.apagado ? " pl-huerfana" : ""}">${escapeHtml(c.texto)}</span>`,
+              )
+              .join("")
+          : '<span class="pl-sublinea pl-huerfana">Sin rol</span>';
+        let turno = "";
+        if (!p.esGrupo) {
+          turno = p.turno
+            ? "Turno " + p.turno.nombre + " (" + p.turno.hora + ")"
+            : p.hora
+              ? "Turno a las " + p.hora + " (no está en el catálogo)"
+              : "Sin turno (empieza a las 06:00)";
+        }
+        // El grupo ya lo dice la cabecera y no tiene turno.
+        const datos = p.esGrupo
+          ? [p.equipo].filter(Boolean)
+          : [turno, p.equipo || "Sin equipo"];
+        const distintivo = !p.activo
+          ? '<span class="pl-distintivo">Inactivo</span>'
+          : p.yo
+            ? '<span class="pl-distintivo">Tú</span>'
+            : "";
+        return (
+          `<div class="pl-tarjeta">` +
+          `<div class="pl-cabecera"><strong>${escapeHtml(p.nombre)}</strong>` +
+          `<span class="pl-fecha">${p.esGrupo ? "Grupo" : "CC " + escapeHtml(p.cedula)}</span>` +
+          distintivo +
+          `</div>` +
+          (datos.length
+            ? `<div class="hint" style="margin: 2px 0 0">${escapeHtml(datos.join(" · "))}</div>`
+            : "") +
+          `<div class="pl-sublineas">${roles}</div>` +
+          `</div>`
+        );
+      }
+
+      function renderPlUsuarios() {
+        if (!plUsuarios) return;
+        const lista = _plUsuariosFiltrados();
+        const visibles = lista.slice(0, plUsuariosMostrados);
+        document.getElementById("plUsuariosLista").innerHTML = visibles
+          .map(_tarjetaPlUsuario)
+          .join("");
+        document.getElementById("plUsuariosAlerta").innerHTML = lista.length
+          ? '<p class="hint">Mostrando ' +
+            visibles.length +
+            " de " +
+            lista.length +
+            (lista.length === 1 ? " persona.</p>" : " personas.</p>")
+          : '<p class="hint">No hay personas con ese filtro.</p>';
+        document.getElementById("btnPlUsuariosMas").style.display =
+          lista.length > visibles.length ? "" : "none";
+      }
+
+      function verMasPlUsuarios() {
+        plUsuariosMostrados += PL_USUARIOS_POR_PAGINA;
+        renderPlUsuarios();
+      }
+
+      function renderPlRolesSinPersona() {
+        const lista = plUsuarios ? plUsuarios.nombresSinPersona : [];
+        document.getElementById("plRolesSinPersona").innerHTML = lista.length
+          ? lista
+              .map(function (r) {
+                const registros =
+                  r.registros === 1 ? "1 registro" : r.registros + " registros";
+                const perdida = r.cedulaPerdida
+                  ? `<div class="msg warn">Estaba vinculado a la cédula ${escapeHtml(r.cedulaPerdida)}, que ya no está en Operarios.</div>`
+                  : "";
+                const sugerencias = r.sugerencias.length
+                  ? `<div class="hint" style="margin: 6px 0 0">Puede ser: ` +
+                    r.sugerencias
+                      .map(
+                        (s) =>
+                          escapeHtml(s.nombre) +
+                          (s.cuenta ? " (con cuenta)" : "") +
+                          (s.exacta ? "" : " (nombre parecido)"),
+                      )
+                      .join(" · ") +
+                    (r.coincidencias > r.sugerencias.length
+                      ? " · y " +
+                        (r.coincidencias - r.sugerencias.length) +
+                        " más"
+                      : "") +
+                    `</div>`
+                  : r.activo
+                    ? '<div class="hint" style="margin: 6px 0 0">Sin coincidencias entre las personas activas.</div>'
+                    : "";
+                return (
+                  `<div class="pl-tarjeta">` +
+                  `<div class="pl-cabecera"><strong>${escapeHtml(r.nombre)}</strong>` +
+                  `<span class="pl-fecha">${PL_ETIQUETA_ROL[r.tipo]} · ${registros}</span>` +
+                  (r.activo
+                    ? ""
+                    : '<span class="pl-distintivo">Inactivo</span>') +
+                  `</div>` +
+                  perdida +
+                  sugerencias +
+                  `</div>`
+                );
+              })
+              .join("")
+          : '<p class="hint">Todos los nombres tienen persona.</p>';
+      }
+
+      document
+        .getElementById("plUsuarioBuscar")
+        .addEventListener("input", function () {
+          plUsuariosMostrados = PL_USUARIOS_POR_PAGINA;
+          renderPlUsuarios();
+        });
+      [
+        "plUsuarioRol",
+        "plUsuarioEstado",
+        "plUsuarioTurno",
+        "plUsuarioEquipo",
+      ].forEach((id) =>
+        document.getElementById(id).addEventListener("change", function () {
+          plUsuariosMostrados = PL_USUARIOS_POR_PAGINA;
+          renderPlUsuarios();
+        }),
+      );
 
       let opNombreOperario = "";
       let opCedulaConfirmada = "";
