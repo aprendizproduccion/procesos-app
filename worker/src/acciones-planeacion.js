@@ -12,6 +12,8 @@
 // F3b: agregar, editar y eliminar un EAN (con el interruptor, como F2b) y
 // "Corregir" su contador desde los registros (sin interruptor: el contador es
 // de D1 y la hoja solo lo recibe por el espejo).
+// F3c: pegar varios EAN desde Excel con vista previa y guardado todo o nada
+// (cargarEanes: la vista previa funciona ya; guardar exige el interruptor).
 
 import {
   _normalizarPedido,
@@ -551,6 +553,215 @@ async function _errorBatchEan(env, errLote, condicion, binds, mensajeUnico) {
   if (mensajeUnico && /UNIQUE/i.test(String(errLote && errLote.message)))
     return new Error(mensajeUnico);
   return errLote;
+}
+
+// ---------------- F3c: pegar EAN desde Excel ----------------
+
+const MAX_FILAS_CARGA = 300;
+const MAX_LARGO_CARGA = 100000;
+
+// Unidades pegadas: entero sin separadores o con puntos de miles exactos
+// ("1.200", "12.500"). La coma es decimal en Colombia: no se acepta. Devuelve
+// el número, "" si la celda está vacía o null si no se entiende.
+function _unidadesPegadas(texto) {
+  const valor = String(texto == null ? "" : texto).trim();
+  if (!valor) return "";
+  if (/^\d+$/.test(valor)) return Number(valor);
+  if (/^\d{1,3}(\.\d{3})+$/.test(valor))
+    return Number(valor.replace(/\./g, ""));
+  return null;
+}
+
+// Una línea pegada en celdas: Excel copia con tabuladores; también se acepta
+// punto y coma, o espacios si no hay ninguno de los dos (escrito a mano: la
+// sublínea es lo que queda después del EAN y las unidades).
+function _celdasLinea(linea) {
+  if (linea.includes("\t")) return linea.split("\t").map((c) => c.trim());
+  if (linea.includes(";")) return linea.split(";").map((c) => c.trim());
+  const partes = linea.trim().split(/\s+/);
+  return partes.length > 2
+    ? [partes[0], partes[1], partes.slice(2).join(" ")]
+    : partes;
+}
+
+// Si la primera línea es un encabezado (tiene una columna de EAN y otra de
+// unidades), dice en qué columna está cada dato. Entre varias columnas de
+// unidades manda la de "totales" (la hoja Validacion eanes tiene varias). Las
+// demás columnas se ignoran, salvo la de pedido, que debe ser este pedido.
+function _columnasCarga(celdas) {
+  const columnas = {};
+  celdas.forEach((celda, i) => {
+    const t = _normalizarPedido(celda);
+    let campo = "";
+    if (t.includes("ean")) campo = "ean";
+    else if (t.includes("sublinea")) campo = "sublinea";
+    else if (t.includes("unidad") || t.includes("cantidad")) campo = "unidades";
+    else if (t.includes("pedido")) campo = "pedido";
+    if (!campo) return;
+    if (
+      columnas[campo] === undefined ||
+      (campo === "unidades" && t.includes("total"))
+    )
+      columnas[campo] = i;
+  });
+  return columnas.ean !== undefined && columnas.unidades !== undefined
+    ? columnas
+    : null;
+}
+
+// Lee el texto pegado y revisa cada fila con las reglas de guardarEan, sin
+// escribir. Sin encabezado, el orden es EAN, unidades y sublínea. La sublínea
+// puede faltar si el pedido tiene una sola. Un EAN que ya está igual en el
+// pedido se omite; distinto, es un error (se cambia con Editar). Las líneas se
+// numeran como en el texto pegado.
+function _analizarCarga(texto, pedido, estado) {
+  let columnas = { ean: 0, unidades: 1, sublinea: 2 };
+  let conEncabezado = false;
+  let primera = true;
+  const datos = [];
+  String(texto || "")
+    .split(/\r\n|\r|\n/)
+    .forEach((linea, i) => {
+      if (!linea.trim()) return;
+      const celdas = _celdasLinea(linea);
+      if (primera) {
+        primera = false;
+        const encabezado = _columnasCarga(celdas);
+        if (encabezado) {
+          columnas = encabezado;
+          conEncabezado = true;
+          return;
+        }
+      }
+      datos.push({ linea: i + 1, celdas });
+    });
+  if (datos.length === 0)
+    throw new Error("Pega al menos una fila con el EAN y sus unidades.");
+  if (datos.length > MAX_FILAS_CARGA)
+    throw new Error(
+      "Máximo " +
+        MAX_FILAS_CARGA +
+        " filas por carga (pegaste " +
+        datos.length +
+        "). Divídela en partes.",
+    );
+
+  const vistos = [];
+  const nuevos = [];
+  const filas = datos.map(({ linea, celdas }) => {
+    const celda = (campo) =>
+      columnas[campo] === undefined
+        ? ""
+        : String(celdas[columnas[campo]] || "").trim();
+    const fila = {
+      linea,
+      ean: celda("ean"),
+      sublinea: celda("sublinea"),
+      unidades: celda("unidades"),
+      estado: "error",
+      mensaje: "",
+    };
+    try {
+      if (!conEncabezado && celdas.slice(3).some((c) => c !== ""))
+        throw new Error(
+          "Tiene más de 3 columnas. Sin encabezado, el orden es EAN, unidades y sublínea.",
+        );
+      const pedidoFila = celda("pedido");
+      if (
+        pedidoFila &&
+        _normalizarPedido(pedidoFila) !== _normalizarPedido(pedido)
+      )
+        throw new Error("Es del pedido " + pedidoFila + ".");
+      if (/^\d+([.,]\d+)?e[+-]?\d+$/i.test(fila.ean))
+        throw new Error(
+          "Excel pasó el EAN a notación científica y se perdieron dígitos: da formato de texto a la columna y vuelve a copiar.",
+        );
+      const ean = _eanValidado(fila.ean);
+      fila.ean = ean;
+      const esCero = ean === "0";
+
+      const unidades = _unidadesPegadas(fila.unidades);
+      if (unidades === "")
+        throw new Error(
+          'Faltan las unidades. Un EAN sin límite se agrega con "+ Agregar EAN".',
+        );
+      if (
+        unidades === null ||
+        unidades < (esCero ? 0 : 1) ||
+        unidades > MAX_UNIDADES_PEDIDO
+      )
+        throw new Error(
+          esCero
+            ? "Unidades no válidas: el EAN 0 lleva un número entero desde 0."
+            : "Unidades no válidas: debe ser un número entero mayor que 0, sin decimales.",
+        );
+      fila.unidades = unidades;
+
+      let sublinea;
+      if (!fila.sublinea) {
+        if (estado.sublineas.length !== 1)
+          throw new Error(
+            "Falta la sublínea: el pedido tiene varias (" +
+              estado.sublineas.join(", ") +
+              ").",
+          );
+        sublinea = estado.sublineas[0];
+      } else {
+        sublinea = estado.sublineas.find(
+          (s) => _normalizarPedido(s) === _normalizarPedido(fila.sublinea),
+        );
+        if (!sublinea)
+          throw new Error(
+            'La sublínea "' +
+              fila.sublinea +
+              '" no es del pedido (tiene: ' +
+              estado.sublineas.join(", ") +
+              ").",
+          );
+      }
+      fila.sublinea = sublinea;
+
+      const previa = vistos.find((v) => _mismoEan(v.ean, ean));
+      if (previa)
+        throw new Error(
+          (esCero ? "Solo puede haber un EAN 0" : "Repetido") +
+            ": ya está en la línea " +
+            previa.linea +
+            ".",
+        );
+      vistos.push({ ean, linea });
+
+      const existente = estado.eanes.find((e) => _mismoEan(e.ean, ean));
+      if (existente) {
+        if (
+          existente.sublinea === sublinea &&
+          !existente.sinLimite &&
+          existente.totales === unidades
+        ) {
+          fila.ean = existente.ean;
+          fila.estado = "igual";
+          fila.mensaje = "Ya está en el pedido así: se omite.";
+          return fila;
+        }
+        throw new Error(
+          (esCero ? "El pedido ya tiene un EAN 0" : "Ya está en el pedido") +
+            (existente.sinLimite
+              ? " sin límite"
+              : " con " + existente.totales + " unidades") +
+            ' en la sublínea "' +
+            existente.sublinea +
+            '": cámbialo con Editar.',
+        );
+      }
+      fila.estado = "nuevo";
+      nuevos.push({ ean, sublinea, unidades });
+      return fila;
+    } catch (err) {
+      fila.mensaje = err.message;
+      return fila;
+    }
+  });
+  return { filas, nuevos };
 }
 
 export const accionesPlaneacion = {
@@ -2316,6 +2527,174 @@ export const accionesPlaneacion = {
       success: true,
       pedido,
       ean,
+      efecto: completo === null ? "" : _efectoCierre(cerradoAntes, completo),
+      vista: await _vista(),
+    };
+  },
+
+  // F3c: pega varios EAN desde Excel (EAN, unidades y sublínea) en un pedido.
+  // datos: { pedido, texto, soloSimular, efectoAceptado }
+  // - El Worker lee el texto y revisa cada fila con las reglas de guardarEan
+  //   (ver _analizarCarga). Sin límite no se carga: se marca con el
+  //   formulario, para que una celda vacía nunca vuelva a significar "sin
+  //   límite".
+  // - soloSimular devuelve la vista previa sin escribir; funciona también
+  //   antes del corte. Guardar exige el interruptor y es todo o nada: con una
+  //   fila con error no se guarda nada.
+  // - Si la carga reabre un pedido cerrado (Cumple), responde
+  //   { confirmar: "reabre" } sin escribir, igual que guardarEan.
+  // - Si todos los EAN ya están igual (un reintento tras un error de red),
+  //   responde sin cambios.
+  async cargarEanes(datos, env, ctx, ip, sesion) {
+    const pedido = String(datos.pedido || "").trim();
+    if (!pedido) throw new Error("Falta el número de pedido.");
+    const simular = datos.soloSimular === true;
+    if (!simular) await _exigirCatalogoEnApp(env, "pedidos");
+    const texto = String(datos.texto || "");
+    if (texto.length > MAX_LARGO_CARGA)
+      throw new Error(
+        "El texto pegado es demasiado largo: divide la carga en partes de hasta " +
+          MAX_FILAS_CARGA +
+          " filas.",
+      );
+    const estado = await _estadoEanesPedido(env, pedido);
+    const { filas, nuevos } = _analizarCarga(texto, pedido, estado);
+    const errores = filas.filter((f) => f.estado === "error").length;
+
+    const filaPedido = await env.DB.prepare(
+      "SELECT MAX(unidades_pedidas) AS unidades FROM pedidos WHERE numero_pedido = ?",
+    )
+      .bind(pedido)
+      .first();
+    const unidadesPedidas = Number(filaPedido && filaPedido.unidades) || 0;
+    const agregados = nuevos.map((n) => ({
+      ean: n.ean,
+      sinLimite: false,
+      totales: n.unidades,
+      estado: "",
+    }));
+    const _sumaReferentes = (lista) =>
+      _redondear2(
+        lista
+          .filter((e) => _esEanReferente(e.ean, e.sinLimite, e.totales))
+          .reduce((s, e) => s + e.totales, 0),
+      );
+    const sumaDespues = _sumaReferentes(estado.eanes.concat(agregados));
+    const cerradoAntes = _pedidoCerrado(estado.eanes);
+    const efecto = errores
+      ? ""
+      : _efectoCierre(
+          cerradoAntes,
+          _pedidoCerrado(estado.eanes.concat(agregados)),
+        );
+    const resumen = {
+      filas: filas.length,
+      nuevos: nuevos.length,
+      iguales: filas.filter((f) => f.estado === "igual").length,
+      errores,
+      unidadesNuevas: nuevos.reduce((s, n) => s + n.unidades, 0),
+      sumaEanAntes: _sumaReferentes(estado.eanes),
+      sumaEanDespues: sumaDespues,
+      unidadesPedidas,
+      alertaSuma: _alertaSumaEan(sumaDespues, unidadesPedidas),
+    };
+    if (simular)
+      return {
+        success: true,
+        pedido,
+        simulacion: true,
+        filas,
+        resumen,
+        efecto,
+        guardable: errores === 0 && nuevos.length > 0,
+        edicionHabilitada: await _edicionHabilitada(env, ["pedidos"]),
+      };
+
+    if (errores)
+      throw new Error(
+        (errores === 1 ? "1 fila tiene" : errores + " filas tienen") +
+          " error: revisa la vista previa. No se guardó nada.",
+      );
+    const _vista = () => accionesPlaneacion.obtenerEanesPedido({ pedido }, env);
+    if (nuevos.length === 0)
+      return {
+        success: true,
+        pedido,
+        sinCambios: true,
+        agregados: 0,
+        omitidos: resumen.iguales,
+        efecto: "",
+        vista: await _vista(),
+      };
+    if (efecto && datos.efectoAceptado !== efecto)
+      return { success: true, pedido, confirmar: efecto };
+
+    // Guarda: no llegó una justificación, las sublíneas siguen en el pedido y
+    // ningún EAN de la carga (en ninguna de sus formas) apareció entre la
+    // lectura y la escritura.
+    const sublineas = _distintos(nuevos.map((n) => n.sublinea));
+    const formas = _distintos(
+      nuevos.flatMap((n) => _formasEan(n.ean).map((f) => f.toUpperCase())),
+    );
+    const condicion =
+      "EXISTS(SELECT 1 FROM justificaciones WHERE pedido = ?) OR " +
+      "EXISTS(SELECT 1 FROM validacion_eanes WHERE numero_pedido = ? " +
+      "AND UPPER(ean_producto) IN (SELECT value FROM json_each(?))) OR " +
+      "(SELECT COUNT(DISTINCT sublinea) FROM pedidos WHERE numero_pedido = ? " +
+      "AND sublinea IN (SELECT value FROM json_each(?))) < ?";
+    const binds = [
+      pedido,
+      pedido,
+      JSON.stringify(formas),
+      pedido,
+      JSON.stringify(sublineas),
+      sublineas.length,
+    ];
+    const lista = nuevos.map((n) => ({
+      ean: n.ean,
+      sublinea: n.sublinea,
+      unidades: n.unidades,
+    }));
+    const ahora = _ahoraISO();
+    try {
+      await env.DB.batch([
+        _auditoriaConGuarda(
+          env,
+          {
+            tabla: "validacion_eanes",
+            llave: pedido,
+            accion: "cargar",
+            despues: { eanes: lista },
+            cedula: sesion.cedula,
+            nombre: sesion.nombre || "",
+            hechoEn: ahora,
+          },
+          condicion,
+          binds,
+        ),
+        env.DB.prepare(
+          "INSERT INTO validacion_eanes (numero_pedido, ean_producto, sublinea, unidades_totales, " +
+            "sin_limite, actualizado_en) SELECT ?, json_extract(value, '$.ean'), " +
+            "json_extract(value, '$.sublinea'), json_extract(value, '$.unidades'), 0, ? " +
+            "FROM json_each(?)",
+        ).bind(pedido, ahora, JSON.stringify(lista)),
+      ]);
+    } catch (errLote) {
+      throw await _errorBatchEan(
+        env,
+        errLote,
+        condicion,
+        binds,
+        "Uno de los EAN de la carga ya está en el pedido. Vuelve a revisarla.",
+      );
+    }
+
+    const completo = await _trasCambioEan(env, ctx, pedido);
+    return {
+      success: true,
+      pedido,
+      agregados: nuevos.length,
+      omitidos: resumen.iguales,
       efecto: completo === null ? "" : _efectoCierre(cerradoAntes, completo),
       vista: await _vista(),
     };

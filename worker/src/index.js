@@ -35,6 +35,7 @@ const PERMISOS_POR_ACCION = {
   guardarEan: ["planeacion"],
   eliminarEan: ["planeacion"],
   corregirEan: ["planeacion"],
+  cargarEanes: ["planeacion"],
 };
 
 export default {

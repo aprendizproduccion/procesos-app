@@ -534,6 +534,13 @@
       #plEanesTabla.pl-solo-lectura .pl-col-acciones {
         display: none;
       }
+      #cargaEanPlVista tr.pl-carga-error td {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+      #cargaEanPlVista tr.pl-carga-igual td {
+        color: var(--gv-texto-suave);
+      }
 
       /* ===== Botones — Manual de marca, sección 07 ===== */
       /* Base "con caja": 48 px de alto, 14 px, ancho completo. */
@@ -777,6 +784,12 @@
       .modal-box .row2 button.btn-gv-peligro {
         background: #dc2626;
         color: var(--gv-white);
+      }
+      .modal-box .row2 button:disabled {
+        background: var(--gv-platinum);
+        color: var(--gv-texto-suave);
+        border-color: var(--gv-borde);
+        cursor: not-allowed;
       }
 
       /* ===== Responsive para móviles ===== */
@@ -1971,6 +1984,15 @@
         >
           + Agregar EAN
         </button>
+        <button
+          type="button"
+          id="btnPlCargarEan"
+          class="btn-submit btn-gv-contorno"
+          style="display: none"
+          onclick="abrirCargaEanPl()"
+        >
+          Pegar EAN desde Excel
+        </button>
         <input
           id="plEanBuscar"
           placeholder="Buscar o escanear un EAN..."
@@ -2870,6 +2892,52 @@
             Cancelar
           </button>
           <button type="button" id="btnGuardarEanPl" onclick="guardarEanPl()">
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="modalCargaEanPl" class="modal-overlay">
+      <div
+        class="modal-box"
+        style="max-width: 640px; max-height: 100%; overflow-y: auto"
+      >
+        <h3 id="modalCargaEanPlTitulo">Pegar EAN desde Excel</h3>
+        <p class="hint" style="margin-top: 0" id="cargaEanPlNota"></p>
+        <textarea
+          id="cargaEanPlTexto"
+          rows="7"
+          spellcheck="false"
+          autocomplete="off"
+          placeholder="Pega aquí las filas copiadas de Excel"
+        ></textarea>
+        <div id="cargaEanPlAlerta"></div>
+        <div
+          id="cargaEanPlVista"
+          style="max-height: 40vh; overflow-y: auto"
+        ></div>
+        <div class="row2" style="margin-top: 8px">
+          <button
+            type="button"
+            class="btn-gv-contorno"
+            onclick="cerrarCargaEanPl()"
+          >
+            Cerrar
+          </button>
+          <button
+            type="button"
+            id="btnRevisarCargaEanPl"
+            class="btn-gv-contorno"
+            onclick="revisarCargaEanPl()"
+          >
+            Revisar
+          </button>
+          <button
+            type="button"
+            id="btnGuardarCargaEanPl"
+            onclick="guardarCargaEanPl()"
+          >
             Guardar
           </button>
         </div>
@@ -5252,6 +5320,7 @@
         });
         cerrarConfirmarPl();
         cerrarEanPl();
+        cerrarCargaEanPl();
 
         // 2. Vaciar inputs, textareas y selects simples
         const camposAVaciar = [
@@ -6900,6 +6969,7 @@
           "plEanesBody",
         ].forEach((id) => (document.getElementById(id).innerHTML = ""));
         document.getElementById("btnPlAgregarEan").style.display = "none";
+        document.getElementById("btnPlCargarEan").style.display = "none";
         document.getElementById("plEanesTablaWrap").style.display = "none";
         document.getElementById("plEanesMsg").innerHTML =
           '<p class="hint">Cargando EAN...</p>';
@@ -6956,6 +7026,9 @@
             'Hasta el corte, los EAN se asignan en la hoja "Validacion eanes": aquí ves cómo va cada uno y puedes usar Corregir; el formulario se puede abrir, pero no guarda.',
           );
         document.getElementById("btnPlAgregarEan").style.display = r.editable
+          ? ""
+          : "none";
+        document.getElementById("btnPlCargarEan").style.display = r.editable
           ? ""
           : "none";
         document
@@ -7443,6 +7516,249 @@
           document.getElementById("eanPlUnidades").disabled = this.checked;
           _notaEanPl();
         });
+
+      // ---- EAN de un pedido (F3c: pegar desde Excel) ----
+      // El Worker lee el texto, revisa cada fila y calcula el efecto en el
+      // cierre (cargarEanes); aquí solo se pinta la vista previa. Guardar es
+      // todo o nada y solo se habilita con una revisión sin errores del mismo
+      // texto que está escrito.
+      let plCarga = null; // última revisión (cargarEanes con soloSimular)
+      let plCargaTexto = ""; // el texto de esa revisión
+      let plCargaEnCurso = false;
+
+      function abrirCargaEanPl() {
+        if (!plEanes || !plEanes.editable) return;
+        plCarga = null;
+        plCargaTexto = "";
+        const subs = plEanes.sublineas;
+        document.getElementById("modalCargaEanPlTitulo").textContent =
+          "Pegar EAN en el pedido " + plEanes.pedido;
+        document.getElementById("cargaEanPlNota").textContent =
+          "Copia de Excel las columnas EAN, unidades y sublínea, en ese orden o con su encabezado. " +
+          (subs.length === 1
+            ? "La sublínea puede faltar: se usa " + subs[0] + ". "
+            : "Sublíneas del pedido: " + subs.join(", ") + ". ") +
+          "Máximo 300 filas. Los EAN sin límite se agregan uno a uno con + Agregar EAN." +
+          (plEanes.edicionHabilitada
+            ? ""
+            : " Hasta el corte puedes revisar la carga, pero no guardarla.");
+        document.getElementById("cargaEanPlTexto").value = "";
+        document.getElementById("cargaEanPlAlerta").innerHTML = "";
+        document.getElementById("cargaEanPlVista").innerHTML = "";
+        _botonesCargaEanPl();
+        document.getElementById("modalCargaEanPl").classList.add("visible");
+        document.getElementById("cargaEanPlTexto").focus();
+      }
+
+      function cerrarCargaEanPl() {
+        plCarga = null;
+        document.getElementById("modalCargaEanPl").classList.remove("visible");
+      }
+
+      function _cargaAbiertaPl() {
+        return document
+          .getElementById("modalCargaEanPl")
+          .classList.contains("visible");
+      }
+
+      function _botonesCargaEanPl() {
+        const texto = document.getElementById("cargaEanPlTexto").value;
+        document.getElementById("btnRevisarCargaEanPl").disabled =
+          plCargaEnCurso || !texto.trim();
+        document.getElementById("btnGuardarCargaEanPl").disabled =
+          plCargaEnCurso ||
+          !plEanes ||
+          !plEanes.edicionHabilitada ||
+          !plCarga ||
+          !plCarga.guardable ||
+          texto !== plCargaTexto;
+      }
+
+      function revisarCargaEanPl() {
+        if (plCargaEnCurso || !plEanes) return;
+        const texto = document.getElementById("cargaEanPlTexto").value;
+        if (!texto.trim()) return;
+        const alerta = document.getElementById("cargaEanPlAlerta");
+        const vista = document.getElementById("cargaEanPlVista");
+        const consulta = plEanesConsulta;
+        plCarga = null;
+        plCargaEnCurso = true;
+        _botonesCargaEanPl();
+        alerta.innerHTML = '<p class="hint">Revisando...</p>';
+        vista.innerHTML = "";
+        llamarAPI("cargarEanes", {
+          pedido: plEanes.pedido,
+          texto,
+          soloSimular: true,
+        })
+          .then(function (res) {
+            plCargaEnCurso = false;
+            _botonesCargaEanPl();
+            if (
+              res.sesionVencida ||
+              consulta !== plEanesConsulta ||
+              !_cargaAbiertaPl()
+            )
+              return;
+            if (!res.success) {
+              alerta.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
+              return;
+            }
+            plCarga = res;
+            plCargaTexto = texto;
+            alerta.innerHTML = "";
+            _pintarCargaEanPl();
+            _botonesCargaEanPl();
+          })
+          .catch(function (err) {
+            plCargaEnCurso = false;
+            _botonesCargaEanPl();
+            alerta.innerHTML = `<div class="msg err">${escapeHtml("Error de conexión: " + err.message)}</div>`;
+          });
+      }
+
+      // Primero las filas con error, luego las nuevas y al final las que ya
+      // estaban; dentro de cada grupo, en el orden en que se pegaron.
+      function _pintarCargaEanPl() {
+        const r = plCarga;
+        const k = r.resumen;
+        const partes = [];
+        if (k.nuevos)
+          partes.push(
+            (k.nuevos === 1 ? "1 EAN nuevo" : k.nuevos + " EAN nuevos") +
+              " (" +
+              _fmtUnidades(k.unidadesNuevas) +
+              " unidades)",
+          );
+        if (k.iguales)
+          partes.push(
+            k.iguales === 1
+              ? "1 ya estaba igual y se omite"
+              : k.iguales + " ya estaban iguales y se omiten",
+          );
+        if (k.errores)
+          partes.push(
+            k.errores === 1
+              ? "1 fila con error"
+              : k.errores + " filas con error",
+          );
+        const avisos = [];
+        if (k.errores)
+          avisos.push(
+            `<div class="msg err">${escapeHtml("Corrige en Excel las filas con error y vuelve a pegar: la carga se guarda completa o no se guarda.")}</div>`,
+          );
+        else if (!k.nuevos)
+          avisos.push(
+            '<div class="msg ok">Todos los EAN ya están en el pedido: no hay nada que guardar.</div>',
+          );
+        if (k.alertaSuma)
+          avisos.push(
+            `<div class="msg warn">${escapeHtml("Después de la carga: " + k.alertaSuma)}</div>`,
+          );
+        if (r.efecto)
+          avisos.push(
+            `<div class="msg warn">${escapeHtml(_textoEfectoPl(r.efecto, r.pedido))}</div>`,
+          );
+        const orden = { error: 0, nuevo: 1, igual: 2 };
+        const etiqueta = { error: "Error", nuevo: "Nuevo", igual: "Ya está" };
+        const filas = r.filas
+          .slice()
+          .sort(
+            (a, b) => orden[a.estado] - orden[b.estado] || a.linea - b.linea,
+          );
+        document.getElementById("cargaEanPlVista").innerHTML =
+          `<p class="hint" style="margin: 10px 0 0">${escapeHtml(
+            (k.filas === 1 ? "1 fila: " : k.filas + " filas: ") +
+              partes.join(", ") +
+              ".",
+          )}</p>` +
+          avisos.join("") +
+          "<table><thead><tr><th>Línea</th><th>EAN</th><th>Sublínea</th>" +
+          "<th>Unidades</th><th>Resultado</th></tr></thead><tbody>" +
+          filas
+            .map(
+              (f) =>
+                `<tr class="pl-carga-${f.estado}"><td>${f.linea}</td>` +
+                `<td style="white-space:nowrap">${escapeHtml(f.ean)}</td>` +
+                `<td>${escapeHtml(f.sublinea)}</td>` +
+                `<td>${typeof f.unidades === "number" ? _fmtUnidades(f.unidades) : escapeHtml(f.unidades)}</td>` +
+                `<td>${escapeHtml(f.mensaje || etiqueta[f.estado])}</td></tr>`,
+            )
+            .join("") +
+          "</tbody></table>";
+      }
+
+      // efectoAceptado: el aviso de reapertura ya se confirmó.
+      function guardarCargaEanPl(efectoAceptado) {
+        const texto = document.getElementById("cargaEanPlTexto").value;
+        if (
+          plCargaEnCurso ||
+          !plEanes ||
+          !plEanes.edicionHabilitada ||
+          !plCarga ||
+          !plCarga.guardable ||
+          texto !== plCargaTexto
+        )
+          return;
+        const alerta = document.getElementById("cargaEanPlAlerta");
+        const datos = { pedido: plEanes.pedido, texto };
+        if (efectoAceptado) datos.efectoAceptado = efectoAceptado;
+        const consulta = plEanesConsulta;
+        plCargaEnCurso = true;
+        _botonesCargaEanPl();
+        alerta.innerHTML = '<p class="hint">Guardando...</p>';
+        llamarAPI("cargarEanes", datos)
+          .then(function (res) {
+            plCargaEnCurso = false;
+            _botonesCargaEanPl();
+            if (res.sesionVencida) return;
+            if (!res.success) {
+              alerta.innerHTML = `<div class="msg err">${escapeHtml(res.message)}</div>`;
+              return;
+            }
+            alerta.innerHTML = "";
+            if (res.confirmar) {
+              pedirConfirmarPl(
+                "Confirmar carga",
+                _textoEfectoPl(res.confirmar, datos.pedido),
+                "Guardar",
+                false,
+                function () {
+                  guardarCargaEanPl(res.confirmar);
+                },
+              );
+              return;
+            }
+            cerrarCargaEanPl();
+            _trasCambioEanPl(
+              res,
+              consulta,
+              res.sinCambios
+                ? "Sin cambios: todos los EAN ya estaban en el pedido."
+                : (res.agregados === 1
+                    ? "1 EAN agregado"
+                    : res.agregados + " EAN agregados") +
+                    (res.omitidos
+                      ? " (" +
+                        res.omitidos +
+                        (res.omitidos === 1
+                          ? " ya estaba y se omitió)"
+                          : " ya estaban y se omitieron)")
+                      : "") +
+                    ".",
+            );
+          })
+          .catch(function (err) {
+            plCargaEnCurso = false;
+            _botonesCargaEanPl();
+            alerta.innerHTML = `<div class="msg err">${escapeHtml("Error de conexión: " + err.message)}</div>`;
+          });
+      }
+
+      // Cambiar el texto invalida la revisión: hay que volver a revisar.
+      document
+        .getElementById("cargaEanPlTexto")
+        .addEventListener("input", _botonesCargaEanPl);
 
       // ---- Confirmación genérica de Planeación ----
       let plAlConfirmar = null;
