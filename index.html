@@ -2309,18 +2309,6 @@
           Ver más
         </button>
       </div>
-      <div class="card">
-        <h3 style="margin-top: 0">
-          Coordinadores y supernumerarios sin persona
-        </h3>
-        <p class="hint" style="margin-top: 0">
-          Son los nombres que salen en el registro. Cada uno se vincula a la
-          persona que lo usa; el nombre no cambia, porque es el que guardan sus
-          registros. Los grupos (Calidad, Picking, Maquinas) se crean como
-          persona en el corte.
-        </p>
-        <div id="plRolesSinPersona"></div>
-      </div>
     </div>
 
     <div id="vistaPrincipal" style="display: none">
@@ -8980,12 +8968,9 @@
         );
         plUsuarios = null;
         plUsuariosMostrados = PL_USUARIOS_POR_PAGINA;
-        [
-          "plUsuariosNota",
-          "plUsuariosAvisos",
-          "plUsuariosLista",
-          "plRolesSinPersona",
-        ].forEach((id) => (document.getElementById(id).innerHTML = ""));
+        ["plUsuariosNota", "plUsuariosAvisos", "plUsuariosLista"].forEach(
+          (id) => (document.getElementById(id).innerHTML = ""),
+        );
         document.getElementById("btnPlUsuariosMas").style.display = "none";
         document.getElementById("plUsuariosAlerta").innerHTML =
           '<p class="hint">Cargando personas...</p>';
@@ -9024,7 +9009,7 @@
         document.getElementById("plUsuariosNota").textContent =
           res.edicionHabilitada
             ? "Las personas no se borran de una vez: primero se desactivan."
-            : "Solo lectura. Hasta el corte, las personas salen de la hoja Operarios y los nombres de coordinador y supernumerario de supervisores-supernumerarios; el turno se deduce de la hora.";
+            : "Solo lectura. Hasta el corte, las personas salen de la hoja Operarios y el turno se deduce de la hora. Los roles de coordinador y supernumerario no se cargan de la hoja: se asignarán aquí a cada persona.";
         document.getElementById("plUsuarioTurno").innerHTML = _opcionesPl(
           [{ valor: "", texto: "Todos los turnos" }],
           res.turnos
@@ -9054,7 +9039,6 @@
           .map((a) => `<div class="msg warn">${escapeHtml(a)}</div>`)
           .join("");
         renderPlUsuarios();
-        renderPlRolesSinPersona();
       }
 
       function _plUsuariosFiltrados() {
@@ -9171,52 +9155,6 @@
       function verMasPlUsuarios() {
         plUsuariosMostrados += PL_USUARIOS_POR_PAGINA;
         renderPlUsuarios();
-      }
-
-      function renderPlRolesSinPersona() {
-        const lista = plUsuarios ? plUsuarios.nombresSinPersona : [];
-        document.getElementById("plRolesSinPersona").innerHTML = lista.length
-          ? lista
-              .map(function (r) {
-                const registros =
-                  r.registros === 1 ? "1 registro" : r.registros + " registros";
-                const perdida = r.cedulaPerdida
-                  ? `<div class="msg warn">Estaba vinculado a la cédula ${escapeHtml(r.cedulaPerdida)}, que ya no está en Operarios.</div>`
-                  : "";
-                const sugerencias = r.sugerencias.length
-                  ? `<div class="hint" style="margin: 6px 0 0">Puede ser: ` +
-                    r.sugerencias
-                      .map(
-                        (s) =>
-                          escapeHtml(s.nombre) +
-                          (s.cuenta ? " (con cuenta)" : "") +
-                          (s.exacta ? "" : " (nombre parecido)"),
-                      )
-                      .join(" · ") +
-                    (r.coincidencias > r.sugerencias.length
-                      ? " · y " +
-                        (r.coincidencias - r.sugerencias.length) +
-                        " más"
-                      : "") +
-                    `</div>`
-                  : r.activo
-                    ? '<div class="hint" style="margin: 6px 0 0">Sin coincidencias entre las personas activas.</div>'
-                    : "";
-                return (
-                  `<div class="pl-tarjeta">` +
-                  `<div class="pl-cabecera"><strong>${escapeHtml(r.nombre)}</strong>` +
-                  `<span class="pl-fecha">${PL_ETIQUETA_ROL[r.tipo]} · ${registros}</span>` +
-                  (r.activo
-                    ? ""
-                    : '<span class="pl-distintivo">Inactivo</span>') +
-                  `</div>` +
-                  perdida +
-                  sugerencias +
-                  `</div>`
-                );
-              })
-              .join("")
-          : '<p class="hint">Todos los nombres tienen persona.</p>';
       }
 
       document
