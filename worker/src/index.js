@@ -38,6 +38,9 @@ const PERMISOS_POR_ACCION = {
   corregirEan: ["planeacion"],
   cargarEanes: ["planeacion"],
   obtenerUsuariosPlaneacion: ["planeacion"],
+  cambiarRolOperario: ["planeacion"],
+  guardarRolPersona: ["planeacion"],
+  guardarCuentaUsuario: ["planeacion"],
 };
 
 export default {
