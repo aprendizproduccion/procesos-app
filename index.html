@@ -6970,7 +6970,7 @@
         }
 
         // Mismo reparto que _repartirEntero del Worker: parte entera para
-        // todos y el sobrante completo al primero de la lista.
+        // todos y el sobrante de a 1 entre los primeros de la lista.
         const base = Math.floor(total / n);
         const resto = total - base * n;
         const durHoras = durationMinutos() / 60;
@@ -6980,7 +6980,7 @@
 
         const filas = operarios
           .map((nombre, i) => {
-            const unidades = i === 0 ? base + resto : base;
+            const unidades = i < resto ? base + 1 : base;
             const ritmoReal =
               durHoras > 0 ? Math.round((unidades / durHoras) * 100) / 100 : 0;
             const efic =

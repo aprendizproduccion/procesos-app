@@ -42,12 +42,13 @@ const MSG_UNIDADES_ENTERAS =
   "Las unidades deben ser un número entero, sin puntos, comas ni decimales (ej: 29530).";
 
 // Reparte un entero entre n operarios sin decimales: todos reciben la parte
-// entera y el sobrante va completo al primero de la lista (ej: 100 / 3 →
-// 34, 33, 33). La suma de las filas da siempre el total exacto.
+// entera y el sobrante se reparte de a 1 entre los primeros de la lista
+// (ej: 287 / 12 → once de 24 y uno de 23). Nadie le lleva más de 1 unidad
+// a otro y la suma de las filas da siempre el total exacto.
 function _repartirEntero(total, n) {
   const base = Math.floor(total / n);
   const resto = total - base * n;
-  return Array.from({ length: n }, (_, i) => (i === 0 ? base + resto : base));
+  return Array.from({ length: n }, (_, i) => (i < resto ? base + 1 : base));
 }
 
 // La fila tocada ya quedó en D1: si la cascada falla, no se le falla al
@@ -187,9 +188,11 @@ export const accionesEscritura = {
       const ahora = _ahoraISO();
 
       const unidadesPorOperario = _repartirEntero(total, n);
-      const sobrantesPorOperario = _repartirEntero(codigosSobrantes, n);
+      // Al revés: el +1 de sobrantes cae en los últimos de la lista, no en los
+      // mismos que ya llevan el +1 de unidades.
+      const sobrantesPorOperario = _repartirEntero(codigosSobrantes, n).reverse();
       const durHoras = Math.round((duracionRealMin / 60) * 100) / 100;
-      // Una métrica por operario: el primero puede llevar unidades de más.
+      // Una métrica por operario: los primeros pueden llevar 1 unidad de más.
       // El estándar del proceso es por persona, no por banda.
       const metricas = unidadesPorOperario.map((u) =>
         _calcularMetricasProduccion(u, tasaEstandar, durHoras),
