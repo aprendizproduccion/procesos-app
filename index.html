@@ -675,6 +675,92 @@
         }
       }
 
+      /* ===== Administrador en escritorio: Editar registros y Seguimiento =====
+         abrirEdicionDesdeDashboard y abrirSeguimientoDesdeDashboard ponen la
+         misma clase body.pl-escritorio de Planeación (1280 px, botones a su
+         medida, título a la izquierda); volverAlDashboard / volverALogin ya
+         la quitan. Solo actúa desde 1024 px: en el celular todo sigue igual. */
+      @media (min-width: 1024px) {
+        /* Editar registros: buscador acotado y tarjetas en cuadrícula */
+        body.pl-escritorio #vistaEdicionRegistros .filtro-principal {
+          max-width: 560px;
+        }
+        body.pl-escritorio #listaRegistrosEditar {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+          gap: 12px;
+        }
+        body.pl-escritorio #listaRegistrosEditar > .hint {
+          grid-column: 1 / -1;
+        }
+        body.pl-escritorio #listaRegistrosEditar > div[data-id] {
+          display: flex;
+          flex-direction: column;
+          margin-bottom: 0 !important;
+        }
+        /* Anular / Reactivar / Eliminar alineados abajo de la tarjeta */
+        body.pl-escritorio
+          #listaRegistrosEditar
+          > div[data-id]
+          > div:last-child {
+          margin-top: auto !important;
+          padding-top: 8px;
+        }
+        body.pl-escritorio #modalEditarRegistro .modal-box {
+          max-width: 640px !important;
+        }
+
+        /* Seguimiento: buscador acotado */
+        body.pl-escritorio #vistaSeguimientoPaquetes .add-row {
+          max-width: 560px;
+        }
+        /* Dona y barra lado a lado, con alto fijo (_segEnEscritorio apaga
+           maintainAspectRatio para que llenen este alto) */
+        body.pl-escritorio .seg-graficas {
+          display: grid;
+          grid-template-columns: minmax(280px, 1fr) 2fr;
+          gap: 16px;
+          margin-bottom: 18px;
+        }
+        body.pl-escritorio .seg-graficas > .seguimiento-grafica-wrap {
+          position: relative;
+          min-width: 0;
+          height: 300px;
+          margin-bottom: 0;
+        }
+        /* Detalle: medidor, eficiencia y Justificar/Cerrar en una fila */
+        body.pl-escritorio .seg-detalle-fila {
+          display: grid;
+          grid-template-columns: minmax(240px, 1fr) minmax(160px, 220px) 2fr;
+          gap: 16px;
+          align-items: center;
+          margin-bottom: 18px;
+        }
+        body.pl-escritorio .seg-detalle-fila > * {
+          min-width: 0;
+          margin-bottom: 0 !important;
+        }
+        /* Tabla: encabezado fijo y cifras a la derecha (las 5 últimas
+           columnas, tanto en la general de 9 como en el detalle de 11) */
+        body.pl-escritorio #seguimientoTablaWrap {
+          max-height: calc(100vh - 120px);
+          overflow: auto;
+        }
+        body.pl-escritorio #seguimientoTablaWrap th {
+          position: sticky;
+          top: 0;
+          z-index: 1;
+          border-bottom: none;
+          box-shadow: inset 0 -2px 0 var(--gv-aquamarine);
+        }
+        body.pl-escritorio #seguimientoTablaWrap th:nth-last-child(-n + 5),
+        body.pl-escritorio
+          #seguimientoTablaWrap
+          td:not([colspan]):nth-last-child(-n + 5) {
+          text-align: right;
+        }
+      }
+
       /* ===== Botones — Manual de marca, sección 07 ===== */
       /* Base "con caja": 48 px de alto, 14 px, ancho completo. */
       .btn-submit {
@@ -1709,11 +1795,13 @@
             </div>
           </div>
 
-          <div class="seguimiento-grafica-wrap">
-            <canvas id="graficaEstadoPaquetes" height="200"></canvas>
-          </div>
-          <div class="seguimiento-grafica-wrap">
-            <canvas id="graficaEficienciaPaquetes" height="220"></canvas>
+          <div class="seg-graficas">
+            <div class="seguimiento-grafica-wrap">
+              <canvas id="graficaEstadoPaquetes" height="200"></canvas>
+            </div>
+            <div class="seguimiento-grafica-wrap">
+              <canvas id="graficaEficienciaPaquetes" height="220"></canvas>
+            </div>
           </div>
           <div
             class="filtro-estado-seg"
@@ -1767,6 +1855,7 @@
           <div class="seguimiento-grafica-wrap" style="height: 120px">
             <canvas id="graficaDetallePedido"></canvas>
           </div>
+          <div class="seg-detalle-fila">
           <div class="seguimiento-grafica-wrap" style="height: 140px">
             <canvas id="graficaGaugeEficiencia"></canvas>
           </div>
@@ -1826,9 +1915,10 @@
               Justificar/Cerrar
             </button>
           </div>
+          </div>
         </div>
 
-        <div style="overflow-x: auto">
+        <div id="seguimientoTablaWrap" style="overflow-x: auto">
           <table>
             <thead id="seguimientoPaquetesHead">
               <tr>
@@ -3860,6 +3950,8 @@
         document.getElementById("vistaDashboard").style.display = "none";
         document.getElementById("vistaEdicionRegistros").style.display =
           "block";
+        // Vista de escritorio: solo cambia algo desde 1024 px (ver CSS).
+        document.body.classList.add("pl-escritorio");
         [
           "edicionPedidoInput",
           "edicionOperarioInput",
@@ -3886,6 +3978,9 @@
         document.getElementById("vistaDashboard").style.display = "none";
         document.getElementById("vistaSeguimientoPaquetes").style.display =
           "block";
+        // Antes de cargar, para que las gráficas nazcan con el tamaño de
+        // escritorio. Solo cambia algo desde 1024 px (ver CSS).
+        document.body.classList.add("pl-escritorio");
         _marcarChipsEstadoSeg("");
         cargarSeguimientoPaquetes();
       }
@@ -4414,6 +4509,16 @@
           eficienciaProm !== null ? eficienciaProm + "%" : "—";
       }
 
+      // Misma condición que el CSS de escritorio: ahí las gráficas llenan el
+      // alto fijo de .seg-graficas en vez de mantener su proporción (con
+      // 1280 px la dona quedaba tan alta como ancha).
+      function _segEnEscritorio() {
+        return (
+          document.body.classList.contains("pl-escritorio") &&
+          window.matchMedia("(min-width: 1024px)").matches
+        );
+      }
+
       function renderGraficasPaquetes(paquetes) {
         const enProceso = paquetes.filter(
           (p) => p.estado === "En proceso",
@@ -4438,6 +4543,7 @@
             },
             options: {
               responsive: true,
+              maintainAspectRatio: !_segEnEscritorio(),
               plugins: { legend: { position: "bottom" } },
             },
           },
@@ -4461,6 +4567,7 @@
             },
             options: {
               responsive: true,
+              maintainAspectRatio: !_segEnEscritorio(),
               scales: { y: { beginAtZero: true, max: 100 } },
               plugins: { legend: { display: false } },
             },
