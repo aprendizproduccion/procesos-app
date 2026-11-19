@@ -542,6 +542,139 @@
         color: var(--gv-texto-suave);
       }
 
+      /* ===== Planeación en escritorio (portátil y PC) =====
+         _abrirVistaPlaneacion pone body.pl-escritorio y volverAlDashboard /
+         volverALogin la quitan. Solo actúa desde 1024 px: en el celular
+         todo sigue igual. Los !important pisan márgenes en línea pensados
+         para la columna del celular. */
+      @media (min-width: 1024px) {
+        body.pl-escritorio {
+          max-width: 1280px;
+          padding: 24px 32px 60px;
+        }
+        body.pl-escritorio h1 {
+          text-align: left;
+        }
+        /* Botones a su medida (Volver, Ver más, barras), no a todo el ancho */
+        body.pl-escritorio .btn-submit {
+          width: auto;
+          min-width: 180px;
+        }
+        body.pl-escritorio #btnPlPedidosMas,
+        body.pl-escritorio #btnPlUsuariosMas,
+        body.pl-escritorio #btnPlProcesosMas {
+          display: flex;
+          margin: 14px auto 0;
+        }
+
+        /* Barra de herramientas en una fila: buscador, filtros y botones */
+        body.pl-escritorio .pl-barra {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: flex-end;
+          gap: 10px 12px;
+          margin-bottom: 14px;
+        }
+        body.pl-escritorio .pl-barra > * {
+          margin: 0 !important;
+        }
+        body.pl-escritorio .pl-barra > input {
+          order: -2;
+          flex: 1 1 320px;
+          min-width: 240px;
+        }
+        body.pl-escritorio .pl-barra > .filtro-estado-seg,
+        body.pl-escritorio .pl-barra > .row2 {
+          order: -1;
+        }
+        body.pl-escritorio .pl-barra > .row2 {
+          flex: 1 1 380px;
+        }
+        body.pl-escritorio .pl-barra select {
+          margin-bottom: 0;
+        }
+        body.pl-escritorio .pl-barra .btn-submit {
+          min-height: 40px;
+        }
+
+        /* Listas en cuadrícula; las acciones quedan alineadas abajo */
+        body.pl-escritorio #plPedidosLista,
+        body.pl-escritorio #plClientesLista,
+        body.pl-escritorio #plUsuariosLista,
+        body.pl-escritorio #plProcesosLista {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+          gap: 12px;
+        }
+        body.pl-escritorio #plClientesLista {
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        }
+        body.pl-escritorio #plPedidosLista > .pl-tarjeta,
+        body.pl-escritorio #plClientesLista > .pl-tarjeta,
+        body.pl-escritorio #plUsuariosLista > .pl-tarjeta,
+        body.pl-escritorio #plProcesosLista > .pl-tarjeta {
+          display: flex;
+          flex-direction: column;
+          margin-bottom: 0;
+        }
+        body.pl-escritorio .pl-tarjeta > .pl-acciones {
+          margin-top: auto;
+          padding-top: 8px;
+        }
+
+        /* EAN del pedido: encabezado fijo y cifras a la derecha */
+        body.pl-escritorio #plEanesTablaWrap {
+          max-height: calc(100vh - 120px);
+          overflow: auto;
+        }
+        body.pl-escritorio #plEanesTabla th {
+          position: sticky;
+          top: 0;
+          z-index: 1;
+          border-bottom: none;
+          box-shadow: inset 0 -2px 0 var(--gv-aquamarine);
+        }
+        body.pl-escritorio #plEanesTabla th:nth-child(n + 3):nth-child(-n + 7),
+        body.pl-escritorio #plEanesTabla td:nth-child(n + 3):nth-child(-n + 7),
+        body.pl-escritorio #plEanesTabla th:nth-child(9),
+        body.pl-escritorio #plEanesTabla td:nth-child(9) {
+          text-align: right;
+        }
+
+        /* Crear / editar pedido en dos columnas */
+        body.pl-escritorio .cp-columnas {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 0 32px;
+          align-items: start;
+        }
+        body.pl-escritorio #btnCrearPedido {
+          display: flex;
+          margin-left: auto;
+          min-width: 240px;
+        }
+
+        /* Modales más anchos y con scroll */
+        body.pl-escritorio #modalEanPl .modal-box {
+          max-width: 480px;
+        }
+        body.pl-escritorio #modalPersonaPl .modal-box,
+        body.pl-escritorio #modalProcesoPl .modal-box {
+          max-width: 560px;
+        }
+        body.pl-escritorio #modalConfirmarPl .modal-box {
+          max-width: 600px;
+          max-height: 100%;
+          overflow-y: auto;
+        }
+        body.pl-escritorio #modalCargaEanPl .modal-box {
+          max-width: 960px !important;
+        }
+        body.pl-escritorio #cargaEanPlVista {
+          max-height: 50vh !important;
+        }
+      }
+
       /* ===== Botones — Manual de marca, sección 07 ===== */
       /* Base "con caja": 48 px de alto, 14 px, ancho completo. */
       .btn-submit {
@@ -1913,53 +2046,55 @@
       <h1>Pedidos</h1>
       <div class="card">
         <p class="hint" style="margin-top: 0" id="plPedidosNota"></p>
-        <button
-          type="button"
-          class="btn-submit"
-          style="margin-bottom: 14px"
-          onclick="abrirCrearPedido()"
-        >
-          + Crear pedido
-        </button>
-        <input
-          id="plPedidoBuscar"
-          placeholder="Buscar por pedido o cliente..."
-          autocomplete="off"
-          enterkeyhint="search"
-        />
-        <div
-          class="filtro-estado-seg"
-          role="group"
-          aria-label="Filtrar pedidos"
-          style="margin-bottom: 12px"
-        >
+        <div class="pl-barra">
           <button
             type="button"
-            class="chip-estado"
-            data-filtro-pl=""
-            aria-pressed="true"
-            onclick="cambiarFiltroPlPedidos('')"
+            class="btn-submit"
+            style="margin-bottom: 14px"
+            onclick="abrirCrearPedido()"
           >
-            Todos <span class="pl-conteo" id="plConteoTodos"></span>
+            + Crear pedido
           </button>
-          <button
-            type="button"
-            class="chip-estado"
-            data-filtro-pl="alertas"
-            aria-pressed="false"
-            onclick="cambiarFiltroPlPedidos('alertas')"
+          <input
+            id="plPedidoBuscar"
+            placeholder="Buscar por pedido o cliente..."
+            autocomplete="off"
+            enterkeyhint="search"
+          />
+          <div
+            class="filtro-estado-seg"
+            role="group"
+            aria-label="Filtrar pedidos"
+            style="margin-bottom: 12px"
           >
-            Con alertas <span class="pl-conteo" id="plConteoAlertas"></span>
-          </button>
-          <button
-            type="button"
-            class="chip-estado"
-            data-filtro-pl="sinEan"
-            aria-pressed="false"
-            onclick="cambiarFiltroPlPedidos('sinEan')"
-          >
-            Sin EAN <span class="pl-conteo" id="plConteoSinEan"></span>
-          </button>
+            <button
+              type="button"
+              class="chip-estado"
+              data-filtro-pl=""
+              aria-pressed="true"
+              onclick="cambiarFiltroPlPedidos('')"
+            >
+              Todos <span class="pl-conteo" id="plConteoTodos"></span>
+            </button>
+            <button
+              type="button"
+              class="chip-estado"
+              data-filtro-pl="alertas"
+              aria-pressed="false"
+              onclick="cambiarFiltroPlPedidos('alertas')"
+            >
+              Con alertas <span class="pl-conteo" id="plConteoAlertas"></span>
+            </button>
+            <button
+              type="button"
+              class="chip-estado"
+              data-filtro-pl="sinEan"
+              aria-pressed="false"
+              onclick="cambiarFiltroPlPedidos('sinEan')"
+            >
+              Sin EAN <span class="pl-conteo" id="plConteoSinEan"></span>
+            </button>
+          </div>
         </div>
         <div id="plPedidosAlerta"></div>
         <div id="plPedidosLista"></div>
@@ -1991,30 +2126,32 @@
         <div class="seguimiento-kpi-grid" id="plEanesKpi"></div>
         <div id="plEanesAlertas"></div>
         <div id="plEanesResultado"></div>
-        <button
-          type="button"
-          id="btnPlAgregarEan"
-          class="btn-submit btn-gv-contorno"
-          style="display: none"
-          onclick="abrirEanPl(-1)"
-        >
-          + Agregar EAN
-        </button>
-        <button
-          type="button"
-          id="btnPlCargarEan"
-          class="btn-submit btn-gv-contorno"
-          style="display: none"
-          onclick="abrirCargaEanPl()"
-        >
-          Pegar EAN desde Excel
-        </button>
-        <input
-          id="plEanBuscar"
-          placeholder="Buscar o escanear un EAN..."
-          autocomplete="off"
-          enterkeyhint="search"
-        />
+        <div class="pl-barra">
+          <button
+            type="button"
+            id="btnPlAgregarEan"
+            class="btn-submit btn-gv-contorno"
+            style="display: none"
+            onclick="abrirEanPl(-1)"
+          >
+            + Agregar EAN
+          </button>
+          <button
+            type="button"
+            id="btnPlCargarEan"
+            class="btn-submit btn-gv-contorno"
+            style="display: none"
+            onclick="abrirCargaEanPl()"
+          >
+            Pegar EAN desde Excel
+          </button>
+          <input
+            id="plEanBuscar"
+            placeholder="Buscar o escanear un EAN..."
+            autocomplete="off"
+            enterkeyhint="search"
+          />
+        </div>
         <div id="plEanesMsg"></div>
         <div id="plEanesTablaWrap" style="overflow-x: auto">
           <table id="plEanesTabla">
@@ -2051,136 +2188,146 @@
       <h1>Crear pedido</h1>
       <div class="card">
         <div id="cpAviso"></div>
-        <div
-          id="cpTipoGrupo"
-          class="filtro-estado-seg"
-          role="group"
-          aria-label="Tipo"
-          style="margin-bottom: 14px"
-        >
-          <button
-            type="button"
-            class="chip-estado"
-            data-tipo-cp="pedido"
-            aria-pressed="true"
-            onclick="cambiarTipoCrearPedido('pedido')"
-          >
-            Pedido
-          </button>
-          <button
-            type="button"
-            class="chip-estado"
-            data-tipo-cp="interna"
-            aria-pressed="false"
-            onclick="cambiarTipoCrearPedido('interna')"
-          >
-            Actividad interna
-          </button>
-        </div>
-        <div id="cpBloquePedido">
-          <label for="cpUnidades" id="cpUnidadesEtiqueta"
-            >Unidades pedidas</label
-          >
-          <input
-            id="cpUnidades"
-            type="number"
-            inputmode="numeric"
-            min="1"
-            step="1"
-            placeholder="Ej: 2000"
-          />
-        </div>
-        <div id="cpBloqueInterna" style="display: none">
-          <label for="cpNombre">Nombre de la actividad</label>
-          <input
-            id="cpNombre"
-            maxlength="60"
-            autocomplete="off"
-            placeholder="Ej: Inventario bodega 3"
-          />
-          <label class="cp-casilla">
-            <input id="cpSinLimite" type="checkbox" />
-            Marcar como sin límite
-          </label>
-          <p class="hint" style="margin-top: 0">
-            Crea el EAN 0 sin tope de unidades, para registrar trabajo sin
-            unidades estimadas.
-          </p>
-        </div>
-        <label for="cpCliente">Cliente</label>
-        <div class="campo-sugerencias">
-          <input
-            id="cpCliente"
-            autocomplete="off"
-            placeholder="Busca el cliente..."
-          />
-          <div id="sugCpCliente" class="lista-sugerencias" role="listbox"></div>
-        </div>
-        <label for="cpSublinea">Sublíneas</label>
-        <div
-          id="cpSublineas"
-          class="pl-sublineas"
-          style="margin: 0 0 8px"
-        ></div>
-        <div class="add-row" style="margin-bottom: 14px">
-          <div class="campo-sugerencias">
-            <input
-              id="cpSublinea"
-              autocomplete="off"
-              enterkeyhint="done"
-              placeholder="Ej: Ninguna"
-            />
+        <div class="cp-columnas">
+          <div class="cp-col">
             <div
-              id="sugCpSublinea"
-              class="lista-sugerencias"
-              role="listbox"
-            ></div>
-          </div>
-          <button type="button" onclick="agregarSublineaCrearPedido()">
-            Agregar
-          </button>
-        </div>
-        <div class="row2">
-          <div>
-            <label for="cpEvento">Evento</label>
-            <select id="cpEvento"></select>
-          </div>
-          <div>
-            <label for="cpClasificacion">Clasificación</label>
-            <select id="cpClasificacion"></select>
-          </div>
-        </div>
-        <label for="cpProceso">Procesos</label>
-        <div id="cpProcesos"></div>
-        <div class="add-row" style="margin-bottom: 14px">
-          <div class="campo-sugerencias">
-            <input
-              id="cpProceso"
-              autocomplete="off"
-              enterkeyhint="done"
-              placeholder="Busca un proceso del catálogo..."
-            />
+              id="cpTipoGrupo"
+              class="filtro-estado-seg"
+              role="group"
+              aria-label="Tipo"
+              style="margin-bottom: 14px"
+            >
+              <button
+                type="button"
+                class="chip-estado"
+                data-tipo-cp="pedido"
+                aria-pressed="true"
+                onclick="cambiarTipoCrearPedido('pedido')"
+              >
+                Pedido
+              </button>
+              <button
+                type="button"
+                class="chip-estado"
+                data-tipo-cp="interna"
+                aria-pressed="false"
+                onclick="cambiarTipoCrearPedido('interna')"
+              >
+                Actividad interna
+              </button>
+            </div>
+            <div id="cpBloquePedido">
+              <label for="cpUnidades" id="cpUnidadesEtiqueta"
+                >Unidades pedidas</label
+              >
+              <input
+                id="cpUnidades"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                step="1"
+                placeholder="Ej: 2000"
+              />
+            </div>
+            <div id="cpBloqueInterna" style="display: none">
+              <label for="cpNombre">Nombre de la actividad</label>
+              <input
+                id="cpNombre"
+                maxlength="60"
+                autocomplete="off"
+                placeholder="Ej: Inventario bodega 3"
+              />
+              <label class="cp-casilla">
+                <input id="cpSinLimite" type="checkbox" />
+                Marcar como sin límite
+              </label>
+              <p class="hint" style="margin-top: 0">
+                Crea el EAN 0 sin tope de unidades, para registrar trabajo sin
+                unidades estimadas.
+              </p>
+            </div>
+            <label for="cpCliente">Cliente</label>
+            <div class="campo-sugerencias">
+              <input
+                id="cpCliente"
+                autocomplete="off"
+                placeholder="Busca el cliente..."
+              />
+              <div
+                id="sugCpCliente"
+                class="lista-sugerencias"
+                role="listbox"
+              ></div>
+            </div>
+            <label for="cpSublinea">Sublíneas</label>
             <div
-              id="sugCpProceso"
-              class="lista-sugerencias"
-              role="listbox"
+              id="cpSublineas"
+              class="pl-sublineas"
+              style="margin: 0 0 8px"
             ></div>
+            <div class="add-row" style="margin-bottom: 14px">
+              <div class="campo-sugerencias">
+                <input
+                  id="cpSublinea"
+                  autocomplete="off"
+                  enterkeyhint="done"
+                  placeholder="Ej: Ninguna"
+                />
+                <div
+                  id="sugCpSublinea"
+                  class="lista-sugerencias"
+                  role="listbox"
+                ></div>
+              </div>
+              <button type="button" onclick="agregarSublineaCrearPedido()">
+                Agregar
+              </button>
+            </div>
+            <div class="row2">
+              <div>
+                <label for="cpEvento">Evento</label>
+                <select id="cpEvento"></select>
+              </div>
+              <div>
+                <label for="cpClasificacion">Clasificación</label>
+                <select id="cpClasificacion"></select>
+              </div>
+            </div>
           </div>
-          <button type="button" onclick="agregarProcesoCrearPedido()">
-            Agregar
-          </button>
-        </div>
-        <p class="hint" style="margin-top: -6px">
-          Solo procesos activos del catálogo, con su estándar y su link. Si
-          falta uno, créalo en el módulo Procesos.
-        </p>
-        <label for="cpFecha">Fecha de creación</label>
-        <input id="cpFecha" readonly />
-        <div id="cpNumeroBloque" class="msg info">
-          Número del pedido: <span id="cpNumero" class="cp-numero">—</span>
-          <div class="hint" style="margin: 4px 0 0" id="cpNumeroHint">
-            Unidades y una letra por cada proceso con estándar. El sistema lo
-            confirma al crear.
+          <div class="cp-col">
+            <label for="cpProceso">Procesos</label>
+            <div id="cpProcesos"></div>
+            <div class="add-row" style="margin-bottom: 14px">
+              <div class="campo-sugerencias">
+                <input
+                  id="cpProceso"
+                  autocomplete="off"
+                  enterkeyhint="done"
+                  placeholder="Busca un proceso del catálogo..."
+                />
+                <div
+                  id="sugCpProceso"
+                  class="lista-sugerencias"
+                  role="listbox"
+                ></div>
+              </div>
+              <button type="button" onclick="agregarProcesoCrearPedido()">
+                Agregar
+              </button>
+            </div>
+            <p class="hint" style="margin-top: -6px">
+              Solo procesos activos del catálogo, con su estándar y su link. Si
+              falta uno, créalo en el módulo Procesos.
+            </p>
+            <label for="cpFecha">Fecha de creación</label>
+            <input id="cpFecha" readonly />
+            <div id="cpNumeroBloque" class="msg info">
+              Número del pedido: <span id="cpNumero" class="cp-numero">—</span>
+              <div class="hint" style="margin: 4px 0 0" id="cpNumeroHint">
+                Unidades y una letra por cada proceso con estándar. El sistema
+                lo confirma al crear.
+              </div>
+            </div>
           </div>
         </div>
         <div id="cpResultado"></div>
@@ -2220,37 +2367,39 @@
             </button>
           </div>
         </div>
-        <input
-          id="plClienteBuscar"
-          placeholder="Buscar cliente..."
-          autocomplete="off"
-          enterkeyhint="search"
-        />
-        <div
-          class="filtro-estado-seg"
-          role="group"
-          aria-label="Filtrar clientes"
-          style="margin-bottom: 12px"
-        >
-          <button
-            type="button"
-            class="chip-estado"
-            data-filtro-cl=""
-            aria-pressed="true"
-            onclick="cambiarFiltroPlClientes('')"
+        <div class="pl-barra">
+          <input
+            id="plClienteBuscar"
+            placeholder="Buscar cliente..."
+            autocomplete="off"
+            enterkeyhint="search"
+          />
+          <div
+            class="filtro-estado-seg"
+            role="group"
+            aria-label="Filtrar clientes"
+            style="margin-bottom: 12px"
           >
-            Todos <span class="pl-conteo" id="plConteoClientes"></span>
-          </button>
-          <button
-            type="button"
-            class="chip-estado"
-            data-filtro-cl="duplicados"
-            aria-pressed="false"
-            onclick="cambiarFiltroPlClientes('duplicados')"
-          >
-            Escritos de varias formas
-            <span class="pl-conteo" id="plConteoDuplicados"></span>
-          </button>
+            <button
+              type="button"
+              class="chip-estado"
+              data-filtro-cl=""
+              aria-pressed="true"
+              onclick="cambiarFiltroPlClientes('')"
+            >
+              Todos <span class="pl-conteo" id="plConteoClientes"></span>
+            </button>
+            <button
+              type="button"
+              class="chip-estado"
+              data-filtro-cl="duplicados"
+              aria-pressed="false"
+              onclick="cambiarFiltroPlClientes('duplicados')"
+            >
+              Escritos de varias formas
+              <span class="pl-conteo" id="plConteoDuplicados"></span>
+            </button>
+          </div>
         </div>
         <div id="plClientesAlerta"></div>
         <div id="plClientesLista"></div>
@@ -2270,43 +2419,45 @@
       <div class="card">
         <p class="hint" style="margin-top: 0" id="plUsuariosNota"></p>
         <div id="plUsuariosAvisos"></div>
-        <input
-          id="plUsuarioBuscar"
-          placeholder="Buscar por nombre o cédula..."
-          autocomplete="off"
-          enterkeyhint="search"
-        />
-        <div class="row2">
-          <div>
-            <label for="plUsuarioRol">Rol</label>
-            <select id="plUsuarioRol">
-              <option value="">Todos los roles</option>
-              <option value="operario">Operario</option>
-              <option value="supernumerario">Supernumerario</option>
-              <option value="coordinador">Coordinador</option>
-              <option value="administrativo">Administrativo</option>
-              <option value="planeacion">Planeación</option>
-              <option value="grupo">Grupo</option>
-              <option value="sinRol">Sin rol</option>
-            </select>
+        <div class="pl-barra">
+          <input
+            id="plUsuarioBuscar"
+            placeholder="Buscar por nombre o cédula..."
+            autocomplete="off"
+            enterkeyhint="search"
+          />
+          <div class="row2">
+            <div>
+              <label for="plUsuarioRol">Rol</label>
+              <select id="plUsuarioRol">
+                <option value="">Todos los roles</option>
+                <option value="operario">Operario</option>
+                <option value="supernumerario">Supernumerario</option>
+                <option value="coordinador">Coordinador</option>
+                <option value="administrativo">Administrativo</option>
+                <option value="planeacion">Planeación</option>
+                <option value="grupo">Grupo</option>
+                <option value="sinRol">Sin rol</option>
+              </select>
+            </div>
+            <div>
+              <label for="plUsuarioEstado">Estado</label>
+              <select id="plUsuarioEstado">
+                <option value="activos">Activos</option>
+                <option value="inactivos">Inactivos</option>
+                <option value="">Todos</option>
+              </select>
+            </div>
           </div>
-          <div>
-            <label for="plUsuarioEstado">Estado</label>
-            <select id="plUsuarioEstado">
-              <option value="activos">Activos</option>
-              <option value="inactivos">Inactivos</option>
-              <option value="">Todos</option>
-            </select>
-          </div>
-        </div>
-        <div class="row2">
-          <div>
-            <label for="plUsuarioTurno">Turno</label>
-            <select id="plUsuarioTurno"></select>
-          </div>
-          <div>
-            <label for="plUsuarioEquipo">Equipo</label>
-            <select id="plUsuarioEquipo"></select>
+          <div class="row2">
+            <div>
+              <label for="plUsuarioTurno">Turno</label>
+              <select id="plUsuarioTurno"></select>
+            </div>
+            <div>
+              <label for="plUsuarioEquipo">Equipo</label>
+              <select id="plUsuarioEquipo"></select>
+            </div>
           </div>
         </div>
         <div id="plUsuariosAlerta"></div>
@@ -2335,75 +2486,77 @@
       <h1>Procesos</h1>
       <div class="card">
         <p class="hint" style="margin-top: 0" id="plProcesosNota"></p>
-        <div
-          class="filtro-estado-seg"
-          role="group"
-          aria-label="Ver procesos"
-          style="margin-bottom: 12px"
-        >
-          <button
-            type="button"
-            class="chip-estado"
-            data-vista-proc="catalogo"
-            aria-pressed="true"
-            onclick="cambiarVistaPlProcesos('catalogo')"
+        <div class="pl-barra">
+          <div
+            class="filtro-estado-seg"
+            role="group"
+            aria-label="Ver procesos"
+            style="margin-bottom: 12px"
           >
-            Catálogo <span class="pl-conteo" id="plConteoCatalogo"></span>
-          </button>
-          <button
-            type="button"
-            class="chip-estado"
-            data-vista-proc="fuera"
-            aria-pressed="false"
-            onclick="cambiarVistaPlProcesos('fuera')"
-          >
-            En uso, fuera del catálogo
-            <span class="pl-conteo" id="plConteoFuera"></span>
-          </button>
-        </div>
-        <button
-          type="button"
-          id="btnPlProcesoNuevo"
-          class="btn-submit btn-gv-contorno"
-          style="margin-bottom: 14px"
-          onclick="abrirProcesoPl(null)"
-        >
-          + Nuevo proceso
-        </button>
-        <button
-          type="button"
-          id="btnPlProcesosAlinear"
-          class="btn-submit btn-gv-contorno"
-          style="margin-bottom: 14px"
-          onclick="revisarAlineacionPl()"
-        >
-          Alinear pedidos con el catálogo
-        </button>
-        <input
-          id="plProcesoBuscar"
-          placeholder="Buscar proceso..."
-          autocomplete="off"
-          enterkeyhint="search"
-        />
-        <div class="row2">
-          <div id="plProcesoEstadoWrap">
-            <label for="plProcesoEstado">Estado</label>
-            <select id="plProcesoEstado">
-              <option value="activos">Activos</option>
-              <option value="inactivos">Inactivos</option>
-              <option value="">Todos</option>
-            </select>
+            <button
+              type="button"
+              class="chip-estado"
+              data-vista-proc="catalogo"
+              aria-pressed="true"
+              onclick="cambiarVistaPlProcesos('catalogo')"
+            >
+              Catálogo <span class="pl-conteo" id="plConteoCatalogo"></span>
+            </button>
+            <button
+              type="button"
+              class="chip-estado"
+              data-vista-proc="fuera"
+              aria-pressed="false"
+              onclick="cambiarVistaPlProcesos('fuera')"
+            >
+              En uso, fuera del catálogo
+              <span class="pl-conteo" id="plConteoFuera"></span>
+            </button>
           </div>
-          <div>
-            <label for="plProcesoRevisar">Mostrar</label>
-            <select id="plProcesoRevisar">
-              <option value="">Todos</option>
-              <option value="avisos">Con avisos</option>
-              <option value="general">Generales</option>
-              <option value="sinUso90">Sin uso en 90 días</option>
-              <option value="sinUso180">Sin uso en 180 días</option>
-              <option value="nunca">Nunca usados</option>
-            </select>
+          <button
+            type="button"
+            id="btnPlProcesoNuevo"
+            class="btn-submit btn-gv-contorno"
+            style="margin-bottom: 14px"
+            onclick="abrirProcesoPl(null)"
+          >
+            + Nuevo proceso
+          </button>
+          <button
+            type="button"
+            id="btnPlProcesosAlinear"
+            class="btn-submit btn-gv-contorno"
+            style="margin-bottom: 14px"
+            onclick="revisarAlineacionPl()"
+          >
+            Alinear pedidos con el catálogo
+          </button>
+          <input
+            id="plProcesoBuscar"
+            placeholder="Buscar proceso..."
+            autocomplete="off"
+            enterkeyhint="search"
+          />
+          <div class="row2">
+            <div id="plProcesoEstadoWrap">
+              <label for="plProcesoEstado">Estado</label>
+              <select id="plProcesoEstado">
+                <option value="activos">Activos</option>
+                <option value="inactivos">Inactivos</option>
+                <option value="">Todos</option>
+              </select>
+            </div>
+            <div>
+              <label for="plProcesoRevisar">Mostrar</label>
+              <select id="plProcesoRevisar">
+                <option value="">Todos</option>
+                <option value="avisos">Con avisos</option>
+                <option value="general">Generales</option>
+                <option value="sinUso90">Sin uso en 90 días</option>
+                <option value="sinUso180">Sin uso en 180 días</option>
+                <option value="nunca">Nunca usados</option>
+              </select>
+            </div>
           </div>
         </div>
         <div id="plProcesosMensaje"></div>
@@ -5551,6 +5704,7 @@
         // Sin esto el intervalo sigue repintando elementos ocultos hasta
         // cerrar sesión.
         _detenerRelojHoraFin();
+        document.body.classList.remove("pl-escritorio");
         document.getElementById("vistaDashboard").style.display = "block";
       }
 
@@ -5623,6 +5777,7 @@
         ].forEach((id) => {
           document.getElementById(id).style.display = "none";
         });
+        document.body.classList.remove("pl-escritorio");
         cerrarConfirmarPl();
         cerrarEanPl();
         cerrarCargaEanPl();
@@ -7009,6 +7164,8 @@
       function _abrirVistaPlaneacion(idVista) {
         document.getElementById("vistaDashboard").style.display = "none";
         document.getElementById(idVista).style.display = "block";
+        // Vista de escritorio: solo cambia algo desde 1024 px (ver CSS).
+        document.body.classList.add("pl-escritorio");
         window.scrollTo(0, 0);
       }
 
