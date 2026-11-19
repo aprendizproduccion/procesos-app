@@ -1371,6 +1371,14 @@
           <span class="tarjetaApp-icono">👥</span>
           <span>Usuarios</span>
         </button>
+        <button
+          type="button"
+          class="tarjetaApp"
+          onclick="abrirProcesosPlaneacion()"
+        >
+          <span class="tarjetaApp-icono">🛠️</span>
+          <span>Procesos</span>
+        </button>
       </div>
       <button
         type="button"
@@ -2311,6 +2319,102 @@
       </div>
     </div>
 
+    <div id="vistaProcesosPlaneacion" style="display: none">
+      <button
+        type="button"
+        class="btn-submit btn-gv-contorno"
+        style="margin-bottom: 14px"
+        onclick="volverAlDashboard()"
+      >
+        ← Volver al Menú
+      </button>
+      <h1>Procesos</h1>
+      <div class="card">
+        <p class="hint" style="margin-top: 0" id="plProcesosNota"></p>
+        <div
+          class="filtro-estado-seg"
+          role="group"
+          aria-label="Ver procesos"
+          style="margin-bottom: 12px"
+        >
+          <button
+            type="button"
+            class="chip-estado"
+            data-vista-proc="catalogo"
+            aria-pressed="true"
+            onclick="cambiarVistaPlProcesos('catalogo')"
+          >
+            Catálogo <span class="pl-conteo" id="plConteoCatalogo"></span>
+          </button>
+          <button
+            type="button"
+            class="chip-estado"
+            data-vista-proc="fuera"
+            aria-pressed="false"
+            onclick="cambiarVistaPlProcesos('fuera')"
+          >
+            En uso, fuera del catálogo
+            <span class="pl-conteo" id="plConteoFuera"></span>
+          </button>
+        </div>
+        <button
+          type="button"
+          id="btnPlProcesoNuevo"
+          class="btn-submit btn-gv-contorno"
+          style="margin-bottom: 14px"
+          onclick="abrirProcesoPl(null)"
+        >
+          + Nuevo proceso
+        </button>
+        <input
+          id="plProcesoBuscar"
+          placeholder="Buscar proceso..."
+          autocomplete="off"
+          enterkeyhint="search"
+        />
+        <div class="row2">
+          <div id="plProcesoEstadoWrap">
+            <label for="plProcesoEstado">Estado</label>
+            <select id="plProcesoEstado">
+              <option value="activos">Activos</option>
+              <option value="inactivos">Inactivos</option>
+              <option value="">Todos</option>
+            </select>
+          </div>
+          <div>
+            <label for="plProcesoRevisar">Mostrar</label>
+            <select id="plProcesoRevisar">
+              <option value="">Todos</option>
+              <option value="avisos">Con avisos</option>
+              <option value="general">Generales</option>
+              <option value="sinUso90">Sin uso en 90 días</option>
+              <option value="sinUso180">Sin uso en 180 días</option>
+              <option value="nunca">Nunca usados</option>
+            </select>
+          </div>
+        </div>
+        <div id="plProcesosMensaje"></div>
+        <button
+          type="button"
+          id="btnPlProcesosBloque"
+          class="btn-submit btn-gv-contorno"
+          style="display: none; margin-bottom: 14px"
+          onclick="accionBloquePlProcesos()"
+        ></button>
+        <div id="plProcesosAlerta"></div>
+        <div id="plProcesosLista"></div>
+        <button
+          type="button"
+          id="btnPlProcesosMas"
+          class="btn-submit btn-gv-contorno"
+          style="display: none"
+          onclick="verMasPlProcesos()"
+        >
+          Ver más
+        </button>
+      </div>
+    </div>
+
     <div id="vistaPrincipal" style="display: none">
       <button
         type="button"
@@ -3069,6 +3173,62 @@
         >
           Cerrar
         </button>
+      </div>
+    </div>
+
+    <!-- Crear o editar un proceso del catálogo (módulo Procesos). Va antes de
+         modalConfirmarPl para que la confirmación quede encima. -->
+    <div id="modalProcesoPl" class="modal-overlay">
+      <div class="modal-box" style="max-height: 100%; overflow-y: auto">
+        <h3 id="procesoPlTitulo" style="margin-top: 0">Nuevo proceso</h3>
+        <div id="procesoPlAlerta"></div>
+        <label for="procesoPlNombre">Nombre</label>
+        <textarea
+          id="procesoPlNombre"
+          rows="3"
+          maxlength="300"
+          autocomplete="off"
+          spellcheck="false"
+        ></textarea>
+        <p class="hint" style="margin-top: 0" id="procesoPlNotaNombre"></p>
+        <label for="procesoPlEstandar">Estándar (unidades por hora)</label>
+        <input
+          id="procesoPlEstandar"
+          type="number"
+          min="0"
+          max="100000"
+          step="0.01"
+          inputmode="decimal"
+        />
+        <label for="procesoPlLink">Link (opcional)</label>
+        <input
+          id="procesoPlLink"
+          type="url"
+          maxlength="1000"
+          autocomplete="off"
+          placeholder="https://..."
+        />
+        <label class="cp-casilla">
+          <input id="procesoPlGeneral" type="checkbox" />
+          General (se preselecciona al crear un pedido)
+        </label>
+        <p class="hint" style="margin-top: 0" id="procesoPlNota"></p>
+        <div class="row2" style="margin-top: 8px">
+          <button
+            type="button"
+            class="btn-gv-contorno"
+            onclick="cerrarProcesoPl()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            id="btnGuardarProcesoPl"
+            onclick="guardarProcesoPl()"
+          >
+            Guardar
+          </button>
+        </div>
       </div>
     </div>
 
@@ -5371,6 +5531,7 @@
           "vistaCrearPedido",
           "vistaClientesPlaneacion",
           "vistaUsuariosPlaneacion",
+          "vistaProcesosPlaneacion",
         ].forEach((id) => {
           document.getElementById(id).style.display = "none";
         });
@@ -5445,6 +5606,7 @@
           "vistaCrearPedido",
           "vistaClientesPlaneacion",
           "vistaUsuariosPlaneacion",
+          "vistaProcesosPlaneacion",
         ].forEach((id) => {
           document.getElementById(id).style.display = "none";
         });
@@ -5452,6 +5614,7 @@
         cerrarEanPl();
         cerrarCargaEanPl();
         cerrarPersonaPl();
+        cerrarProcesoPl();
 
         // 2. Vaciar inputs, textareas y selects simples
         const camposAVaciar = [
@@ -9706,6 +9869,573 @@
       ["personaPlNombre", "personaPlClave", "personaPlMaestra"].forEach((id) =>
         document.getElementById(id).addEventListener("keydown", function (e) {
           if (e.key === "Enter") enviarFormPersonaPl();
+        }),
+      );
+
+      // ---------------- PROCESOS (Planeación, F5 P1: catálogo) ----------------
+      // Un proceso es único (nombre específico, estándar y link) y se asigna a
+      // los pedidos que lo necesiten. El catálogo funciona antes del corte: el
+      // pull no toca catalogo_procesos. Usos, avisos y reglas los calcula el
+      // Worker; aquí solo se filtra y se ofrecen los botones que aplican.
+      const PL_PROCESOS_POR_PAGINA = 50;
+      let plProcesos = null; // última respuesta de obtenerProcesosPlaneacion
+      let plVistaProcesos = "catalogo"; // "catalogo" | "fuera"
+      let plProcesosMostrados = PL_PROCESOS_POR_PAGINA;
+      let plProcesosEnCurso = false; // acciones de las tarjetas y en bloque
+      let plProcesoAbierto = null; // id del proceso en el modal, o "nuevo"
+      let plProcesoEnCurso = false;
+
+      function abrirProcesosPlaneacion() {
+        _abrirVistaPlaneacion("vistaProcesosPlaneacion");
+        document.getElementById("plProcesoBuscar").value = "";
+        document.getElementById("plProcesoEstado").value = "activos";
+        document.getElementById("plProcesoRevisar").value = "";
+        plVistaProcesos = "catalogo";
+        _marcarChipsPl("data-vista-proc", "catalogo");
+        plProcesos = null;
+        plProcesosMostrados = PL_PROCESOS_POR_PAGINA;
+        [
+          "plProcesosNota",
+          "plProcesosMensaje",
+          "plProcesosLista",
+          "plConteoCatalogo",
+          "plConteoFuera",
+        ].forEach((id) => (document.getElementById(id).innerHTML = ""));
+        ["btnPlProcesosMas", "btnPlProcesosBloque"].forEach(
+          (id) => (document.getElementById(id).style.display = "none"),
+        );
+        document.getElementById("plProcesosAlerta").innerHTML =
+          '<p class="hint">Cargando procesos...</p>';
+        const consulta = ++plConsulta;
+        llamarAPI("obtenerProcesosPlaneacion", {})
+          .then(function (res) {
+            if (consulta !== plConsulta || res.sesionVencida) return;
+            if (!res.success) {
+              _errorPl("plProcesosAlerta", "plProcesosLista", res.message);
+              return;
+            }
+            _aplicarProcesosPl(res);
+            renderPlProcesos();
+          })
+          .catch(function (err) {
+            if (consulta !== plConsulta) return;
+            _errorPl(
+              "plProcesosAlerta",
+              "plProcesosLista",
+              "Error de conexión: " + err.message,
+            );
+          });
+      }
+
+      function _aplicarProcesosPl(res) {
+        plProcesos = res;
+        document.getElementById("plProcesosNota").textContent =
+          "Cada proceso tiene un nombre específico, un estándar y un link (si hay), y se asigna a los pedidos que lo necesiten. " +
+          "Hasta el corte, los procesos de cada pedido siguen saliendo de la hoja Procesos: lo que cambies aquí llega a los pedidos en el corte. " +
+          'Los que ya se usan en los pedidos y faltan en el catálogo están en "En uso, fuera del catálogo".';
+        document.getElementById("plConteoCatalogo").textContent =
+          "(" + res.procesos.length + ")";
+        document.getElementById("plConteoFuera").textContent =
+          "(" + res.fueraDelCatalogo.length + ")";
+      }
+
+      function cambiarVistaPlProcesos(vista) {
+        plVistaProcesos = vista;
+        _marcarChipsPl("data-vista-proc", vista);
+        plProcesosMostrados = PL_PROCESOS_POR_PAGINA;
+        document.getElementById("plProcesosMensaje").innerHTML = "";
+        renderPlProcesos();
+      }
+
+      function _numPl(n) {
+        return Number(n).toLocaleString("es-CO", { maximumFractionDigits: 2 });
+      }
+
+      // Fecha ISO de hace `dias` días en Bogotá.
+      function _fechaHaceDiasPl(dias) {
+        const d = new Date(_hoyBogotaCT() + "T12:00:00Z");
+        d.setUTCDate(d.getUTCDate() - dias);
+        return d.toISOString().slice(0, 10);
+      }
+
+      function _usoProcesoPl(p) {
+        const partes = [];
+        if (p.pedidos)
+          partes.push(p.pedidos + (p.pedidos === 1 ? " pedido" : " pedidos"));
+        if (p.registros)
+          partes.push(
+            p.registros + (p.registros === 1 ? " registro" : " registros"),
+          );
+        return partes.join(" y ");
+      }
+
+      // Avisos de una tarjeta. "warn" cuenta para el filtro "Con avisos".
+      function _avisosProcesoPl(p, fuera) {
+        const avisos = [];
+        if (p.estandaresUsados.length > 1)
+          avisos.push({
+            tipo: "warn",
+            texto:
+              "En los pedidos tuvo " +
+              p.estandaresUsados.length +
+              " estándares (" +
+              p.estandaresUsados.map(_numPl).join(", ") +
+              "). Si son procesos distintos, crea uno con un nombre más específico.",
+          });
+        if (!p.linkValido)
+          avisos.push({
+            tipo: "warn",
+            texto: "El link no empieza por http:// o https://.",
+          });
+        if (p.escrituras > 1)
+          avisos.push({
+            tipo: "info",
+            texto:
+              "En los pedidos está escrito de " + p.escrituras + " formas.",
+          });
+        if (!fuera && p.distintos)
+          avisos.push({
+            tipo: "info",
+            texto:
+              (p.distintos === 1
+                ? "1 pedido tiene"
+                : p.distintos + " pedidos tienen") +
+              " otro estándar u otro link: en el corte toman los del catálogo.",
+          });
+        return avisos;
+      }
+
+      function _plProcesosFiltrados() {
+        if (!plProcesos) return [];
+        const fuera = plVistaProcesos === "fuera";
+        const lista = fuera ? plProcesos.fueraDelCatalogo : plProcesos.procesos;
+        const clave = normalizarPedido(
+          document.getElementById("plProcesoBuscar").value,
+        );
+        const estado = document.getElementById("plProcesoEstado").value;
+        const revisar = document.getElementById("plProcesoRevisar").value;
+        const dias = { sinUso90: 90, sinUso180: 180 }[revisar];
+        const limite = dias ? _fechaHaceDiasPl(dias) : "";
+        return lista.filter(function (p) {
+          if (!fuera && estado === "activos" && !p.activo) return false;
+          if (!fuera && estado === "inactivos" && p.activo) return false;
+          if (
+            revisar === "avisos" &&
+            !_avisosProcesoPl(p, fuera).some((a) => a.tipo === "warn")
+          )
+            return false;
+          if (revisar === "general" && !p.general) return false;
+          if (dias && p.ultimoUso && p.ultimoUso >= limite) return false;
+          if (revisar === "nunca" && (p.pedidos || p.registros)) return false;
+          return !clave || normalizarPedido(p.nombre).includes(clave);
+        });
+      }
+
+      function _tarjetaPlProceso(p, fuera) {
+        const bloqueado = plProcesosEnCurso ? " disabled" : "";
+        let distintivo = "";
+        if (!fuera && !p.activo)
+          distintivo = '<span class="pl-distintivo">Inactivo</span>';
+        else if (!fuera && p.general)
+          distintivo = '<span class="pl-distintivo">General</span>';
+        const estandar = p.estandar
+          ? "Estándar " + _numPl(p.estandar) + " u/h"
+          : "Sin estándar (0)";
+        const link = !p.link
+          ? "Sin link"
+          : p.linkValido
+            ? `<a href="${escapeHtml(p.link)}" target="_blank" rel="noopener">Abrir link</a>`
+            : "Link: " + escapeHtml(p.link);
+        const uso = _usoProcesoPl(p);
+        const textoUso = uso
+          ? "Usado en " +
+            uso +
+            (p.ultimoUso ? " · último uso " + _textoFechaChip(p.ultimoUso) : "")
+          : "Sin uso";
+        const avisos = _avisosProcesoPl(p, fuera)
+          .map(
+            (a) =>
+              `<div class="msg ${a.tipo === "warn" ? "warn" : "info"}">${escapeHtml(a.texto)}</div>`,
+          )
+          .join("");
+        const botones = [];
+        if (fuera) {
+          botones.push(
+            `<button type="button" class="btn-gv-mini btn-gv-contorno" data-proc-agregar="${escapeHtml(p.clave)}"${bloqueado}>Agregar al catálogo</button>`,
+          );
+        } else {
+          const boton = (accion, texto, peligro) =>
+            `<button type="button" class="btn-gv-mini ${peligro ? "btn-gv-peligro" : "btn-gv-contorno"}" data-proc="${accion}:${p.id}"${bloqueado}>${texto}</button>`;
+          botones.push(boton("editar", "Editar"));
+          if (p.activo) botones.push(boton("desactivar", "Desactivar"));
+          else {
+            botones.push(boton("reactivar", "Reactivar"));
+            if (!p.pedidos && !p.registros)
+              botones.push(boton("eliminar", "Eliminar", true));
+          }
+        }
+        return (
+          `<div class="pl-tarjeta">` +
+          `<div class="pl-cabecera"><strong>${escapeHtml(p.nombre)}</strong>${distintivo}</div>` +
+          `<div class="hint" style="margin: 2px 0 0">${escapeHtml(estandar)} · ${link}</div>` +
+          `<div class="hint" style="margin: 2px 0 0">${escapeHtml(textoUso)}</div>` +
+          avisos +
+          `<div class="pl-acciones">${botones.join("")}</div>` +
+          `</div>`
+        );
+      }
+
+      function renderPlProcesos() {
+        if (!plProcesos) return;
+        const fuera = plVistaProcesos === "fuera";
+        document.getElementById("plProcesoEstadoWrap").style.visibility = fuera
+          ? "hidden"
+          : "";
+        const nuevo = document.getElementById("btnPlProcesoNuevo");
+        nuevo.style.display = fuera ? "none" : "";
+        nuevo.disabled = plProcesosEnCurso;
+        const lista = _plProcesosFiltrados();
+        const visibles = lista.slice(0, plProcesosMostrados);
+        document.getElementById("plProcesosLista").innerHTML = visibles
+          .map((p) => _tarjetaPlProceso(p, fuera))
+          .join("");
+        let alerta;
+        if (lista.length)
+          alerta =
+            '<p class="hint">Mostrando ' +
+            visibles.length +
+            " de " +
+            lista.length +
+            (lista.length === 1 ? " proceso.</p>" : " procesos.</p>");
+        else if (fuera && !plProcesos.fueraDelCatalogo.length)
+          alerta =
+            '<p class="hint">Todos los procesos que se usan en los pedidos están en el catálogo.</p>';
+        else if (!fuera && !plProcesos.procesos.length)
+          alerta =
+            '<p class="hint">El catálogo está vacío: agrega los procesos que ya se usan desde "En uso, fuera del catálogo".</p>';
+        else alerta = '<p class="hint">No hay procesos con ese filtro.</p>';
+        document.getElementById("plProcesosAlerta").innerHTML = alerta;
+        document.getElementById("btnPlProcesosMas").style.display =
+          lista.length > visibles.length ? "" : "none";
+
+        // Acción en bloque sobre lo filtrado: agregar los que faltan, o
+        // desactivar los activos que no se usan hace tiempo.
+        const bloque = document.getElementById("btnPlProcesosBloque");
+        const revisar = document.getElementById("plProcesoRevisar").value;
+        let texto = "";
+        if (fuera && lista.length)
+          texto =
+            lista.length === 1
+              ? "Agregar este proceso al catálogo"
+              : "Agregar los " + lista.length + " al catálogo";
+        else if (
+          !fuera &&
+          ["sinUso90", "sinUso180", "nunca"].includes(revisar)
+        ) {
+          const activos = lista.filter((p) => p.activo).length;
+          if (activos)
+            texto =
+              activos === 1
+                ? "Desactivar el proceso activo de la lista"
+                : "Desactivar los " + activos + " activos de la lista";
+        }
+        bloque.textContent = texto;
+        bloque.style.display = texto ? "" : "none";
+        bloque.disabled = plProcesosEnCurso;
+      }
+
+      function verMasPlProcesos() {
+        plProcesosMostrados += PL_PROCESOS_POR_PAGINA;
+        renderPlProcesos();
+      }
+
+      document
+        .getElementById("plProcesoBuscar")
+        .addEventListener("input", function () {
+          plProcesosMostrados = PL_PROCESOS_POR_PAGINA;
+          renderPlProcesos();
+        });
+      ["plProcesoEstado", "plProcesoRevisar"].forEach((id) =>
+        document.getElementById(id).addEventListener("change", function () {
+          plProcesosMostrados = PL_PROCESOS_POR_PAGINA;
+          renderPlProcesos();
+        }),
+      );
+
+      // Vuelve a leer el módulo tras un cambio, conservando la vista, los
+      // filtros, cuántos se muestran y la posición. Si falla, la lista queda
+      // como estaba (el cambio ya se guardó).
+      function _recargarProcesosPl() {
+        const mostrados = plProcesosMostrados;
+        const consulta = ++plConsulta;
+        return llamarAPI("obtenerProcesosPlaneacion", {})
+          .then(function (res) {
+            if (consulta !== plConsulta || res.sesionVencida || !res.success)
+              return;
+            const y = window.scrollY;
+            _aplicarProcesosPl(res);
+            plProcesosMostrados = mostrados;
+            renderPlProcesos();
+            window.scrollTo(0, y);
+          })
+          .catch(function () {});
+      }
+
+      function _mensajeProcesosPl(clase, texto) {
+        document.getElementById("plProcesosMensaje").innerHTML =
+          `<div class="msg ${clase}">${escapeHtml(texto)}</div>`;
+      }
+
+      // Acciones de las tarjetas y en bloque. textoOk recibe la respuesta.
+      function _enviarProcesosPl(datos, textoOk) {
+        plProcesosEnCurso = true;
+        renderPlProcesos();
+        document.getElementById("plProcesosMensaje").innerHTML =
+          '<p class="hint">Guardando...</p>';
+        const terminar = function (clase, texto) {
+          plProcesosEnCurso = false;
+          renderPlProcesos();
+          _mensajeProcesosPl(clase, texto);
+        };
+        llamarAPI("guardarProceso", datos)
+          .then(function (res) {
+            if (res.sesionVencida) {
+              plProcesosEnCurso = false;
+              return;
+            }
+            if (!res.success) return terminar("err", res.message);
+            _recargarProcesosPl().then(function () {
+              terminar(
+                "ok",
+                res.sinCambios ? "No había nada que cambiar." : textoOk(res),
+              );
+            });
+          })
+          .catch(function (err) {
+            terminar("err", "Error de conexión: " + err.message);
+          });
+      }
+
+      function _accionTarjetaProcesoPl(accion, valor) {
+        if (!plProcesos || plProcesosEnCurso) return;
+        if (accion === "agregar") {
+          const f = plProcesos.fueraDelCatalogo.find((x) => x.clave === valor);
+          if (!f) return;
+          _enviarProcesosPl(
+            { accion: "agregarEnUso", claves: [f.clave] },
+            () => '"' + f.nombre + '" quedó en el catálogo.',
+          );
+          return;
+        }
+        const p = plProcesos.procesos.find((x) => String(x.id) === valor);
+        if (!p) return;
+        if (accion === "editar") return abrirProcesoPl(p.id);
+        if (accion === "reactivar") {
+          _enviarProcesosPl(
+            { accion, id: p.id },
+            () => '"' + p.nombre + '" reactivado.',
+          );
+          return;
+        }
+        if (accion === "desactivar") {
+          pedirConfirmarPl(
+            "Desactivar proceso",
+            '"' +
+              p.nombre +
+              '" dejará de ofrecerse al crear un pedido. Los pedidos que ya lo tienen no cambian. Se puede reactivar.',
+            "Desactivar",
+            true,
+            () =>
+              _enviarProcesosPl(
+                { accion, id: p.id },
+                () => '"' + p.nombre + '" desactivado.',
+              ),
+          );
+          return;
+        }
+        if (accion === "eliminar") {
+          pedirConfirmarPl(
+            "Eliminar proceso",
+            '"' +
+              p.nombre +
+              '" se borra del catálogo. No se usa en ningún pedido ni registro.',
+            "Eliminar",
+            true,
+            () =>
+              _enviarProcesosPl(
+                { accion, id: p.id },
+                () => '"' + p.nombre + '" eliminado.',
+              ),
+          );
+        }
+      }
+
+      function accionBloquePlProcesos() {
+        if (!plProcesos || plProcesosEnCurso) return;
+        const lista = _plProcesosFiltrados();
+        if (plVistaProcesos === "fuera") {
+          if (!lista.length) return;
+          pedirConfirmarPl(
+            "Agregar al catálogo",
+            (lista.length === 1
+              ? "Se agrega 1 proceso"
+              : "Se agregan " + lista.length + " procesos") +
+              " con el nombre más usado en los pedidos y el estándar y el link del pedido más reciente que lo usó. Después se pueden editar uno por uno.",
+            "Agregar",
+            false,
+            () =>
+              _enviarProcesosPl(
+                { accion: "agregarEnUso", claves: lista.map((p) => p.clave) },
+                (res) =>
+                  res.agregados === 1
+                    ? "1 proceso agregado al catálogo."
+                    : res.agregados + " procesos agregados al catálogo.",
+              ),
+          );
+          return;
+        }
+        const activos = lista.filter((p) => p.activo);
+        if (!activos.length) return;
+        pedirConfirmarPl(
+          "Desactivar procesos",
+          (activos.length === 1
+            ? "Se desactiva 1 proceso"
+            : "Se desactivan " + activos.length + " procesos") +
+            ": dejan de ofrecerse al crear un pedido. Los pedidos que ya los tienen no cambian. Se pueden reactivar.",
+          "Desactivar",
+          true,
+          () =>
+            _enviarProcesosPl(
+              { accion: "desactivarVarios", ids: activos.map((p) => p.id) },
+              (res) =>
+                res.desactivados === 1
+                  ? "1 proceso desactivado."
+                  : res.desactivados + " procesos desactivados.",
+            ),
+        );
+      }
+
+      document
+        .getElementById("plProcesosLista")
+        .addEventListener("click", function (e) {
+          const agregar = e.target.closest("[data-proc-agregar]");
+          if (agregar && !agregar.disabled)
+            return _accionTarjetaProcesoPl(
+              "agregar",
+              agregar.dataset.procAgregar,
+            );
+          const boton = e.target.closest("[data-proc]");
+          if (!boton || boton.disabled) return;
+          const [accion, id] = boton.dataset.proc.split(":");
+          _accionTarjetaProcesoPl(accion, id);
+        });
+
+      // ---- Modal: crear o editar un proceso ----
+      function abrirProcesoPl(id) {
+        if (!plProcesos || plProcesosEnCurso) return;
+        const p =
+          id === null ? null : plProcesos.procesos.find((x) => x.id === id);
+        if (id !== null && !p) return;
+        plProcesoAbierto = p ? p.id : "nuevo";
+        plProcesoEnCurso = false;
+        const uso = p ? _usoProcesoPl(p) : "";
+        document.getElementById("procesoPlTitulo").textContent = p
+          ? "Editar proceso"
+          : "Nuevo proceso";
+        const nombre = document.getElementById("procesoPlNombre");
+        nombre.value = p
+          ? p.nombre
+          : document
+              .getElementById("plProcesoBuscar")
+              .value.trim()
+              .replace(/\s+/g, " ");
+        nombre.disabled = !!uso;
+        document.getElementById("procesoPlNotaNombre").textContent = uso
+          ? "El nombre no se cambia: se usa en " +
+            uso +
+            ". Si hace falta uno más específico, crea otro proceso."
+          : 'Usa un nombre específico: etiquetar zapatos no es lo mismo que etiquetar camisas (por ejemplo, "Etiquetar calzado niño").';
+        document.getElementById("procesoPlEstandar").value = p
+          ? String(p.estandar)
+          : "";
+        document.getElementById("procesoPlLink").value = p ? p.link : "";
+        document.getElementById("procesoPlGeneral").checked = p
+          ? p.general
+          : false;
+        document.getElementById("procesoPlNota").textContent =
+          p && p.pedidos
+            ? "Hasta el corte, los pedidos siguen con el estándar y el link de la hoja; en el corte toman los del catálogo. Los registros ya guardados conservan su estándar."
+            : "";
+        document.getElementById("procesoPlAlerta").innerHTML = "";
+        document.getElementById("btnGuardarProcesoPl").disabled = false;
+        document.getElementById("modalProcesoPl").classList.add("visible");
+        (uso ? document.getElementById("procesoPlEstandar") : nombre).focus();
+      }
+
+      function cerrarProcesoPl() {
+        plProcesoAbierto = null;
+        document.getElementById("modalProcesoPl").classList.remove("visible");
+      }
+
+      function guardarProcesoPl() {
+        if (!plProcesoAbierto || plProcesoEnCurso) return;
+        const alerta = document.getElementById("procesoPlAlerta");
+        const _error = (m) =>
+          (alerta.innerHTML = `<div class="msg err">${escapeHtml(m)}</div>`);
+        const nombre = document
+          .getElementById("procesoPlNombre")
+          .value.trim()
+          .replace(/\s+/g, " ");
+        const campoEstandar = document.getElementById("procesoPlEstandar");
+        const estandar = campoEstandar.value.trim();
+        if (!nombre) return _error("Escribe el nombre del proceso.");
+        if (campoEstandar.validity.badInput)
+          return _error("El estándar debe ser un número.");
+        if (!estandar) return _error("Escribe el estándar (0 si no tiene).");
+        const nuevo = plProcesoAbierto === "nuevo";
+        const datos = {
+          accion: nuevo ? "crear" : "editar",
+          nombre,
+          estandar,
+          link: document.getElementById("procesoPlLink").value.trim(),
+          general: document.getElementById("procesoPlGeneral").checked,
+        };
+        if (!nuevo) datos.id = plProcesoAbierto;
+        const abierto = plProcesoAbierto;
+        const boton = document.getElementById("btnGuardarProcesoPl");
+        plProcesoEnCurso = true;
+        boton.disabled = true;
+        alerta.innerHTML = '<p class="hint">Guardando...</p>';
+        const terminar = function () {
+          plProcesoEnCurso = false;
+          boton.disabled = false;
+        };
+        llamarAPI("guardarProceso", datos)
+          .then(function (res) {
+            terminar();
+            if (res.sesionVencida) return;
+            if (!res.success) {
+              if (plProcesoAbierto === abierto) _error(res.message);
+              return;
+            }
+            if (plProcesoAbierto === abierto) cerrarProcesoPl();
+            const texto = res.sinCambios
+              ? "No había nada que cambiar."
+              : nuevo
+                ? '"' + res.nombre + '" quedó en el catálogo.'
+                : '"' + res.nombre + '" guardado.';
+            _recargarProcesosPl().then(() => _mensajeProcesosPl("ok", texto));
+          })
+          .catch(function (err) {
+            terminar();
+            if (plProcesoAbierto === abierto)
+              _error("Error de conexión: " + err.message);
+          });
+      }
+
+      ["procesoPlEstandar", "procesoPlLink"].forEach((id) =>
+        document.getElementById(id).addEventListener("keydown", function (e) {
+          if (e.key === "Enter") guardarProcesoPl();
         }),
       );
 

@@ -3,6 +3,7 @@ import { accionesAuth } from "./acciones-auth.js";
 import { accionesEscritura } from "./acciones-escritura.js";
 import { accionesPlaneacion } from "./acciones-planeacion.js";
 import { accionesUsuarios } from "./acciones-usuarios.js";
+import { accionesProcesos } from "./acciones-procesos.js";
 import { _reconciliarSeguimientoD1 } from "./d1-negocio.js";
 import {
   leerModoAuth,
@@ -41,6 +42,8 @@ const PERMISOS_POR_ACCION = {
   cambiarRolOperario: ["planeacion"],
   guardarRolPersona: ["planeacion"],
   guardarCuentaUsuario: ["planeacion"],
+  obtenerProcesosPlaneacion: ["planeacion"],
+  guardarProceso: ["planeacion"],
 };
 
 export default {
@@ -168,6 +171,7 @@ const ACCIONES = {
   ...accionesEscritura,
   ...accionesPlaneacion,
   ...accionesUsuarios,
+  ...accionesProcesos,
 };
 
 function json(data, status = 200) {
