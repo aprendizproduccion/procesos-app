@@ -14,6 +14,8 @@
 // de D1 y la hoja solo lo recibe por el espejo).
 // F3c: pegar varios EAN desde Excel con vista previa y guardado todo o nada
 // (cargarEanes: la vista previa funciona ya; guardar exige el interruptor).
+// F5 · P2: los procesos de un pedido salen del catálogo de procesos
+// (catalogo_procesos, módulo Procesos en acciones-procesos.js).
 
 import {
   _normalizarPedido,
@@ -34,8 +36,9 @@ import {
 } from "./d1-negocio.js";
 import { _pushSeguimientoYMarcar } from "./push-sheets.js";
 
-// Procesos sin estándar que llevan casi todos los pedidos: el formulario los
-// trae ya marcados (se pueden quitar). No cuentan para el número del pedido.
+// Procesos sin estándar que llevan casi todos los pedidos. Desde F5 · P2 el
+// formulario preselecciona los que tienen la marca "general" en el catálogo;
+// esta lista solo pone esa marca al agregar los procesos en uso (agregarEnUso).
 export const PROCESOS_GENERALES = [
   "Induccion Proceso",
   "Pasar Trabajo",
@@ -102,60 +105,54 @@ function _inicialProceso(nombre) {
   return m ? m[0] : "";
 }
 
-// Catálogo de procesos agrupado por nombre normalizado. Nombre canónico: la
-// escritura más usada. Estándar y link: los del pedido más reciente que lo usó
-// (por fecha del pedido; empate, la fila más nueva).
+// Catálogo de procesos (F5): la tabla catalogo_procesos por su clave (nombre
+// sin tildes, mayúsculas ni espacios). Desde P2 los pedidos toman de aquí el
+// nombre, el estándar y el link de cada proceso.
 async function _catalogoProcesos(env) {
   const { results } = await env.DB.prepare(
-    "SELECT pr.id, pr.nombre_proceso AS nombre, pr.unidades_hora_estandar AS estandar, " +
-      "COALESCE(pr.link_procesos, '') AS link, COALESCE(f.fecha, '') AS fecha " +
-      "FROM procesos pr LEFT JOIN (SELECT numero_pedido, MIN(fecha) AS fecha " +
-      "FROM pedidos GROUP BY numero_pedido) f ON f.numero_pedido = pr.numero_pedido",
+    "SELECT id, nombre, clave, estandar, link, general, activo FROM catalogo_procesos",
   ).all();
-
-  const grupos = new Map();
-  results.forEach((r) => {
-    const nombre = String(r.nombre || "").trim();
-    const clave = _normalizarPedido(nombre);
-    if (!clave) return;
-    if (!grupos.has(clave)) {
-      grupos.set(clave, {
-        escrituras: new Map(),
-        estandares: new Map(),
-        reciente: null,
-        usos: 0,
-      });
-    }
-    const g = grupos.get(clave);
-    g.usos++;
-    g.escrituras.set(nombre, (g.escrituras.get(nombre) || 0) + 1);
-    const estandar = Number(r.estandar) || 0;
-    g.estandares.set(estandar, (g.estandares.get(estandar) || 0) + 1);
-    const masNuevo =
-      !g.reciente ||
-      String(r.fecha) > String(g.reciente.fecha) ||
-      (String(r.fecha) === String(g.reciente.fecha) && r.id > g.reciente.id);
-    if (masNuevo) g.reciente = r;
-  });
-
   const catalogo = new Map();
-  grupos.forEach((g, clave) => {
-    const nombre = [...g.escrituras.entries()].sort(
-      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "es"),
-    )[0][0];
-    catalogo.set(clave, {
-      nombre,
-      estandar: Number(g.reciente.estandar) || 0,
-      link: String(g.reciente.link || ""),
-      usos: g.usos,
-      // Estándares usados, el más frecuente primero.
-      estandares: [...g.estandares.entries()]
-        .sort((a, b) => b[1] - a[1] || b[0] - a[0])
-        .map((e) => e[0]),
-    });
-  });
+  results.forEach((r) =>
+    catalogo.set(String(r.clave), {
+      id: r.id,
+      nombre: String(r.nombre),
+      estandar: Number(r.estandar) || 0,
+      link: String(r.link || ""),
+      general: r.general === 1,
+      activo: r.activo === 1,
+    }),
+  );
   return catalogo;
 }
+
+// Guarda de los procesos del catálogo que se escriben en un pedido: se cumple
+// si entre la lectura y el batch alguno se desactivó, se eliminó o cambió su
+// nombre, su estándar o su link (lo escrito sería distinto del catálogo).
+function _guardaCatalogo(procesos) {
+  return {
+    condicion:
+      "(SELECT COUNT(*) FROM json_each(?) j JOIN catalogo_procesos c " +
+      "ON c.id = json_extract(j.value, '$.id') AND c.activo = 1 " +
+      "AND c.nombre = json_extract(j.value, '$.nombre') " +
+      "AND c.estandar = json_extract(j.value, '$.estandar') " +
+      "AND c.link = json_extract(j.value, '$.link')) < ?",
+    binds: [
+      JSON.stringify(
+        procesos.map((p) => ({
+          id: p.id,
+          nombre: p.nombre,
+          estandar: p.estandar,
+          link: p.link,
+        })),
+      ),
+      procesos.length,
+    ],
+  };
+}
+
+const MSG_CATALOGO_CAMBIO =
+  "Un proceso cambió en el catálogo mientras guardabas (se editó, se desactivó o se eliminó). Vuelve a abrir el formulario.";
 
 // Sublíneas ya usadas, agrupadas por nombre normalizado (gana la escritura más
 // usada), de la más usada a la menos.
@@ -249,39 +246,28 @@ function _alertaSumaEan(unidadesEan, unidadesPedidas) {
   );
 }
 
-// Valida un proceso del formulario: nombre, estándar (obligatorio, desde 0) y
-// link (vacío o http(s)://). Si el nombre ya está en el catálogo devuelve su
-// escritura. La repetición dentro del pedido la revisa quien llama.
-function _procesoValidado(p, catalogo) {
+// Un proceso que se agrega a un pedido (F5 · P2): se busca en el catálogo por
+// su nombre normalizado y debe estar activo. Nombre, estándar y link son los
+// del catálogo; lo que mande el navegador no cuenta. La repetición dentro del
+// pedido la revisa quien llama.
+function _procesoDelCatalogo(p, catalogo) {
   const texto = _limpiar(p && p.nombre);
   const clave = _normalizarPedido(texto);
   if (!clave) throw new Error("Hay un proceso sin nombre.");
-  if (texto.length > 300)
-    throw new Error("Un nombre de proceso pasa de 300 caracteres.");
-  const estandar = _redondear2(p.estandar);
-  if (
-    p.estandar === "" ||
-    p.estandar === null ||
-    !Number.isFinite(estandar) ||
-    estandar < 0 ||
-    estandar > 100000
-  )
+  const c = catalogo.get(clave);
+  if (!c)
     throw new Error(
-      'El estándar de "' + texto + '" debe ser un número desde 0.',
+      'El proceso "' +
+        texto +
+        '" no está en el catálogo: créalo primero en el módulo Procesos.',
     );
-  const link = String((p && p.link) || "").trim();
-  if (link && (!/^https?:\/\/\S+$/i.test(link) || link.length > 1000))
+  if (!c.activo)
     throw new Error(
-      'El link de "' + texto + '" debe empezar por http:// o https://.',
+      'El proceso "' +
+        c.nombre +
+        '" está inactivo en el catálogo: reactívalo en el módulo Procesos o elige otro.',
     );
-  const enCatalogo = catalogo.get(clave);
-  return {
-    clave,
-    nombre: enCatalogo ? enCatalogo.nombre : texto,
-    estandar,
-    link,
-    nuevo: !enCatalogo,
-  };
+  return { clave, ...c };
 }
 
 // Valor de una lista fija. Si equivale al que ya tiene el pedido (y no difiere
@@ -1010,16 +996,17 @@ export const accionesPlaneacion = {
     }
     clientes.sort((a, b) => a.localeCompare(b, "es"));
 
-    const catalogo = await _catalogoProcesos(env);
-    const procesos = [...catalogo.values()].sort((a, b) =>
-      a.nombre.localeCompare(b.nombre, "es"),
-    );
-    const generales = PROCESOS_GENERALES.map((nombre) => {
-      const c = catalogo.get(_normalizarPedido(nombre));
-      return c
-        ? { nombre: c.nombre, estandar: c.estandar, link: c.link }
-        : { nombre, estandar: 0, link: "" };
-    });
+    // Procesos: los activos del catálogo. Los generales vienen marcados.
+    const procesos = [...(await _catalogoProcesos(env)).values()]
+      .filter((c) => c.activo)
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
+      .map((c) => ({
+        nombre: c.nombre,
+        estandar: c.estandar,
+        link: c.link,
+        general: c.general,
+      }));
+    const generales = procesos.filter((c) => c.general);
     const sublineas = [...(await _sublineasUsadas(env)).values()]
       .sort((a, b) => b.usos - a.usos)
       .map((s) => s.nombre);
@@ -1041,9 +1028,10 @@ export const accionesPlaneacion = {
   // Crea un pedido (o una actividad interna) con sus sublíneas y procesos en
   // un solo batch. El número de un pedido lo genera el sistema y no se
   // recalcula nunca; si alguien se equivoca, se borra y se crea de nuevo.
+  // Los procesos salen del catálogo activo (F5 · P2), con su estándar y su
+  // link; si alguno cambia en el catálogo antes de guardar, no se crea nada.
   // datos: { idEnvio, tipo: "pedido"|"interna", unidades, nombre, cliente,
-  //   sublineas[], evento, clasificacion, procesos[{nombre, estandar, link}],
-  //   sinLimite }
+  //   sublineas[], evento, clasificacion, procesos[{nombre}], sinLimite }
   async crearPedido(datos, env, ctx, ip, sesion) {
     if (!String(datos.idEnvio || "").trim())
       throw new Error("Falta el identificador del envío. Recarga la página.");
@@ -1136,7 +1124,7 @@ export const accionesPlaneacion = {
       if (sublineas.length > MAX_SUBLINEAS)
         throw new Error("Máximo " + MAX_SUBLINEAS + " sublíneas por pedido.");
 
-      // --- Procesos: nombre del catálogo si ya existe ---
+      // --- Procesos: del catálogo activo, con su estándar y su link ---
       const catalogo = await _catalogoProcesos(env);
       const procesos = [];
       const vistosProc = new Set();
@@ -1146,14 +1134,9 @@ export const accionesPlaneacion = {
           throw new Error(
             'El proceso "' + _limpiar(p.nombre) + '" está repetido.',
           );
-        const v = _procesoValidado(p, catalogo);
-        vistosProc.add(v.clave);
-        procesos.push({
-          nombre: v.nombre,
-          estandar: v.estandar,
-          link: v.link,
-          nuevo: v.nuevo,
-        });
+        const c = _procesoDelCatalogo(p, catalogo);
+        vistosProc.add(c.clave);
+        procesos.push(c);
       });
       if (procesos.length === 0) throw new Error("Agrega al menos un proceso.");
       if (procesos.length > MAX_PROCESOS)
@@ -1162,6 +1145,7 @@ export const accionesPlaneacion = {
       const sinLimite = interna && datos.sinLimite === true;
       const fecha = _fechaHoyBogota();
       const ahora = _ahoraISO();
+      const guardaCatalogo = _guardaCatalogo(procesos);
 
       // --- Número y batch, con reintento si otro lo tomó entre medias ---
       let respuesta = null;
@@ -1209,8 +1193,9 @@ export const accionesPlaneacion = {
               hechoEn: ahora,
             },
             "EXISTS(SELECT 1 FROM pedidos WHERE numero_pedido = ?) OR " +
-              "EXISTS(SELECT 1 FROM validacion_eanes WHERE numero_pedido = ?)",
-            [pedido, pedido],
+              "EXISTS(SELECT 1 FROM validacion_eanes WHERE numero_pedido = ?) OR " +
+              guardaCatalogo.condicion,
+            [pedido, pedido, ...guardaCatalogo.binds],
           ),
         ];
         sublineas.forEach((s) =>
@@ -1256,7 +1241,6 @@ export const accionesPlaneacion = {
             fecha,
             sublineas,
             procesos: procesos.length,
-            procesosNuevos: procesos.filter((p) => p.nuevo).length,
             sinLimite,
           };
         } catch (errLote) {
@@ -1268,7 +1252,17 @@ export const accionesPlaneacion = {
           )
             .bind(pedido)
             .first();
-          if (!tomado) throw errLote;
+          if (!tomado) {
+            const cambio = await env.DB.prepare(
+              "SELECT CASE WHEN " +
+                guardaCatalogo.condicion +
+                " THEN 1 ELSE 0 END AS si",
+            )
+              .bind(...guardaCatalogo.binds)
+              .first();
+            if (cambio && cambio.si === 1) throw new Error(MSG_CATALOGO_CAMBIO);
+            throw errLote;
+          }
           if (interna || intento === 3)
             throw new Error(
               'El número "' +
@@ -1452,7 +1446,9 @@ export const accionesPlaneacion = {
   },
 
   // F2b-2: datos para editar un pedido (su estado actual con lo que bloquea
-  // cada sublínea y proceso) más los catálogos del formulario de crear.
+  // cada sublínea y proceso) más los catálogos del formulario de crear. Cada
+  // proceso del pedido dice además cómo está en el catálogo (F5 · P2): si
+  // está, si está activo y su estándar y su link de allá.
   async obtenerPedidoParaEditar(datos, env) {
     const pedido = String(datos.pedido || "").trim();
     if (!pedido) throw new Error("Falta el número de pedido.");
@@ -1463,6 +1459,7 @@ export const accionesPlaneacion = {
       env,
     );
     delete formulario.success;
+    const catalogo = await _catalogoProcesos(env);
     return {
       success: true,
       formulario,
@@ -1476,7 +1473,16 @@ export const accionesPlaneacion = {
         unidadesPedidas: estado.unidadesPedidas,
         unidadesEditables: estado.unidadesEditables,
         sublineas: estado.sublineas,
-        procesos: estado.procesos,
+        procesos: estado.procesos.map((p) => {
+          const c = catalogo.get(_normalizarPedido(p.nombre));
+          return {
+            ...p,
+            enCatalogo: !!c,
+            activo: !!(c && c.activo),
+            estandarCatalogo: c ? c.estandar : null,
+            linkCatalogo: c ? c.link : null,
+          };
+        }),
         huella: estado.huella,
       },
     };
@@ -1486,14 +1492,15 @@ export const accionesPlaneacion = {
   // - cliente, evento y clasificación van a todas las sublíneas y a sus
   //   registros (la hoja Registros se pone al día con la reconciliación);
   // - sublíneas: se agregan siempre; se quitan solo sin EAN;
-  // - procesos: se agregan siempre; se ajustan o quitan solo sin registros;
+  // - procesos: se agregan solo del catálogo activo (F5 · P2) y se quitan
+  //   solo sin registros; los que ya tiene el pedido no se tocan;
   // - unidades pedidas: solo si el pedido viene de la hoja y las tiene en 0.
   // Sin cambios responde éxito (sirve también para un reintento tras un error
   // de red). Si el pedido cambió desde que se abrió (huella distinta), no
   // guarda. Si el pedido está cerrado y cambió el cliente, refresca su fila de
   // "Seguimiento paquetes".
   // datos: { pedido, huella, cliente, evento, clasificacion, unidades,
-  //   sublineas[], procesos[{nombre, estandar, link}] }
+  //   sublineas[], procesos[{nombre}] }
   async editarPedido(datos, env, ctx, ip, sesion) {
     const pedido = String(datos.pedido || "").trim();
     if (!pedido) throw new Error("Falta el número de pedido.");
@@ -1606,13 +1613,14 @@ export const accionesPlaneacion = {
       );
 
     // --- Procesos ---
-    // Uno que ya está en el pedido y llega igual se deja tal cual, sin
-    // revalidar (puede traer un link viejo de la hoja).
+    // Uno que ya está en el pedido se deja tal cual, aunque haya quedado
+    // inactivo o fuera del catálogo (la alineación del corte lo iguala). Uno
+    // nuevo sale del catálogo activo, con su estándar y su link.
     const catalogo = await _catalogoProcesos(env);
     const procActuales = new Map(
       actual.procesos.map((p) => [_normalizarPedido(p.nombre), p]),
     );
-    const procesos = []; // { nombre, estandar, link, estado, antes }
+    const procesos = []; // { nombre, estandar, link, estado }
     const vistosProc = new Set();
     (Array.isArray(datos.procesos) ? datos.procesos : []).forEach((p) => {
       const clave = _normalizarPedido(_limpiar(p && p.nombre));
@@ -1623,47 +1631,18 @@ export const accionesPlaneacion = {
       const existente = clave && procActuales.get(clave);
       if (existente) {
         vistosProc.add(clave);
-        const link = String(p.link || "").trim();
-        const igual =
-          link === existente.link &&
-          p.estandar !== "" &&
-          p.estandar !== null &&
-          _redondear2(p.estandar) === _redondear2(existente.estandar);
-        if (igual) {
-          procesos.push({ ...existente, estado: "igual" });
-          return;
-        }
-        if (existente.registros > 0)
-          throw new Error(
-            'El proceso "' +
-              existente.nombre +
-              '" tiene registros: no se puede cambiar su estándar ni su link.',
-          );
-        const v = _procesoValidado(p, catalogo);
-        procesos.push({
-          nombre: existente.nombre,
-          estandar: v.estandar,
-          link: v.link,
-          estado: "ajustado",
-          antes: existente,
-        });
+        procesos.push({ ...existente, estado: "igual" });
         return;
       }
-      const v = _procesoValidado(p, catalogo);
-      vistosProc.add(v.clave);
-      procesos.push({
-        nombre: v.nombre,
-        estandar: v.estandar,
-        link: v.link,
-        estado: "nuevo",
-      });
+      const c = _procesoDelCatalogo(p, catalogo);
+      vistosProc.add(c.clave);
+      procesos.push({ ...c, estado: "nuevo" });
     });
     if (procesos.length === 0)
       throw new Error("El pedido debe tener al menos un proceso.");
     if (procesos.length > MAX_PROCESOS)
       throw new Error("Máximo " + MAX_PROCESOS + " procesos por pedido.");
     const procNuevos = procesos.filter((p) => p.estado === "nuevo");
-    const procAjustados = procesos.filter((p) => p.estado === "ajustado");
     const procQuitados = actual.procesos.filter(
       (p) => !vistosProc.has(_normalizarPedido(p.nombre)),
     );
@@ -1696,7 +1675,6 @@ export const accionesPlaneacion = {
       subNuevas.length > 0 ||
       subQuitadas.length > 0 ||
       procNuevos.length > 0 ||
-      procAjustados.length > 0 ||
       procQuitados.length > 0;
     if (!hayCambios) return { success: true, pedido, sinCambios: true };
 
@@ -1732,20 +1710,14 @@ export const accionesPlaneacion = {
       link: p.link,
     });
     if (procNuevos.length) despues.procesosAgregados = procNuevos.map(_proc);
-    if (procAjustados.length) {
-      antes.procesosAjustados = procAjustados.map((p) => _proc(p.antes));
-      despues.procesosAjustados = procAjustados.map(_proc);
-    }
     if (procQuitados.length) antes.procesosQuitados = procQuitados.map(_proc);
 
     // --- Guarda: el pedido sigue existiendo, ninguna sublínea que se quita
-    // recibió un EAN y ningún proceso que se quita o ajusta recibió un
-    // registro entre la lectura y el batch ---
+    // recibió un EAN y ningún proceso que se quita recibió un registro entre
+    // la lectura y el batch. Los procesos nuevos tienen su propia guarda: no
+    // cambiaron en el catálogo ---
     const subJson = JSON.stringify(subQuitadas.map((s) => s.sublinea));
-    const procBloqueables = procQuitados
-      .map((p) => p.nombre)
-      .concat(procAjustados.map((p) => p.nombre));
-    const procJson = JSON.stringify(procBloqueables);
+    const procJson = JSON.stringify(procQuitados.map((p) => p.nombre));
     let condicion = "NOT EXISTS(SELECT 1 FROM pedidos WHERE numero_pedido = ?)";
     const binds = [pedido];
     if (subQuitadas.length) {
@@ -1754,12 +1726,15 @@ export const accionesPlaneacion = {
         "AND sublinea IN (SELECT value FROM json_each(?)))";
       binds.push(pedido, subJson);
     }
-    if (procBloqueables.length) {
+    if (procQuitados.length) {
       condicion +=
         " OR EXISTS(SELECT 1 FROM registros WHERE numero_pedido = ? " +
         "AND proceso IN (SELECT value FROM json_each(?)))";
       binds.push(pedido, procJson);
     }
+    const guardaCatalogo = procNuevos.length
+      ? _guardaCatalogo(procNuevos)
+      : null;
 
     const lote = [
       _auditoriaConGuarda(
@@ -1774,8 +1749,10 @@ export const accionesPlaneacion = {
           nombre: sesion.nombre || "",
           hechoEn: _ahoraISO(),
         },
-        condicion,
-        binds,
+        guardaCatalogo
+          ? "(" + condicion + ") OR " + guardaCatalogo.condicion
+          : condicion,
+        guardaCatalogo ? binds.concat(guardaCatalogo.binds) : binds,
       ),
     ];
     if (subQuitadas.length)
@@ -1814,14 +1791,7 @@ export const accionesPlaneacion = {
           "DELETE FROM procesos WHERE numero_pedido = ? AND nombre_proceso IN (SELECT value FROM json_each(?))",
         ).bind(pedido, JSON.stringify(procQuitados.map((p) => p.nombre))),
       );
-    procAjustados.forEach((p) =>
-      lote.push(
-        env.DB.prepare(
-          "UPDATE procesos SET unidades_hora_estandar = ?, link_procesos = ? " +
-            "WHERE numero_pedido = ? AND nombre_proceso = ?",
-        ).bind(p.estandar, p.link, pedido, p.nombre),
-      ),
-    );
+
     procNuevos.forEach((p) =>
       lote.push(
         env.DB.prepare(
@@ -1865,6 +1835,16 @@ export const accionesPlaneacion = {
         throw new Error(
           "El pedido cambió mientras lo editabas (llegaron EAN o registros, o se eliminó). Vuelve a abrirlo.",
         );
+      if (guardaCatalogo) {
+        const cambio = await env.DB.prepare(
+          "SELECT CASE WHEN " +
+            guardaCatalogo.condicion +
+            " THEN 1 ELSE 0 END AS si",
+        )
+          .bind(...guardaCatalogo.binds)
+          .first();
+        if (cambio && cambio.si === 1) throw new Error(MSG_CATALOGO_CAMBIO);
+      }
       throw errLote;
     }
     const registrosActualizados =
@@ -1907,7 +1887,6 @@ export const accionesPlaneacion = {
         sublineasAgregadas: subNuevas,
         sublineasQuitadas: subQuitadas.map((s) => s.sublinea),
         procesosAgregados: procNuevos.map((p) => p.nombre),
-        procesosAjustados: procAjustados.map((p) => p.nombre),
         procesosQuitados: procQuitados.map((p) => p.nombre),
         registrosActualizados,
       },

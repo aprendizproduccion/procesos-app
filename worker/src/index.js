@@ -44,6 +44,7 @@ const PERMISOS_POR_ACCION = {
   guardarCuentaUsuario: ["planeacion"],
   obtenerProcesosPlaneacion: ["planeacion"],
   guardarProceso: ["planeacion"],
+  alinearProcesosPedidos: ["planeacion"],
 };
 
 export default {

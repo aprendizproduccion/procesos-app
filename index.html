@@ -2158,7 +2158,7 @@
               id="cpProceso"
               autocomplete="off"
               enterkeyhint="done"
-              placeholder="Busca o escribe un proceso..."
+              placeholder="Busca un proceso del catálogo..."
             />
             <div
               id="sugCpProceso"
@@ -2170,6 +2170,10 @@
             Agregar
           </button>
         </div>
+        <p class="hint" style="margin-top: -6px">
+          Solo procesos activos del catálogo, con su estándar y su link. Si
+          falta uno, créalo en el módulo Procesos.
+        </p>
         <label for="cpFecha">Fecha de creación</label>
         <input id="cpFecha" readonly />
         <div id="cpNumeroBloque" class="msg info">
@@ -2365,6 +2369,15 @@
           onclick="abrirProcesoPl(null)"
         >
           + Nuevo proceso
+        </button>
+        <button
+          type="button"
+          id="btnPlProcesosAlinear"
+          class="btn-submit btn-gv-contorno"
+          style="margin-bottom: 14px"
+          onclick="revisarAlineacionPl()"
+        >
+          Alinear pedidos con el catálogo
         </button>
         <input
           id="plProcesoBuscar"
@@ -8155,7 +8168,10 @@
       let cpDatos = null; // respuesta de obtenerFormularioPedido
       let cpTipo = "pedido";
       let cpSublineas = [];
-      let cpProcesos = []; // [{ nombre, estandar (texto), link, nuevo, estandares }]
+      // [{ nombre, estandar, link }] del catálogo. Al editar, los del pedido
+      // traen además registros, enCatalogo, activo, estandarCatalogo y
+      // linkCatalogo (F5 · P2).
+      let cpProcesos = [];
       let cpIdEnvio = "";
       let cpEnvioEnCurso = false;
       // Editar pedido (F2b-2) usa el mismo formulario. cpPedidoEditar trae el
@@ -8238,22 +8254,20 @@
             document.getElementById("cpFecha").value = _textoFechaChip(
               res.fecha,
             );
-            // Los generales vienen marcados; se pueden quitar.
+            // Los generales del catálogo vienen marcados; se pueden quitar.
             cpProcesos = res.generales.map((g) => ({
               nombre: g.nombre,
-              estandar: String(g.estandar),
+              estandar: g.estandar,
               link: g.link || "",
-              nuevo: !res.procesos.some(
-                (p) =>
-                  normalizarPedido(p.nombre) === normalizarPedido(g.nombre),
-              ),
-              estandares: [],
             }));
             _pintarProcesosCp();
             document.getElementById("cpAviso").innerHTML =
               (res.edicionHabilitada
                 ? ""
                 : '<div class="msg warn">Hasta el corte los pedidos se montan en la hoja "Numero pedidos". Puedes llenar el formulario para conocerlo, pero no se puede crear.</div>') +
+              (res.procesos.length
+                ? ""
+                : '<div class="msg warn">El catálogo de procesos no tiene procesos activos: agrégalos en el módulo Procesos.</div>') +
               (res.clientesDesdePedidos
                 ? '<p class="hint">Clientes tomados de "Numero pedidos": la tabla de clientes se carga en el corte.</p>'
                 : "");
@@ -8311,20 +8325,7 @@
               ? _textoFechaChip(e.fecha)
               : "Sin fecha";
             cpSublineas = e.sublineas.map((s) => s.sublinea);
-            cpProcesos = e.procesos.map(function (p) {
-              const c = f.procesos.find(
-                (x) =>
-                  normalizarPedido(x.nombre) === normalizarPedido(p.nombre),
-              );
-              return {
-                nombre: p.nombre,
-                estandar: String(p.estandar),
-                link: p.link || "",
-                nuevo: false,
-                estandares: (c && c.estandares) || [],
-                registros: p.registros,
-              };
-            });
+            cpProcesos = e.procesos.map((p) => ({ ...p, link: p.link || "" }));
             _pintarTipoCp();
             _pintarSublineasCp();
             _pintarProcesosCp();
@@ -8363,7 +8364,7 @@
                 `<p class="hint">El cliente "${escapeHtml(e.cliente)}" no está así en la lista de activos: se conserva si no lo cambias.</p>`,
               );
             avisos.push(
-              '<p class="hint">Cliente, evento y clasificación se aplican a todas las sublíneas y a los registros del pedido. Las sublíneas con EAN y los procesos con registros no se pueden quitar ni cambiar.</p>',
+              '<p class="hint">Cliente, evento y clasificación se aplican a todas las sublíneas y a los registros del pedido. Las sublíneas con EAN y los procesos con registros no se pueden quitar.</p>',
             );
             document.getElementById("cpAviso").innerHTML = avisos.join("");
             document.getElementById("btnCrearPedido").disabled =
@@ -8518,8 +8519,9 @@
           if (e.key === "Enter") agregarSublineaCrearPedido();
         });
 
-      // Procesos: del catálogo (con su estándar y link más recientes) o
-      // nuevos. El estándar y el link se pueden ajustar para este pedido.
+      // Procesos: solo del catálogo activo (F5 · P2). El estándar y el link
+      // son los del catálogo y aquí no se cambian; un proceso que falta se
+      // crea en el módulo Procesos.
       function _pintarProcesosCp() {
         const cont = document.getElementById("cpProcesos");
         if (!cpProcesos.length) {
@@ -8530,18 +8532,42 @@
         }
         cont.innerHTML = cpProcesos
           .map(function (p, i) {
-            // Al editar, un proceso con registros queda fijo.
+            // Al editar, un proceso con registros no se quita.
             const fijo = p.registros > 0;
+            const delPedido = p.enCatalogo !== undefined;
             const etiquetas =
-              (p.nuevo ? '<span class="pl-distintivo">Nuevo</span>' : "") +
               (Number(p.estandar) > 0
                 ? ""
                 : '<span class="pl-distintivo">Sin estándar</span>') +
+              (delPedido && !p.enCatalogo
+                ? '<span class="pl-distintivo">Fuera del catálogo</span>'
+                : "") +
+              (delPedido && p.enCatalogo && !p.activo
+                ? '<span class="pl-distintivo">Inactivo</span>'
+                : "") +
               (fijo
                 ? `<span class="pl-distintivo">${p.registros} ${p.registros === 1 ? "registro" : "registros"}</span>`
                 : "");
-            const otros = p.estandares.filter((e) => e !== Number(p.estandar));
-            const bloqueo = fijo ? " disabled" : "";
+            const estandar =
+              Number(p.estandar) > 0
+                ? "Estándar " + _numPl(p.estandar) + " u/h"
+                : "Sin estándar (0)";
+            const link = !p.link
+              ? "Sin link"
+              : /^https?:\/\/\S+$/i.test(p.link)
+                ? `<a href="${escapeHtml(p.link)}" target="_blank" rel="noopener">Abrir link</a>`
+                : "Link: " + escapeHtml(p.link);
+            const notas = [];
+            if (fijo) notas.push("Tiene registros: no se puede quitar.");
+            if (
+              delPedido &&
+              p.enCatalogo &&
+              (Number(p.estandarCatalogo) !== Number(p.estandar) ||
+                p.linkCatalogo !== p.link)
+            )
+              notas.push(
+                "El catálogo tiene otro estándar o link: el pedido los toma al alinear los pedidos con el catálogo.",
+              );
             return (
               `<div class="cp-proceso">` +
               `<div class="cp-proceso-cabecera"><strong>${escapeHtml(p.nombre)}</strong>${etiquetas}` +
@@ -8549,15 +8575,10 @@
                 ? ""
                 : `<button type="button" aria-label="Quitar ${escapeHtml(p.nombre)}" data-quitar-proc="${i}">×</button>`) +
               `</div>` +
-              `<div class="row2">` +
-              `<div><label>Estándar (unds/h)</label><input type="number" inputmode="decimal" min="0" step="any" data-proc="${i}" data-campo="estandar" value="${escapeHtml(p.estandar)}"${bloqueo} /></div>` +
-              `<div><label>Link</label><input type="url" data-proc="${i}" data-campo="link" value="${escapeHtml(p.link)}" placeholder="https://..."${bloqueo} /></div>` +
-              `</div>` +
-              (fijo
-                ? '<p class="hint">Tiene registros: no se puede cambiar ni quitar.</p>'
-                : otros.length
-                  ? `<p class="hint">Otros estándares usados: ${otros.map((e) => escapeHtml(String(e))).join(", ")}</p>`
-                  : "") +
+              `<div class="hint" style="margin: 2px 0 0">${escapeHtml(estandar)} · ${link}</div>` +
+              (notas.length
+                ? `<p class="hint">${escapeHtml(notas.join(" "))}</p>`
+                : "") +
               `</div>`
             );
           })
@@ -8580,23 +8601,20 @@
         const enCatalogo = ((cpDatos && cpDatos.procesos) || []).find(
           (p) => normalizarPedido(p.nombre) === clave,
         );
-        cpProcesos.push(
-          enCatalogo
-            ? {
-                nombre: enCatalogo.nombre,
-                estandar: String(enCatalogo.estandar),
-                link: enCatalogo.link || "",
-                nuevo: false,
-                estandares: enCatalogo.estandares || [],
-              }
-            : {
-                nombre: texto,
-                estandar: "",
-                link: "",
-                nuevo: true,
-                estandares: [],
-              },
-        );
+        if (!enCatalogo) {
+          mostrarModalAviso(
+            'El proceso "' +
+              texto +
+              '" no está en el catálogo o está inactivo. Elige uno de la lista; si falta, créalo en el módulo Procesos.',
+            "Proceso fuera del catálogo",
+          );
+          return;
+        }
+        cpProcesos.push({
+          nombre: enCatalogo.nombre,
+          estandar: enCatalogo.estandar,
+          link: enCatalogo.link || "",
+        });
         input.value = "";
         _pintarProcesosCp();
       }
@@ -8608,32 +8626,6 @@
           if (!b) return;
           cpProcesos.splice(Number(b.dataset.quitarProc), 1);
           _pintarProcesosCp();
-        });
-      document
-        .getElementById("cpProcesos")
-        .addEventListener("input", function (e) {
-          const campo = e.target.dataset.campo;
-          const p = cpProcesos[Number(e.target.dataset.proc)];
-          if (!campo || !p) return;
-          p[campo] = e.target.value;
-          if (campo === "estandar") {
-            // Solo cambia la etiqueta "Sin estándar" y el número: repintar
-            // todo haría perder el foco del campo.
-            const tarjeta = e.target.closest(".cp-proceso");
-            const tieneEtiqueta = Array.from(
-              tarjeta.querySelectorAll(".pl-distintivo"),
-            ).find((x) => x.textContent === "Sin estándar");
-            if (Number(p.estandar) > 0 && tieneEtiqueta) tieneEtiqueta.remove();
-            if (!(Number(p.estandar) > 0) && !tieneEtiqueta) {
-              tarjeta
-                .querySelector(".cp-proceso-cabecera button")
-                .insertAdjacentHTML(
-                  "beforebegin",
-                  '<span class="pl-distintivo">Sin estándar</span>',
-                );
-            }
-            _pintarNumeroCp();
-          }
         });
       document
         .getElementById("cpProceso")
@@ -8684,11 +8676,8 @@
           sublineas: cpSublineas.slice(),
           evento: document.getElementById("cpEvento").value,
           clasificacion: document.getElementById("cpClasificacion").value,
-          procesos: cpProcesos.map((p) => ({
-            nombre: p.nombre,
-            estandar: p.estandar === "" ? "" : Number(p.estandar),
-            link: p.link.trim(),
-          })),
+          // Solo el nombre: el Worker toma estándar y link del catálogo.
+          procesos: cpProcesos.map((p) => ({ nombre: p.nombre })),
         };
         if (editar) {
           if (!cpEdicion) return { error: "El pedido todavía está cargando." };
@@ -8747,16 +8736,7 @@
           return { error: "Selecciona la clasificación." };
         if (!datos.procesos.length)
           return { error: "Agrega al menos un proceso." };
-        const sinEstandar = datos.procesos.find(
-          (p) => p.estandar === "" || !(p.estandar >= 0),
-        );
-        if (sinEstandar)
-          return {
-            error:
-              'Escribe el estándar de "' +
-              sinEstandar.nombre +
-              '" (0 si no tiene).',
-          };
+
         return { datos };
       }
 
@@ -8849,7 +8829,6 @@
       function _cambiosEdicionCp(d) {
         const e = cpEdicion;
         const n = normalizarPedido;
-        const r2 = (x) => Math.round(Number(x) * 100) / 100;
         const lineas = [];
         let tocaRegistros = false;
         [
@@ -8874,22 +8853,15 @@
           lineas.push("Sublíneas nuevas: " + subNuevas.join(", "));
         if (subQuitadas.length)
           lineas.push("Sublíneas que se quitan: " + subQuitadas.join(", "));
-        const procAntes = new Map(e.procesos.map((p) => [n(p.nombre), p]));
+        const procAntes = new Set(e.procesos.map((p) => n(p.nombre)));
         const procDespues = new Set(d.procesos.map((p) => n(p.nombre)));
-        const nuevos = [];
-        const ajustados = [];
-        d.procesos.forEach(function (p) {
-          const a = procAntes.get(n(p.nombre));
-          if (!a) nuevos.push(p.nombre);
-          else if (r2(p.estandar) !== r2(a.estandar) || p.link !== a.link)
-            ajustados.push(p.nombre);
-        });
+        const nuevos = d.procesos
+          .filter((p) => !procAntes.has(n(p.nombre)))
+          .map((p) => p.nombre);
         const quitados = e.procesos
           .filter((p) => !procDespues.has(n(p.nombre)))
           .map((p) => p.nombre);
         if (nuevos.length) lineas.push("Procesos nuevos: " + nuevos.join(", "));
-        if (ajustados.length)
-          lineas.push("Procesos ajustados: " + ajustados.join(", "));
         if (quitados.length)
           lineas.push("Procesos que se quitan: " + quitados.join(", "));
         return { lineas, tocaRegistros };
@@ -9931,7 +9903,9 @@
         plProcesos = res;
         document.getElementById("plProcesosNota").textContent =
           "Cada proceso tiene un nombre específico, un estándar y un link (si hay), y se asigna a los pedidos que lo necesiten. " +
-          "Hasta el corte, los procesos de cada pedido siguen saliendo de la hoja Procesos: lo que cambies aquí llega a los pedidos en el corte. " +
+          (res.edicionHabilitada
+            ? "Cambiar el estándar, el link o el nombre de un proceso lo cambia en todos los pedidos que lo tienen; los registros ya guardados conservan su estándar. "
+            : "Hasta el corte, los procesos de cada pedido siguen saliendo de la hoja Procesos: lo que cambies aquí llega a los pedidos en el corte. ") +
           'Los que ya se usan en los pedidos y faltan en el catálogo están en "En uso, fuera del catálogo".';
         document.getElementById("plConteoCatalogo").textContent =
           "(" + res.procesos.length + ")";
@@ -10000,7 +9974,9 @@
               (p.distintos === 1
                 ? "1 pedido tiene"
                 : p.distintos + " pedidos tienen") +
-              " otro estándar u otro link: en el corte toman los del catálogo.",
+              (plProcesos && plProcesos.edicionHabilitada
+                ? ' otro estándar u otro link: se igualan con "Alinear pedidos con el catálogo".'
+                : " otro estándar u otro link: en el corte toman los del catálogo."),
           });
         return avisos;
       }
@@ -10094,6 +10070,9 @@
         const nuevo = document.getElementById("btnPlProcesoNuevo");
         nuevo.style.display = fuera ? "none" : "";
         nuevo.disabled = plProcesosEnCurso;
+        const alinear = document.getElementById("btnPlProcesosAlinear");
+        alinear.style.display = fuera ? "none" : "";
+        alinear.disabled = plProcesosEnCurso;
         const lista = _plProcesosFiltrados();
         const visibles = lista.slice(0, plProcesosMostrados);
         document.getElementById("plProcesosLista").innerHTML = visibles
@@ -10330,6 +10309,164 @@
           _accionTarjetaProcesoPl(accion, id);
         });
 
+      // ---- Alinear los pedidos con el catálogo (P2, ventana del corte) ----
+      // Revisar funciona siempre; aplicar exige el interruptor y que no queden
+      // procesos en uso fuera del catálogo. Las cifras y la regla de qué
+      // fila cambia o se quita las decide el Worker.
+      function _textoAlineacionPl(res) {
+        const r = res.resumen;
+        const lineas = [
+          "Filas de procesos en los pedidos: " + _numPl(r.filas) + ".",
+          "• Cambian de estándar: " + _numPl(r.estandar),
+          "• Cambian de link: " + _numPl(r.link),
+          "• Toman el nombre del catálogo: " + _numPl(r.nombre),
+          "• Repetidos que se quitan: " + _numPl(r.repetidosQuitados),
+        ];
+        // Máximo 10 por lista: el modal no tiene scroll.
+        const mas = (total, mostrados) =>
+          total > mostrados
+            ? ["   ... y " + _numPl(total - mostrados) + " más"]
+            : [];
+        res.repetidos
+          .slice(0, 10)
+          .forEach((x) =>
+            lineas.push(
+              "   Pedido " +
+                x.pedido +
+                ': "' +
+                x.nombre +
+                '" (queda "' +
+                x.queda +
+                '")',
+            ),
+          );
+        lineas.push(
+          ...mas(r.repetidosQuitados, Math.min(10, res.repetidos.length)),
+        );
+        if (r.repetidosQuedan) {
+          lineas.push(
+            "• Repetidos que se quedan (los dos tienen registros con su escritura): " +
+              _numPl(r.repetidosQuedan),
+          );
+          res.quedanRepetidos
+            .slice(0, 10)
+            .forEach((x) =>
+              lineas.push(
+                "   Pedido " +
+                  x.pedido +
+                  ": " +
+                  x.nombres.map((n) => '"' + n + '"').join(" y "),
+              ),
+            );
+          lineas.push(
+            ...mas(r.repetidosQuedan, Math.min(10, res.quedanRepetidos.length)),
+          );
+        }
+        lineas.push("• Pedidos que cambian: " + _numPl(r.pedidos));
+        if (r.fuera)
+          lineas.push(
+            "• Procesos en uso fuera del catálogo: " +
+              _numPl(r.fuera) +
+              " (" +
+              res.fuera.slice(0, 10).join(", ") +
+              (r.fuera > 10 ? ", ..." : "") +
+              ")",
+          );
+        lineas.push(
+          "",
+          "Una fila con registros conserva su escritura si el catálogo la escribe con otras tildes o espacios. Los registros ya guardados conservan su estándar.",
+        );
+        return lineas.join("\n");
+      }
+
+      function revisarAlineacionPl() {
+        if (!plProcesos || plProcesosEnCurso) return;
+        plProcesosEnCurso = true;
+        renderPlProcesos();
+        document.getElementById("plProcesosMensaje").innerHTML =
+          '<p class="hint">Revisando los pedidos...</p>';
+        const terminar = function () {
+          plProcesosEnCurso = false;
+          renderPlProcesos();
+          document.getElementById("plProcesosMensaje").innerHTML = "";
+        };
+        llamarAPI("alinearProcesosPedidos", { soloSimular: true })
+          .then(function (res) {
+            if (res.sesionVencida) {
+              plProcesosEnCurso = false;
+              return;
+            }
+            terminar();
+            if (!res.success) return _mensajeProcesosPl("err", res.message);
+            const texto = _textoAlineacionPl(res);
+            if (!res.aplicable)
+              return mostrarModalAviso(
+                res.motivo + "\n\n" + texto,
+                "Alinear pedidos con el catálogo",
+              );
+            pedirConfirmarPl(
+              "Alinear pedidos con el catálogo",
+              texto,
+              "Alinear",
+              false,
+              aplicarAlineacionPl,
+            );
+          })
+          .catch(function (err) {
+            terminar();
+            _mensajeProcesosPl("err", "Error de conexión: " + err.message);
+          });
+      }
+
+      function aplicarAlineacionPl() {
+        if (!plProcesos || plProcesosEnCurso) return;
+        plProcesosEnCurso = true;
+        renderPlProcesos();
+        document.getElementById("plProcesosMensaje").innerHTML =
+          '<p class="hint">Alineando los pedidos...</p>';
+        const terminar = function (clase, texto) {
+          plProcesosEnCurso = false;
+          renderPlProcesos();
+          _mensajeProcesosPl(clase, texto);
+        };
+        llamarAPI("alinearProcesosPedidos", {})
+          .then(function (res) {
+            if (res.sesionVencida) {
+              plProcesosEnCurso = false;
+              return;
+            }
+            if (!res.success) return terminar("err", res.message);
+            _recargarProcesosPl().then(function () {
+              terminar(
+                "ok",
+                res.sinCambios
+                  ? "Los pedidos ya estaban alineados con el catálogo."
+                  : "Pedidos alineados: " +
+                      _numPl(res.filasActualizadas) +
+                      (res.filasActualizadas === 1
+                        ? " fila actualizada"
+                        : " filas actualizadas") +
+                      " y " +
+                      _numPl(res.repetidosQuitados) +
+                      (res.repetidosQuitados === 1
+                        ? " repetido quitado"
+                        : " repetidos quitados") +
+                      ", en " +
+                      _numPl(res.pedidos) +
+                      (res.pedidos === 1 ? " pedido." : " pedidos."),
+              );
+            });
+          })
+          .catch(function (err) {
+            terminar(
+              "err",
+              "Error de conexión: " +
+                err.message +
+                ". Revisa de nuevo antes de reintentar: si se alineó, no habrá cambios.",
+            );
+          });
+      }
+
       // ---- Modal: crear o editar un proceso ----
       function abrirProcesoPl(id) {
         if (!plProcesos || plProcesosEnCurso) return;
@@ -10349,8 +10486,12 @@
               .getElementById("plProcesoBuscar")
               .value.trim()
               .replace(/\s+/g, " ");
-        nombre.disabled = !!uso;
-        document.getElementById("procesoPlNotaNombre").textContent = uso
+        // Con el catálogo en la app (P2) el nombre solo queda fijo si tiene
+        // registros; antes del corte, si se usa en pedidos o registros.
+        const enApp = plProcesos.edicionHabilitada;
+        const nombreFijo = p && (enApp ? p.registros > 0 : !!uso);
+        nombre.disabled = !!nombreFijo;
+        document.getElementById("procesoPlNotaNombre").textContent = nombreFijo
           ? "El nombre no se cambia: se usa en " +
             uso +
             ". Si hace falta uno más específico, crea otro proceso."
@@ -10364,12 +10505,20 @@
           : false;
         document.getElementById("procesoPlNota").textContent =
           p && p.pedidos
-            ? "Hasta el corte, los pedidos siguen con el estándar y el link de la hoja; en el corte toman los del catálogo. Los registros ya guardados conservan su estándar."
+            ? enApp
+              ? "Lo que cambies en el nombre, el estándar o el link llega a " +
+                p.pedidos +
+                (p.pedidos === 1 ? " pedido" : " pedidos") +
+                ". Los registros ya guardados conservan su estándar."
+              : "Hasta el corte, los pedidos siguen con el estándar y el link de la hoja; en el corte toman los del catálogo. Los registros ya guardados conservan su estándar."
             : "";
         document.getElementById("procesoPlAlerta").innerHTML = "";
         document.getElementById("btnGuardarProcesoPl").disabled = false;
         document.getElementById("modalProcesoPl").classList.add("visible");
-        (uso ? document.getElementById("procesoPlEstandar") : nombre).focus();
+        (nombreFijo
+          ? document.getElementById("procesoPlEstandar")
+          : nombre
+        ).focus();
       }
 
       function cerrarProcesoPl() {
@@ -10401,6 +10550,43 @@
           general: document.getElementById("procesoPlGeneral").checked,
         };
         if (!nuevo) datos.id = plProcesoAbierto;
+        // Con el catálogo en la app (P2), un cambio de nombre, estándar o link
+        // llega a los pedidos que tienen el proceso: se confirma antes.
+        const p = nuevo
+          ? null
+          : plProcesos.procesos.find((x) => x.id === plProcesoAbierto);
+        const r2 = (x) =>
+          Math.round(Number(String(x).replace(",", ".")) * 100) / 100;
+        if (
+          p &&
+          plProcesos.edicionHabilitada &&
+          p.pedidos &&
+          (datos.nombre !== p.nombre ||
+            r2(datos.estandar) !== p.estandar ||
+            datos.link !== p.link)
+        ) {
+          pedirConfirmarPl(
+            "Guardar proceso",
+            '"' +
+              p.nombre +
+              '" se actualiza en ' +
+              p.pedidos +
+              (p.pedidos === 1 ? " pedido" : " pedidos") +
+              ". Los registros ya guardados conservan su estándar.",
+            "Guardar",
+            false,
+            () => _enviarProcesoModalPl(datos, nuevo),
+          );
+          return;
+        }
+        _enviarProcesoModalPl(datos, nuevo);
+      }
+
+      function _enviarProcesoModalPl(datos, nuevo) {
+        if (!plProcesoAbierto || plProcesoEnCurso) return;
+        const alerta = document.getElementById("procesoPlAlerta");
+        const _error = (m) =>
+          (alerta.innerHTML = `<div class="msg err">${escapeHtml(m)}</div>`);
         const abierto = plProcesoAbierto;
         const boton = document.getElementById("btnGuardarProcesoPl");
         plProcesoEnCurso = true;
@@ -10423,7 +10609,14 @@
               ? "No había nada que cambiar."
               : nuevo
                 ? '"' + res.nombre + '" quedó en el catálogo.'
-                : '"' + res.nombre + '" guardado.';
+                : '"' +
+                  res.nombre +
+                  '" guardado' +
+                  (res.pedidosActualizados
+                    ? " y actualizado en " +
+                      res.pedidosActualizados +
+                      (res.pedidosActualizados === 1 ? " pedido." : " pedidos.")
+                    : ".");
             _recargarProcesosPl().then(() => _mensajeProcesosPl("ok", texto));
           })
           .catch(function (err) {

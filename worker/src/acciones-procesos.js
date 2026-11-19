@@ -12,6 +12,14 @@
 // eliminar (inactivo y sin uso) y agregar al catálogo los que están en uso.
 // Lo que se cambia aquí todavía no llega a los pedidos: eso va con el
 // interruptor `procesos` (corte único de F4).
+//
+// P2 (el catálogo manda en los pedidos): el formulario de pedido solo elige
+// procesos activos del catálogo (acciones-planeacion.js). Con el interruptor
+// `procesos`, editar el estándar, el link o el nombre de un proceso lo cambia
+// también en todos los pedidos que lo tienen (el nombre, solo sin registros),
+// y alinearProcesosPedidos iguala una vez todas las filas de `procesos` con el
+// catálogo en la ventana del corte. Los registros guardados conservan su
+// estándar.
 
 import {
   _normalizarPedido,
@@ -53,6 +61,43 @@ function _auditoria(env, sesion, fila) {
     sesion.nombre || "",
     _ahoraISO(),
   );
+}
+
+// Igual que _auditoria, con una guarda: si `condicion` se cumple, hecho_en
+// queda NULL contra su NOT NULL y D1 deshace el batch completo.
+function _auditoriaConGuarda(env, sesion, fila, condicion, binds) {
+  return env.DB.prepare(
+    "INSERT INTO auditoria_catalogos (tabla, llave, accion, antes, despues, cedula, nombre, hecho_en) " +
+      "SELECT ?, ?, ?, ?, ?, ?, ?, CASE WHEN " +
+      condicion +
+      " THEN NULL ELSE ? END",
+  ).bind(
+    fila.tabla || "catalogo_procesos",
+    fila.llave,
+    fila.accion,
+    fila.antes === undefined ? null : JSON.stringify(fila.antes),
+    fila.despues === undefined ? null : JSON.stringify(fila.despues),
+    sesion.cedula,
+    sesion.nombre || "",
+    ...binds,
+    _ahoraISO(),
+  );
+}
+
+// true si el catálogo de procesos ya es de la app (interruptor `procesos`).
+async function _procesosEnApp(env) {
+  try {
+    await _exigirCatalogoEnApp(env, "procesos");
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+// Minúsculas como las hace LOWER() de SQLite: solo A-Z. Así se compara con
+// _obtenerProcesoValidado, que busca el proceso de un registro con lower().
+function _minusculasSql(texto) {
+  return String(texto).replace(/[A-Z]/g, (c) => c.toLowerCase());
 }
 
 // Valida nombre, estándar (obligatorio, desde 0, 2 decimales), link (vacío o
@@ -128,7 +173,12 @@ async function _usoProcesos(env) {
     g.escrituras.set(nombre, (g.escrituras.get(nombre) || 0) + 1);
     const estandar = _redondear2(Number(r.estandar) || 0);
     g.estandares.set(estandar, (g.estandares.get(estandar) || 0) + 1);
-    g.filas.push({ estandar, link: String(r.link || "").trim() });
+    g.filas.push({
+      id: r.id,
+      pedido: String(r.pedido),
+      estandar,
+      link: String(r.link || "").trim(),
+    });
     g.pedidos.add(String(r.pedido));
     const fecha = String(r.fecha || "");
     if (fecha > g.ultimoUso) g.ultimoUso = fecha;
@@ -188,6 +238,17 @@ function _errorUnico(err) {
     : err;
 }
 
+// true si algún pedido tiene el proceso en dos filas (escrito con otras
+// mayúsculas, tildes o espacios): renombrar las juntaría en el mismo nombre.
+function _repetidoEnPedido(g) {
+  const vistos = new Set();
+  return g.filas.some((f) => {
+    if (vistos.has(f.pedido)) return true;
+    vistos.add(f.pedido);
+    return false;
+  });
+}
+
 function _textoUso(g) {
   const partes = [];
   if (g.pedidos.size)
@@ -224,6 +285,148 @@ async function _exigirNombreLibre(env, clave, uso, idPropio) {
         _textoUso(g) +
         ': agrégalo desde "En uso, fuera del catálogo".',
     );
+}
+
+const FILAS_POR_SENTENCIA = 400;
+const MAX_LISTA_VISTA = 50;
+const MAX_AUDITORIA = 1500000;
+
+// Plan de la alineación de P2 (ventana del corte), sin escribir. Cada fila de
+// `procesos` toma el estándar y el link de su proceso del catálogo, y también
+// su nombre, salvo que tenga registros que ya no encontrarían su proceso:
+// _obtenerProcesoValidado lo busca con lower(), que no quita tildes ni
+// espacios. Un proceso repetido en un pedido con otra escritura queda en una
+// sola fila; las demás se borran si ningún registro depende de ellas. Las
+// filas de procesos que faltan en el catálogo no se tocan (van en `fuera`).
+async function _planAlineacion(env) {
+  const { results: filas } = await env.DB.prepare(
+    "SELECT id, nombre_proceso AS nombre, unidades_hora_estandar AS estandar, " +
+      "COALESCE(link_procesos, '') AS link, numero_pedido AS pedido FROM procesos ORDER BY id",
+  ).all();
+  const { results: regs } = await env.DB.prepare(
+    "SELECT numero_pedido AS pedido, LOWER(TRIM(proceso)) AS proceso, COUNT(*) AS n " +
+      "FROM registros GROUP BY numero_pedido, LOWER(TRIM(proceso))",
+  ).all();
+  const { results: cat } = await env.DB.prepare(
+    "SELECT clave, nombre, estandar, link FROM catalogo_procesos",
+  ).all();
+  const marca = await env.DB.prepare(
+    "SELECT COUNT(*) AS n, COALESCE(MAX(actualizado_en), '') AS ultimo FROM catalogo_procesos",
+  ).first();
+
+  const catalogo = new Map(cat.map((c) => [String(c.clave), c]));
+  // Registros que encuentran cada fila: mismo pedido y mismo lower().
+  const dependen = new Map(
+    regs.map((r) => [r.pedido + "\n" + r.proceso, Number(r.n) || 0]),
+  );
+  const grupos = new Map();
+  const fuera = new Map();
+  filas.forEach((f) => {
+    const nombre = String(f.nombre == null ? "" : f.nombre);
+    const clave = _normalizarPedido(nombre);
+    if (!clave) return;
+    if (!catalogo.has(clave)) {
+      if (!fuera.has(clave)) fuera.set(clave, _limpiar(nombre));
+      return;
+    }
+    const pedido = String(f.pedido);
+    const k = pedido + "\n" + clave;
+    if (!grupos.has(k)) grupos.set(k, { clave, pedido, filas: [] });
+    grupos.get(k).filas.push({
+      id: f.id,
+      pedido,
+      nombre,
+      estandar: Number(f.estandar) || 0,
+      link: String(f.link || ""),
+      registros: dependen.get(pedido + "\n" + _minusculasSql(nombre)) || 0,
+    });
+  });
+
+  const cambios = [];
+  const borrar = [];
+  const quedan = [];
+  const riesgo = []; // { p, n }: registros que no deben llegar antes del batch
+  grupos.forEach((grupo) => {
+    const c = catalogo.get(grupo.clave);
+    const nombreC = String(c.nombre);
+    const destino = {
+      estandar: Number(c.estandar) || 0,
+      link: String(c.link || ""),
+    };
+    const mismoLower = (a, b) => _minusculasSql(a) === _minusculasSql(b);
+    grupo.filas.forEach((f) => {
+      f.final =
+        !f.registros || mismoLower(f.nombre, nombreC) ? nombreC : f.nombre;
+    });
+    // Repetidos: queda la fila con registros y el nombre del catálogo; si
+    // no, la que tenga registros, luego la del nombre del catálogo. Entre
+    // iguales, la que ya está escrita como en el catálogo y después la más
+    // vieja.
+    const puntaje = (f) =>
+      (f.registros ? 4 : 0) +
+      (f.final === nombreC ? 2 : 0) +
+      (f.nombre === nombreC ? 1 : 0);
+    const orden = [...grupo.filas].sort(
+      (a, b) => puntaje(b) - puntaje(a) || a.id - b.id,
+    );
+    const guardada = orden[0];
+    const conservar = [guardada];
+    orden.slice(1).forEach((f) => {
+      if (!f.registros || mismoLower(f.nombre, guardada.final)) {
+        borrar.push({
+          id: f.id,
+          pedido: f.pedido,
+          nombre: f.nombre,
+          estandar: f.estandar,
+          link: f.link,
+          queda: guardada.final,
+        });
+        if (!mismoLower(f.nombre, guardada.final))
+          riesgo.push({ p: f.pedido, n: _minusculasSql(f.nombre) });
+      } else {
+        conservar.push(f);
+        quedan.push({ pedido: f.pedido, nombres: [guardada.final, f.nombre] });
+      }
+    });
+    conservar.forEach((f) => {
+      if (
+        f.final === f.nombre &&
+        f.estandar === destino.estandar &&
+        f.link === destino.link
+      )
+        return;
+      cambios.push({
+        id: f.id,
+        pedido: f.pedido,
+        antes: { nombre: f.nombre, estandar: f.estandar, link: f.link },
+        despues: { nombre: f.final, ...destino },
+      });
+      if (!mismoLower(f.nombre, f.final))
+        riesgo.push({ p: f.pedido, n: _minusculasSql(f.nombre) });
+    });
+  });
+
+  const contar = (campo) =>
+    cambios.filter((c) => c.antes[campo] !== c.despues[campo]).length;
+  return {
+    cambios,
+    borrar,
+    quedan,
+    riesgo,
+    fuera: [...fuera.values()].sort((a, b) => a.localeCompare(b, "es")),
+    marca: { n: Number(marca.n) || 0, ultimo: String(marca.ultimo || "") },
+    resumen: {
+      filas: filas.length,
+      cambian: cambios.length,
+      estandar: contar("estandar"),
+      link: contar("link"),
+      nombre: contar("nombre"),
+      repetidosQuitados: borrar.length,
+      repetidosQuedan: quedan.length,
+      pedidos: new Set(cambios.concat(borrar).map((x) => x.pedido)).size,
+      fuera: fuera.size,
+    },
+  };
 }
 
 export const accionesProcesos = {
@@ -301,6 +504,9 @@ export const accionesProcesos = {
   // - editar: estándar, link y general siempre; el nombre solo si el proceso
   //   no se usa en pedidos ni en registros (hasta que el catálogo llegue a los
   //   pedidos, un nombre en uso no se cambia: se crea uno más específico).
+  //   Con el interruptor (P2) el nombre se cambia si no tiene registros, y
+  //   nombre, estándar y link llegan a todos los pedidos que lo tienen
+  //   (devuelve pedidosActualizados).
   // - desactivar / reactivar: un proceso inactivo no se ofrece en pedidos
   //   nuevos; los pedidos que ya lo tienen no cambian.
   // - eliminar: solo inactivo y sin uso.
@@ -368,10 +574,18 @@ export const accionesProcesos = {
       );
       if (!cambios.length)
         return { success: true, nombre: actual.nombre, sinCambios: true };
-      if (p.nombre !== actual.nombre) {
-        const uso = await _usoProcesos(env);
-        const g = uso.get(actual.clave);
-        if (g && (g.pedidos.size || g.registros))
+      // Con el interruptor (P2), un cambio de nombre, estándar o link llega a
+      // los pedidos que tienen el proceso.
+      const enApp = await _procesosEnApp(env);
+      const renombra = p.nombre !== actual.nombre;
+      const aPedidos = enApp && cambios.some((k) => k !== "general");
+      const uso = renombra || aPedidos ? await _usoProcesos(env) : null;
+      const g = uso ? uso.get(actual.clave) : null;
+      if (renombra) {
+        // Antes del corte, un nombre en uso no se cambia; con el interruptor
+        // basta con que no tenga registros: el nombre nuevo llega a los
+        // pedidos.
+        if (g && (g.registros || (!enApp && g.pedidos.size)))
           throw new Error(
             'El nombre "' +
               actual.nombre +
@@ -379,35 +593,103 @@ export const accionesProcesos = {
               _textoUso(g) +
               ": no se cambia. Si hace falta un nombre más específico, crea otro proceso.",
           );
+        if (g && _repetidoEnPedido(g))
+          throw new Error(
+            'Hay pedidos con "' +
+              actual.nombre +
+              '" repetido con otra escritura: alinea los pedidos con el catálogo antes de cambiarle el nombre.',
+          );
         if (p.clave !== actual.clave)
           await _exigirNombreLibre(env, p.clave, uso, actual.id);
       }
       const filtro = (o) => Object.fromEntries(cambios.map((k) => [k, o[k]]));
-      try {
-        await env.DB.batch([
-          env.DB.prepare(
-            "UPDATE catalogo_procesos SET nombre = ?, clave = ?, estandar = ?, link = ?, " +
-              "general = ?, actualizado_en = ? WHERE id = ?",
-          ).bind(
-            p.nombre,
-            p.clave,
-            p.estandar,
-            p.link,
-            p.general ? 1 : 0,
-            ahora,
-            actual.id,
-          ),
-          _auditoria(env, sesion, {
+      const ids = aPedidos && g ? g.filas.map((f) => f.id) : [];
+      // Guarda del cambio de nombre: no llegó un registro con el nombre viejo
+      // (en una fila del proceso o con el nombre del catálogo).
+      const condicion =
+        aPedidos && renombra
+          ? "EXISTS(SELECT 1 FROM registros r WHERE LOWER(r.proceso) = LOWER(?) " +
+            "OR EXISTS(SELECT 1 FROM procesos pr WHERE pr.id IN (SELECT value FROM json_each(?)) " +
+            "AND pr.numero_pedido = r.numero_pedido AND LOWER(pr.nombre_proceso) = LOWER(r.proceso)))"
+          : "0";
+      const binds =
+        aPedidos && renombra ? [actual.nombre, JSON.stringify(ids)] : [];
+      const lote = [
+        _auditoriaConGuarda(
+          env,
+          sesion,
+          {
             llave: actual.nombre,
             accion: "editar",
             antes: filtro(antes),
-            despues: filtro(despues),
-          }),
-        ]);
+            despues: aPedidos
+              ? { ...filtro(despues), pedidos: g ? g.pedidos.size : 0 }
+              : filtro(despues),
+          },
+          condicion,
+          binds,
+        ),
+        env.DB.prepare(
+          "UPDATE catalogo_procesos SET nombre = ?, clave = ?, estandar = ?, link = ?, " +
+            "general = ?, actualizado_en = ? WHERE id = ?",
+        ).bind(
+          p.nombre,
+          p.clave,
+          p.estandar,
+          p.link,
+          p.general ? 1 : 0,
+          ahora,
+          actual.id,
+        ),
+      ];
+      // Todas las filas del proceso (por id) y las que se hayan creado entre
+      // la lectura y el batch, que llevan el nombre del catálogo. El nombre
+      // solo se toca al renombrar: una fila con otra escritura puede tener
+      // registros que la buscan así.
+      if (aPedidos)
+        lote.push(
+          env.DB.prepare(
+            "UPDATE procesos SET nombre_proceso = CASE WHEN ? THEN ? ELSE nombre_proceso END, " +
+              "unidades_hora_estandar = ?, link_procesos = ? " +
+              "WHERE id IN (SELECT value FROM json_each(?)) OR nombre_proceso = ?",
+          ).bind(
+            renombra ? 1 : 0,
+            p.nombre,
+            p.estandar,
+            p.link,
+            JSON.stringify(ids),
+            actual.nombre,
+          ),
+        );
+      try {
+        await env.DB.batch(lote);
       } catch (err) {
+        if (/procesos\.nombre_proceso/i.test(String(err && err.message)))
+          throw new Error(
+            'Hay pedidos con "' +
+              actual.nombre +
+              '" repetido con otra escritura: alinea los pedidos con el catálogo antes de cambiarle el nombre.',
+          );
+        if (binds.length) {
+          const guarda = await env.DB.prepare(
+            "SELECT CASE WHEN " + condicion + " THEN 1 ELSE 0 END AS si",
+          )
+            .bind(...binds)
+            .first();
+          if (guarda && guarda.si === 1)
+            throw new Error(
+              'Llegó un registro con "' +
+                actual.nombre +
+                '" mientras guardabas: su nombre ya no se cambia. Si hace falta un nombre más específico, crea otro proceso.',
+            );
+        }
         throw _errorUnico(err);
       }
-      return { success: true, nombre: p.nombre };
+      return {
+        success: true,
+        nombre: p.nombre,
+        pedidosActualizados: aPedidos && g ? g.pedidos.size : 0,
+      };
     }
 
     if (accion === "desactivar" || accion === "reactivar") {
@@ -545,5 +827,133 @@ export const accionesProcesos = {
     }
 
     throw new Error("Acción de proceso no válida.");
+  },
+
+  // P2: iguala todas las filas de `procesos` con el catálogo (ventana del
+  // corte, ver _planAlineacion). Con soloSimular devuelve el resumen sin
+  // escribir; funciona también antes del corte. Aplicar exige el interruptor
+  // `procesos` y que ningún proceso en uso falte en el catálogo, y va en un
+  // solo batch con guarda: si el catálogo cambió o llegó un registro que
+  // dependa de una fila que se renombra o se borra, no se escribe nada.
+  // datos: { soloSimular }
+  async alinearProcesosPedidos(datos, env, ctx, ip, sesion) {
+    const simular = datos.soloSimular === true;
+    const plan = await _planAlineacion(env);
+    const enApp = await _procesosEnApp(env);
+    const hayCambios = plan.cambios.length > 0 || plan.borrar.length > 0;
+    let motivo = "";
+    if (plan.fuera.length)
+      motivo =
+        'Primero agrega al catálogo los procesos de "En uso, fuera del catálogo" (' +
+        plan.fuera.length +
+        "): sus filas no se pueden alinear.";
+    else if (!hayCambios)
+      motivo = "Los pedidos ya están alineados con el catálogo.";
+    else if (!enApp)
+      motivo =
+        "Hasta el corte solo se puede revisar: los pedidos se alinean en la ventana del corte, con el catálogo de procesos ya en la app.";
+
+    if (simular)
+      return {
+        success: true,
+        simulacion: true,
+        resumen: plan.resumen,
+        repetidos: plan.borrar.slice(0, MAX_LISTA_VISTA).map((b) => ({
+          pedido: b.pedido,
+          nombre: b.nombre,
+          queda: b.queda,
+        })),
+        quedanRepetidos: plan.quedan.slice(0, MAX_LISTA_VISTA),
+        fuera: plan.fuera.slice(0, MAX_LISTA_VISTA),
+        aplicable: !motivo,
+        motivo,
+        edicionHabilitada: enApp,
+      };
+
+    await _exigirCatalogoEnApp(env, "procesos");
+    if (plan.fuera.length) throw new Error(motivo);
+    if (!hayCambios)
+      return { success: true, sinCambios: true, resumen: plan.resumen };
+
+    let condicion =
+      "(SELECT COUNT(*) FROM catalogo_procesos) <> ? OR " +
+      "(SELECT COALESCE(MAX(actualizado_en), '') FROM catalogo_procesos) <> ?";
+    const binds = [plan.marca.n, plan.marca.ultimo];
+    if (plan.riesgo.length) {
+      condicion +=
+        " OR EXISTS(SELECT 1 FROM json_each(?) j WHERE EXISTS(SELECT 1 FROM registros r " +
+        "WHERE r.numero_pedido = json_extract(j.value, '$.p') " +
+        "AND LOWER(TRIM(r.proceso)) = json_extract(j.value, '$.n')))";
+      binds.push(JSON.stringify(plan.riesgo));
+    }
+    // Auditoría: cómo estaba cada fila que cambia o se borra.
+    let antes = {
+      cambian: plan.cambios.map((c) => ({
+        id: c.id,
+        pedido: c.pedido,
+        ...c.antes,
+      })),
+      borradas: plan.borrar,
+    };
+    if (JSON.stringify(antes).length > MAX_AUDITORIA)
+      antes = {
+        cambian: plan.cambios.map((c) => c.id),
+        borradas: plan.borrar.map((b) => b.id),
+      };
+    const lote = [
+      _auditoriaConGuarda(
+        env,
+        sesion,
+        {
+          tabla: "procesos",
+          llave: "(alinear con el catálogo)",
+          accion: "alinear",
+          antes,
+          despues: plan.resumen,
+        },
+        condicion,
+        binds,
+      ),
+    ];
+    if (plan.borrar.length)
+      lote.push(
+        env.DB.prepare(
+          "DELETE FROM procesos WHERE id IN (SELECT value FROM json_each(?))",
+        ).bind(JSON.stringify(plan.borrar.map((b) => b.id))),
+      );
+    for (let i = 0; i < plan.cambios.length; i += FILAS_POR_SENTENCIA) {
+      const parte = plan.cambios
+        .slice(i, i + FILAS_POR_SENTENCIA)
+        .map((c) => ({ id: c.id, ...c.despues }));
+      lote.push(
+        env.DB.prepare(
+          "UPDATE procesos SET nombre_proceso = json_extract(j.value, '$.nombre'), " +
+            "unidades_hora_estandar = json_extract(j.value, '$.estandar'), " +
+            "link_procesos = json_extract(j.value, '$.link') " +
+            "FROM json_each(?) AS j WHERE procesos.id = json_extract(j.value, '$.id')",
+        ).bind(JSON.stringify(parte)),
+      );
+    }
+    try {
+      await env.DB.batch(lote);
+    } catch (err) {
+      const guarda = await env.DB.prepare(
+        "SELECT CASE WHEN " + condicion + " THEN 1 ELSE 0 END AS si",
+      )
+        .bind(...binds)
+        .first();
+      if (guarda && guarda.si === 1)
+        throw new Error(
+          "El catálogo o los registros cambiaron mientras se alineaba (se editó un proceso o llegó un registro). Vuelve a revisar.",
+        );
+      throw err;
+    }
+    return {
+      success: true,
+      filasActualizadas: plan.cambios.length,
+      repetidosQuitados: plan.borrar.length,
+      pedidos: plan.resumen.pedidos,
+      resumen: plan.resumen,
+    };
   },
 };
