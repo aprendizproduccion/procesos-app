@@ -227,6 +227,34 @@ function _auditoria(env, fila) {
   return _auditoriaConGuarda(env, fila, "0", []);
 }
 
+// Un pedido está cerrado si tiene EAN referentes y todos están en Completado
+// (mismo criterio que _pedidoEstaCompleto y Seguimiento). Uno sin EAN
+// referentes (actividad interna, pedido sin EAN) nunca cierra solo: cuenta
+// como abierto. `columna`: expresión SQL con el número de pedido.
+function _sqlPedidoAbierto(columna) {
+  return (
+    "NOT (EXISTS(SELECT 1 FROM validacion_eanes va WHERE va.numero_pedido = " +
+    columna +
+    " AND " +
+    _sqlEanReferente("va.") +
+    ") AND NOT EXISTS(SELECT 1 FROM validacion_eanes va WHERE va.numero_pedido = " +
+    columna +
+    " AND " +
+    _sqlEanReferente("va.") +
+    " AND COALESCE(va.estado, '') <> 'Completado'))"
+  );
+}
+
+// Cada pedido con su cliente y si sigue abierto. Un pedido con sublíneas de
+// clientes distintos sale una vez por cliente.
+function _sqlPedidosPorCliente() {
+  return (
+    "SELECT DISTINCT p.numero_pedido AS pedido, p.cliente, CASE WHEN " +
+    _sqlPedidoAbierto("p.numero_pedido") +
+    " THEN 1 ELSE 0 END AS abierto FROM pedidos p"
+  );
+}
+
 function _redondear2(n) {
   return Math.round(Number(n) * 100) / 100;
 }
@@ -920,10 +948,13 @@ export const accionesPlaneacion = {
 
   // Clientes agrupados por nombre normalizado, con sus variantes de escritura.
   // Une la tabla clientes (vacía hasta el corte F4) con pedidos.cliente, así
-  // que la misma acción sirve antes y después del corte.
+  // que la misma acción sirve antes y después del corte. pedidosAbiertos:
+  // los que no han cerrado (deciden si el cliente se puede eliminar).
   async obtenerClientesPlaneacion(datos, env) {
     const { results: usados } = await env.DB.prepare(
-      "SELECT cliente, COUNT(DISTINCT numero_pedido) AS pedidos FROM pedidos GROUP BY cliente",
+      "SELECT cliente, COUNT(*) AS pedidos, SUM(abierto) AS abiertos FROM (" +
+        _sqlPedidosPorCliente() +
+        ") GROUP BY cliente",
     ).all();
     const { results: tabla } = await env.DB.prepare(
       "SELECT nombre, activo FROM clientes",
@@ -950,7 +981,11 @@ export const accionesPlaneacion = {
         pedidosSinCliente += u.pedidos;
         return;
       }
-      _grupo(nombre).variantes.push({ nombre, pedidos: u.pedidos });
+      _grupo(nombre).variantes.push({
+        nombre,
+        pedidos: u.pedidos,
+        abiertos: Number(u.abiertos) || 0,
+      });
     });
     tabla.forEach((t) => {
       const g = _grupo(t.nombre);
@@ -966,6 +1001,7 @@ export const accionesPlaneacion = {
         nombre: g.nombreTabla || (g.variantes[0] && g.variantes[0].nombre),
         variantes: g.variantes,
         pedidos: g.variantes.reduce((s, v) => s + v.pedidos, 0),
+        pedidosAbiertos: g.variantes.reduce((s, v) => s + v.abiertos, 0),
         enTabla: g.enTabla,
         activo: g.activo,
       };
@@ -1375,9 +1411,12 @@ export const accionesPlaneacion = {
     return { success: true, resumen };
   },
 
-  // Clientes: crear, desactivar o reactivar. Un cliente no se borra: si deja
-  // de usarse se desactiva y sale del selector del formulario.
-  // datos: { accion: "crear"|"desactivar"|"reactivar", nombre }
+  // Clientes: crear, desactivar, reactivar o eliminar. Desactivar saca al
+  // cliente del formulario de pedidos (no se le crean más), y los pedidos que
+  // ya tiene se siguen trabajando. Eliminar (20-11) exige que esté inactivo y
+  // sin pedidos abiertos: sus pedidos cerrados y sus registros guardan el
+  // nombre como texto y no dependen de esta tabla.
+  // datos: { accion: "crear"|"desactivar"|"reactivar"|"eliminar", nombre }
   async guardarCliente(datos, env, ctx, ip, sesion) {
     await _exigirCatalogoEnApp(env, "pedidos");
     const accion = String(datos.accion || "");
@@ -1440,6 +1479,87 @@ export const accionesPlaneacion = {
         }),
       ]);
       return { success: true, nombre: existente.nombre, activo: !!activo };
+    }
+
+    if (accion === "eliminar") {
+      // Ya no está: un reintento tras un error de red.
+      if (!existente)
+        return { success: true, nombre, eliminado: true, sinCambios: true };
+      if (existente.activo === 1)
+        throw new Error(
+          'Desactiva primero el cliente "' + existente.nombre + '".',
+        );
+      const { results: pedidos } = await env.DB.prepare(
+        _sqlPedidosPorCliente(),
+      ).all();
+      const suyos = pedidos.filter(
+        (p) => _normalizarPedido(p.cliente) === clave,
+      );
+      const abiertos = _distintos(
+        suyos.filter((p) => p.abierto === 1).map((p) => String(p.pedido)),
+      );
+      if (abiertos.length)
+        throw new Error(
+          'El cliente "' +
+            existente.nombre +
+            '" tiene ' +
+            (abiertos.length === 1
+              ? "1 pedido sin cerrar"
+              : abiertos.length + " pedidos sin cerrar") +
+            " (" +
+            abiertos.slice(0, 5).join(", ") +
+            (abiertos.length > 5 ? "…" : "") +
+            "): se podrá eliminar cuando estén cerrados.",
+        );
+
+      // Guarda: sigue inactivo y ninguno de sus pedidos se reabrió entre la
+      // lectura y el batch (por ejemplo, al agregarle un EAN). Un pedido nuevo
+      // no puede llegar: crear y editar pedido solo aceptan clientes activos.
+      const condicion =
+        "NOT EXISTS(SELECT 1 FROM clientes WHERE nombre = ? AND activo = 0) OR " +
+        "EXISTS(SELECT 1 FROM json_each(?) j WHERE " +
+        _sqlPedidoAbierto("j.value") +
+        ")";
+      const binds = [
+        existente.nombre,
+        JSON.stringify(_distintos(suyos.map((p) => String(p.pedido)))),
+      ];
+      try {
+        await env.DB.batch([
+          _auditoriaConGuarda(
+            env,
+            {
+              ...fila,
+              llave: existente.nombre,
+              accion: "eliminar",
+              antes: {
+                nombre: existente.nombre,
+                activo: existente.activo,
+                pedidosCerrados: suyos.length,
+              },
+            },
+            condicion,
+            binds,
+          ),
+          env.DB.prepare(
+            "DELETE FROM clientes WHERE nombre = ? AND activo = 0",
+          ).bind(existente.nombre),
+        ]);
+      } catch (errLote) {
+        const guarda = await env.DB.prepare(
+          "SELECT CASE WHEN " + condicion + " THEN 1 ELSE 0 END AS bloqueado",
+        )
+          .bind(...binds)
+          .first();
+        if (guarda && guarda.bloqueado === 1)
+          throw new Error(
+            'El cliente "' +
+              existente.nombre +
+              '" cambió mientras lo eliminabas (se reactivó o se reabrió uno de sus pedidos). Recarga la lista.',
+          );
+        throw errLote;
+      }
+      return { success: true, nombre: existente.nombre, eliminado: true };
     }
 
     throw new Error("Acción de cliente no válida.");

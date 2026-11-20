@@ -7264,6 +7264,9 @@
       // es false: se ve todo, pero no se crea ni se elimina.
       let plEdicionPedidos = false;
       let plEdicionClientes = false;
+      // Con la tabla de clientes cargada (después del corte), un cliente que
+      // solo sale de los pedidos se marca "No está en la tabla".
+      let plClientesTablaCargada = false;
       // F3b: un cambio en los EAN deja la lista vieja (suma, avisos); volver
       // a Pedidos la recarga.
       let plPedidosDesactualizados = false;
@@ -9232,11 +9235,12 @@
             }
             plClientes = res.clientes || [];
             plEdicionClientes = res.edicionHabilitada === true;
+            plClientesTablaCargada = res.tablaCargada === true;
             document.getElementById("plClienteNuevoBloque").style.display =
               plEdicionClientes ? "" : "none";
             document.getElementById("plClientesNota").textContent =
               (plEdicionClientes
-                ? "Un cliente con pedidos no se borra: se desactiva y deja de salir al crear pedidos. "
+                ? "Desactivar un cliente lo saca del formulario de pedidos: no se le crean más y los que tiene se siguen trabajando. Se puede eliminar cuando está inactivo y no tiene pedidos sin cerrar. "
                 : "Solo lectura. ") +
               (res.tablaCargada
                 ? ""
@@ -9296,18 +9300,41 @@
                     .join(" · ") +
                   `</div>`
                 : "";
-            const estado =
-              c.enTabla && c.activo === false
-                ? '<span class="pl-distintivo">Inactivo</span>'
-                : "";
-            const acciones =
-              plEdicionClientes && c.enTabla
-                ? `<div class="pl-acciones"><button type="button" class="btn-gv-mini btn-gv-contorno" data-cliente-pl="${plClientes.indexOf(c)}">${c.activo === false ? "Reactivar" : "Desactivar"}</button></div>`
-                : "";
+            let estado = "";
+            if (c.enTabla && c.activo === false)
+              estado = '<span class="pl-distintivo">Inactivo</span>';
+            else if (plClientesTablaCargada && !c.enTabla)
+              estado = '<span class="pl-distintivo">No está en la tabla</span>';
+            const abiertos = c.pedidosAbiertos || 0;
+            // Inactivo: Reactivar y Eliminar; Eliminar queda deshabilitado
+            // mientras tenga pedidos sin cerrar (el Worker lo vuelve a revisar).
+            let acciones = "";
+            if (plEdicionClientes && c.enTabla) {
+              const indice = plClientes.indexOf(c);
+              const boton = (accion, texto, peligro, extra) =>
+                `<button type="button" class="btn-gv-mini ${peligro ? "btn-gv-peligro" : "btn-gv-contorno"}" data-cliente-pl="${indice}" data-accion-cl="${accion}"${extra || ""}>${texto}</button>`;
+              const nota =
+                c.activo === false && abiertos
+                  ? `<div class="hint" style="margin: 6px 0 0">Se podrá eliminar cuando ${abiertos === 1 ? "su pedido sin cerrar esté cerrado" : "sus " + abiertos + " pedidos sin cerrar estén cerrados"}.</div>`
+                  : "";
+              acciones =
+                nota +
+                `<div class="pl-acciones">` +
+                (c.activo === false
+                  ? boton("reactivar", "Reactivar") +
+                    boton(
+                      "eliminar",
+                      "Eliminar",
+                      true,
+                      abiertos ? " disabled" : "",
+                    )
+                  : boton("desactivar", "Desactivar")) +
+                `</div>`;
+            }
             return (
               `<div class="pl-tarjeta">` +
               `<div class="pl-cabecera"><strong>${escapeHtml(c.nombre)}</strong>` +
-              `<span class="pl-fecha">${c.pedidos} ${c.pedidos === 1 ? "pedido" : "pedidos"}</span>` +
+              `<span class="pl-fecha">${c.pedidos} ${c.pedidos === 1 ? "pedido" : "pedidos"}${abiertos ? " · " + abiertos + " sin cerrar" : ""}</span>` +
               estado +
               `</div>` +
               variantes +
@@ -9376,15 +9403,51 @@
           if (!boton) return;
           const c = plClientes[Number(boton.dataset.clientePl)];
           if (!c) return;
-          if (c.activo === false) {
+          const accion = boton.dataset.accionCl;
+          if (accion === "reactivar") {
             _guardarClientePl({ accion: "reactivar", nombre: c.nombre }, boton);
             return;
           }
+          if (accion === "eliminar") {
+            pedirConfirmarPl(
+              "Eliminar cliente",
+              '"' +
+                c.nombre +
+                '" sale de la lista de clientes y no se puede deshacer (habría que crearlo de nuevo). ' +
+                (c.pedidos
+                  ? "Sus pedidos cerrados y sus registros conservan el nombre."
+                  : ""),
+              "Eliminar",
+              true,
+              function () {
+                _guardarClientePl(
+                  { accion: "eliminar", nombre: c.nombre },
+                  boton,
+                  function (res) {
+                    mostrarModalAviso(
+                      'Cliente "' + res.nombre + '" eliminado.',
+                      "Cliente eliminado",
+                    );
+                  },
+                );
+              },
+            );
+            return;
+          }
+          const abiertos = c.pedidosAbiertos || 0;
           pedirConfirmarPl(
             "Desactivar cliente",
             '"' +
               c.nombre +
-              '" dejará de salir al crear pedidos. Sus pedidos no cambian y se puede reactivar.',
+              '" dejará de salir al crear pedidos. ' +
+              (abiertos
+                ? "Tiene " +
+                  (abiertos === 1
+                    ? "1 pedido sin cerrar: se sigue trabajando normalmente. "
+                    : abiertos +
+                      " pedidos sin cerrar: se siguen trabajando normalmente. ")
+                : "Sus pedidos no cambian. ") +
+              "Se puede reactivar.",
             "Desactivar",
             true,
             function () {
