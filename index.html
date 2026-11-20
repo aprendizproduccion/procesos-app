@@ -4219,6 +4219,7 @@
           "supernumerario",
           "Todos",
         );
+        _cargarHistoricosSupervisoresCT();
         document.getElementById("edicionAlerta").innerHTML = "";
         document.getElementById("listaRegistrosEditar").innerHTML = "";
         registrosEditarActuales = [];
@@ -4259,7 +4260,70 @@
         const destino = document.getElementById(idDestino);
         destino.innerHTML = document.getElementById(idOrigen).innerHTML;
         if (destino.options.length) destino.options[0].text = etiquetaVacia;
+        // Desde el corte: también los nombres que ya no están en la lista
+        // pero sí en los registros, para encontrar su historial.
+        const viejos =
+          historicosSupervisores &&
+          historicosSupervisores[
+            idOrigen === "coordinador" ? "coordinadores" : "supernumerarios"
+          ];
+        if (viejos) {
+          const ya = new Set(
+            [...destino.options].map((o) => o.value.toLowerCase()),
+          );
+          viejos
+            .filter((n) => !ya.has(n.toLowerCase()))
+            .forEach((n) => destino.add(new Option(n + " (ya no está)", n)));
+        }
         destino.value = "";
+      }
+
+      // Nombres de coordinadores y supernumerarios que tienen los registros
+      // (getSupervisoresData con historicos). Solo los devuelve desde el corte;
+      // antes del corte se vuelve a pedir la próxima vez que se abra la vista.
+      let historicosSupervisores = null;
+      let historicosSupervisoresPedidos = false;
+      const FILTROS_SUPERVISORES_CT = {
+        edicionCoordinador: "coordinador",
+        edicionSupernumerario: "supernumerario",
+        ctCoordinador: "coordinador",
+        ctSupernumerario: "supernumerario",
+      };
+
+      function _cargarHistoricosSupervisoresCT() {
+        if (historicosSupervisoresPedidos) return;
+        historicosSupervisoresPedidos = true;
+        llamarAPI("getSupervisoresData", { historicos: true })
+          .then(function (res) {
+            if (!res.success || !res.data || !res.data.historicos) {
+              historicosSupervisoresPedidos = false;
+              return;
+            }
+            historicosSupervisores = res.data.historicos;
+            Object.keys(FILTROS_SUPERVISORES_CT).forEach(function (id) {
+              const sel = document.getElementById(id);
+              const valor = sel.value;
+              _poblarSelectFiltroCT(id, FILTROS_SUPERVISORES_CT[id], "Todos");
+              sel.value = valor;
+            });
+          })
+          .catch(function () {
+            historicosSupervisoresPedidos = false;
+          });
+      }
+
+      // Un registro viejo puede tener un coordinador o supernumerario que ya
+      // no está en la lista: se ofrece igual (el Worker lo acepta al editar).
+      function _opcionParaValor(id, valor) {
+        const sel = document.getElementById(id);
+        const v = String(valor || "").trim();
+        if (!v) return "";
+        const igual = [...sel.options].find(
+          (o) => o.value.toLowerCase() === v.toLowerCase(),
+        );
+        if (igual) return igual.value;
+        sel.add(new Option(v + " (ya no está)", v));
+        return v;
       }
 
       function abrirControlTiemposDesdeDashboard() {
@@ -4294,6 +4358,7 @@
           cargarClientesCT();
           _poblarSelectFiltroCT("ctCoordinador", "coordinador", "Todos");
           _poblarSelectFiltroCT("ctSupernumerario", "supernumerario", "Todos");
+          _cargarHistoricosSupervisoresCT();
         }
 
         document.getElementById("ctFiltro").value = "fecha";
@@ -5620,10 +5685,14 @@
         document.getElementById("editSuplementoMin").innerHTML =
           _generarOpcionesSuplemento();
 
-        document.getElementById("editCoordinador").value =
-          registro.coordinador || "";
-        document.getElementById("editSupernumerario").value =
-          registro.supernumerario || "";
+        document.getElementById("editCoordinador").value = _opcionParaValor(
+          "editCoordinador",
+          registro.coordinador,
+        );
+        document.getElementById("editSupernumerario").value = _opcionParaValor(
+          "editSupernumerario",
+          registro.supernumerario,
+        );
         document.getElementById("editProceso").value = registro.proceso || "";
         document
           .getElementById("editProceso")
