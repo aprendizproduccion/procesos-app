@@ -450,6 +450,48 @@
         color: var(--gv-jet);
         cursor: pointer;
       }
+      /* Usuarios (U2b): botones del módulo y selección para cambiar turno */
+      .pl-botones {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+      .pl-botones .btn-submit {
+        flex: 1 1 140px;
+        width: auto;
+        margin: 0;
+      }
+      .pl-seleccion-barra {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        border: 1px solid var(--gv-aquamarine);
+        border-radius: 10px;
+        padding: 10px 12px;
+        margin-bottom: 10px;
+        background: var(--gv-celeste);
+      }
+      .pl-check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        margin: 0 0 6px;
+      }
+      .pl-check input {
+        width: auto;
+        margin: 0;
+      }
+      .pl-horas-turno {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 0 12px;
+      }
+      .pl-tarjeta.pl-marcada {
+        border-color: var(--gv-aquamarine);
+        box-shadow: inset 0 0 0 1px var(--gv-aquamarine);
+      }
       .cp-proceso {
         border: 1px solid var(--gv-borde);
         border-radius: 8px;
@@ -659,6 +701,8 @@
           max-width: 480px;
         }
         body.pl-escritorio #modalPersonaPl .modal-box,
+        body.pl-escritorio #modalDatosPersonaPl .modal-box,
+        body.pl-escritorio #modalTurnosPl .modal-box,
         body.pl-escritorio #modalProcesoPl .modal-box {
           max-width: 560px;
         }
@@ -2509,6 +2553,40 @@
       <div class="card">
         <p class="hint" style="margin-top: 0" id="plUsuariosNota"></p>
         <div id="plUsuariosAvisos"></div>
+        <div class="pl-botones">
+          <button
+            type="button"
+            id="btnPlPersonaNueva"
+            class="btn-submit btn-gv-contorno"
+            onclick="abrirDatosPersonaPl('persona')"
+          >
+            + Persona
+          </button>
+          <button
+            type="button"
+            id="btnPlGrupoNuevo"
+            class="btn-submit btn-gv-contorno"
+            onclick="abrirDatosPersonaPl('grupo')"
+          >
+            + Grupo
+          </button>
+          <button
+            type="button"
+            id="btnPlTurnos"
+            class="btn-submit btn-gv-contorno"
+            onclick="abrirTurnosPl()"
+          >
+            Turnos
+          </button>
+          <button
+            type="button"
+            id="btnPlCambiarTurno"
+            class="btn-submit btn-gv-contorno"
+            onclick="iniciarSeleccionTurnoPl()"
+          >
+            Cambiar turno
+          </button>
+        </div>
         <div class="pl-barra">
           <input
             id="plUsuarioBuscar"
@@ -2550,6 +2628,54 @@
             </div>
           </div>
         </div>
+        <div
+          id="plSeleccionBarra"
+          class="pl-seleccion-barra"
+          style="display: none"
+        >
+          <strong id="plSeleccionConteo"></strong>
+          <p class="hint" style="margin: 2px 0 8px">
+            Marca a las personas o usa "Seleccionar los filtrados" (toma a todas
+            las que muestra el filtro, no solo las de esta página). Los grupos
+            no tienen turno.
+          </p>
+          <div class="pl-botones" style="margin-bottom: 8px">
+            <button
+              type="button"
+              class="btn-submit btn-gv-contorno"
+              onclick="seleccionarFiltradosPl()"
+            >
+              Seleccionar los filtrados
+            </button>
+            <button
+              type="button"
+              class="btn-submit btn-gv-contorno"
+              onclick="limpiarSeleccionPl()"
+            >
+              Quitar la selección
+            </button>
+          </div>
+          <label for="plSeleccionTurno">Turno nuevo</label>
+          <select id="plSeleccionTurno"></select>
+          <div class="pl-botones" style="margin-bottom: 0">
+            <button
+              type="button"
+              class="btn-submit btn-gv-contorno"
+              onclick="cancelarSeleccionPl()"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              id="btnPlAplicarTurno"
+              class="btn-submit"
+              onclick="aplicarTurnoSeleccionPl()"
+            >
+              Aplicar
+            </button>
+          </div>
+        </div>
+        <div id="plUsuariosMensaje"></div>
         <div id="plUsuariosAlerta"></div>
         <div id="plUsuariosLista"></div>
         <button
@@ -3426,6 +3552,132 @@
           class="btn-submit btn-gv-contorno"
           style="margin-top: 8px"
           onclick="cerrarPersonaPl()"
+        >
+          Cerrar
+        </button>
+      </div>
+    </div>
+
+    <!-- Alta y datos de una persona o grupo (U2b). Va después de
+         modalPersonaPl, porque se abre encima de él. -->
+    <div id="modalDatosPersonaPl" class="modal-overlay">
+      <div class="modal-box" style="max-height: 100%; overflow-y: auto">
+        <h3 id="datosPersonaPlTitulo" style="margin-top: 0"></h3>
+        <div id="datosPersonaPlAlerta"></div>
+        <div id="datosPersonaPlCampoCedula">
+          <label for="datosPersonaPlCedula">Cédula</label>
+          <input id="datosPersonaPlCedula" maxlength="15" autocomplete="off" />
+        </div>
+        <label for="datosPersonaPlNombre">Nombre</label>
+        <input id="datosPersonaPlNombre" maxlength="80" autocomplete="off" />
+        <div id="datosPersonaPlCamposPersona">
+          <label for="datosPersonaPlEquipo">Equipo (opcional)</label>
+          <div class="campo-sugerencias">
+            <input
+              id="datosPersonaPlEquipo"
+              maxlength="40"
+              autocomplete="off"
+              placeholder="Toca para ver los equipos o escribe uno nuevo..."
+            />
+            <div
+              id="sugDatosPersonaPlEquipo"
+              class="lista-sugerencias"
+              role="listbox"
+            ></div>
+          </div>
+          <label for="datosPersonaPlTurno">Turno</label>
+          <select id="datosPersonaPlTurno"></select>
+          <label class="cp-casilla" id="datosPersonaPlCampoOperario">
+            <input id="datosPersonaPlOperario" type="checkbox" />
+            Rol de operario (sale en el registro y entra como operario)
+          </label>
+        </div>
+        <p class="hint" style="margin-top: 8px" id="datosPersonaPlNota"></p>
+        <div class="row2" style="margin-top: 8px">
+          <button
+            type="button"
+            class="btn-gv-contorno"
+            onclick="cerrarDatosPersonaPl()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            id="btnGuardarDatosPersonaPl"
+            onclick="guardarDatosPersonaPl()"
+          >
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Catálogo de turnos (U2b). Antes de modalConfirmarPl. -->
+    <div id="modalTurnosPl" class="modal-overlay">
+      <div class="modal-box" style="max-height: 100%; overflow-y: auto">
+        <h3 style="margin-top: 0">Turnos</h3>
+        <p class="hint" style="margin-top: 0" id="turnosPlNota"></p>
+        <div id="turnosPlAlerta"></div>
+        <div id="turnosPlLista"></div>
+        <button
+          type="button"
+          id="btnTurnoPlNuevo"
+          class="btn-submit btn-gv-contorno"
+          onclick="abrirFormTurnoPl(null)"
+        >
+          + Turno
+        </button>
+        <div
+          id="turnosPlForm"
+          class="pl-tarjeta"
+          style="display: none; margin-top: 10px"
+        >
+          <strong id="turnosPlFormTitulo"></strong>
+          <label for="turnoPlNombre" style="margin-top: 8px">Nombre</label>
+          <input
+            id="turnoPlNombre"
+            maxlength="40"
+            autocomplete="off"
+            placeholder="Por ejemplo: Madrugada, Medio turno..."
+          />
+          <div class="pl-horas-turno">
+            <div>
+              <label for="turnoPlHora">Hora de inicio</label>
+              <input id="turnoPlHora" type="time" />
+            </div>
+            <div>
+              <label for="turnoPlHoraFin">Hora de fin</label>
+              <input id="turnoPlHoraFin" type="time" />
+            </div>
+          </div>
+          <p class="hint" style="margin-top: 0">
+            El nombre es solo para identificarlo. El sistema usa la hora de
+            inicio: es la hora en que empieza el primer registro del día de sus
+            personas. Por ahora el turno debe terminar el mismo día, a más
+            tardar a las 23:30.
+          </p>
+          <div class="row2">
+            <button
+              type="button"
+              class="btn-gv-contorno"
+              onclick="cancelarFormTurnoPl()"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              id="btnGuardarTurnoPl"
+              onclick="guardarTurnoPl()"
+            >
+              Guardar
+            </button>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="btn-submit btn-gv-contorno"
+          style="margin-top: 8px"
+          onclick="cerrarTurnosPl()"
         >
           Cerrar
         </button>
@@ -5889,6 +6141,8 @@
         cerrarEanPl();
         cerrarCargaEanPl();
         cerrarPersonaPl();
+        cerrarDatosPersonaPl();
+        cerrarTurnosPl();
         cerrarProcesoPl();
 
         // 2. Vaciar inputs, textareas y selects simples
@@ -9485,9 +9739,14 @@
         );
         plUsuarios = null;
         plUsuariosMostrados = PL_USUARIOS_POR_PAGINA;
-        ["plUsuariosNota", "plUsuariosAvisos", "plUsuariosLista"].forEach(
-          (id) => (document.getElementById(id).innerHTML = ""),
-        );
+        plSeleccion = null;
+        document.getElementById("plSeleccionBarra").style.display = "none";
+        [
+          "plUsuariosNota",
+          "plUsuariosAvisos",
+          "plUsuariosLista",
+          "plUsuariosMensaje",
+        ].forEach((id) => (document.getElementById(id).innerHTML = ""));
         document.getElementById("btnPlUsuariosMas").style.display = "none";
         document.getElementById("plUsuariosAlerta").innerHTML =
           '<p class="hint">Cargando personas...</p>';
@@ -9523,27 +9782,54 @@
 
       function _aplicarUsuariosPl(res) {
         plUsuarios = res;
+        const habilitada = res.edicionHabilitada === true;
         document.getElementById("plUsuariosNota").textContent =
-          (res.edicionHabilitada
-            ? "Las personas no se borran de una vez: primero se desactivan. "
-            : "Hasta el corte, las personas, sus nombres, turnos y equipos salen de la hoja Operarios (el turno se deduce de la hora). ") +
+          (habilitada
+            ? "Las personas no se borran de una vez: primero se desactivan (desactivar y eliminar piden la clave maestra). "
+            : "Hasta el corte, las personas, sus nombres, turnos y equipos salen de la hoja Operarios (el turno se deduce de la hora). Altas, datos, turnos y bajas se habilitan con el corte. ") +
           'En "Roles y cuentas" se asignan el rol de operario y los de coordinador y supernumerario (no se cargan de la hoja), y se manejan las cuentas, que piden la clave maestra.';
+        ["btnPlPersonaNueva", "btnPlGrupoNuevo", "btnPlCambiarTurno"].forEach(
+          (id) => (document.getElementById(id).disabled = !habilitada),
+        );
         document.getElementById("plUsuarioTurno").innerHTML = _opcionesPl(
           [{ valor: "", texto: "Todos los turnos" }],
           res.turnos
             .map((t) => ({
               valor: String(t.id),
               texto:
-                t.nombre +
-                " (" +
-                t.hora +
-                ")" +
+                _textoTurnoPl(t) +
                 (t.activo ? "" : " · inactivo") +
                 " · " +
                 t.personas,
             }))
             .concat([{ valor: "sin", texto: "Sin turno" }]),
         );
+        // Selección de "Cambiar turno": conserva el turno elegido y quita a
+        // quien ya no esté o sea grupo.
+        const selTurno = document.getElementById("plSeleccionTurno");
+        const turnoElegido = selTurno.value;
+        selTurno.innerHTML = _opcionesPl(
+          [{ valor: "", texto: "Elige el turno..." }],
+          res.turnos.map((t) => ({
+            valor: String(t.id),
+            texto: _textoTurnoPl(t),
+          })),
+        );
+        if ([...selTurno.options].some((o) => o.value === turnoElegido))
+          selTurno.value = turnoElegido;
+        if (plSeleccion && !habilitada) plSeleccion = null;
+        if (plSeleccion) {
+          const validas = new Set(
+            res.personas.filter((p) => !p.esGrupo).map((p) => p.cedula),
+          );
+          [...plSeleccion].forEach((c) => {
+            if (!validas.has(c)) plSeleccion.delete(c);
+          });
+        }
+        if (
+          document.getElementById("modalTurnosPl").classList.contains("visible")
+        )
+          _pintarTurnosPl();
         document.getElementById("plUsuarioEquipo").innerHTML = _opcionesPl(
           [{ valor: "", texto: "Todos los equipos" }],
           res.equipos
@@ -9638,8 +9924,14 @@
           : p.yo
             ? '<span class="pl-distintivo">Tú</span>'
             : "";
+        const marcada = !!plSeleccion && plSeleccion.has(p.cedula);
+        const casilla =
+          plSeleccion && !p.esGrupo
+            ? `<label class="pl-check"><input type="checkbox" data-sel-pl="${escapeHtml(p.cedula)}"${marcada ? " checked" : ""} />Seleccionar</label>`
+            : "";
         return (
-          `<div class="pl-tarjeta">` +
+          `<div class="pl-tarjeta${marcada ? " pl-marcada" : ""}">` +
+          casilla +
           `<div class="pl-cabecera"><strong>${escapeHtml(p.nombre)}</strong>` +
           `<span class="pl-fecha">${p.esGrupo ? "Grupo" : "CC " + escapeHtml(p.cedula)}</span>` +
           distintivo +
@@ -9648,7 +9940,7 @@
             ? `<div class="hint" style="margin: 2px 0 0">${escapeHtml(datos.join(" · "))}</div>`
             : "") +
           `<div class="pl-sublineas">${roles}</div>` +
-          `<div class="pl-acciones"><button type="button" class="btn-gv-mini btn-gv-contorno" data-persona-pl="${escapeHtml(p.cedula)}">Roles y cuentas</button></div>` +
+          `<div class="pl-acciones"><button type="button" class="btn-gv-mini btn-gv-contorno" data-persona-pl="${escapeHtml(p.cedula)}">${plUsuarios.edicionHabilitada ? "Datos, roles y cuentas" : "Roles y cuentas"}</button></div>` +
           `</div>`
         );
       }
@@ -9669,6 +9961,7 @@
           : '<p class="hint">No hay personas con ese filtro.</p>';
         document.getElementById("btnPlUsuariosMas").style.display =
           lista.length > visibles.length ? "" : "none";
+        _pintarSeleccionPl();
       }
 
       function verMasPlUsuarios() {
@@ -9754,6 +10047,26 @@
           (p.esGrupo ? "Grupo" : "CC " + p.cedula) +
           (p.activo ? "" : " · Inactivo");
         const secciones = [];
+        const habilitada = plUsuarios.edicionHabilitada === true;
+        if (habilitada)
+          secciones.push(
+            _seccionPersonaPl(
+              "Datos",
+              p.esGrupo
+                ? "Grupo: su cédula es su nombre; no tiene turno ni equipo."
+                : (p.turno
+                    ? "Turno " +
+                      _textoTurnoPl(
+                        plUsuarios.turnos.find((t) => t.id === p.turno.id) ||
+                          p.turno,
+                      ) +
+                      (p.turno.deducido ? " (deducido de la hora)" : "")
+                    : "Sin turno") +
+                    " · " +
+                    (p.equipo || "Sin equipo"),
+              [{ clave: "datos-editar", texto: "Editar datos" }],
+            ),
+          );
         if (p.esGrupo) {
           secciones.push(
             _seccionPersonaPl("Operario", "Un grupo no es operario.", []),
@@ -9851,6 +10164,30 @@
             );
           });
         }
+        if (habilitada) {
+          let estado;
+          const botones = [];
+          if (p.activo) {
+            estado = p.yo
+              ? "Activa. Eres tú: no puedes desactivarte."
+              : "Activa.";
+            if (!p.yo)
+              botones.push({
+                clave: "estado-desactivar",
+                texto: "Desactivar",
+                peligro: true,
+              });
+          } else {
+            estado = "Inactiva: no sale en el registro y no puede entrar.";
+            botones.push(
+              { clave: "estado-reactivar", texto: "Reactivar" },
+              { clave: "estado-eliminar", texto: "Eliminar", peligro: true },
+            );
+          }
+          secciones.push(
+            _seccionPersonaPl(p.esGrupo ? "Grupo" : "Persona", estado, botones),
+          );
+        }
         document.getElementById("personaPlCuerpo").innerHTML =
           secciones.join("");
         _pintarFormPersonaPl();
@@ -9931,6 +10268,46 @@
         const p = _personaPl(plPersona);
         if (!p || plPersonaEnCurso) return;
         const [que, accion] = clave.split("-");
+        if (que === "datos") {
+          abrirDatosPersonaPl("editar", p.cedula);
+          return;
+        }
+        if (que === "estado") {
+          const cuentasActivas = p.cuentas.filter((c) => c.activa).length;
+          if (accion === "reactivar") {
+            _enviarPersonaPl(
+              "cambiarEstadoPersona",
+              { cedula: p.cedula, accion },
+              p.cuentas.length
+                ? "Reactivada. Sus cuentas siguen inactivas: reactívalas aparte si hace falta."
+                : "Reactivada.",
+            );
+            return;
+          }
+          const desactivar = accion === "desactivar";
+          _abrirFormPersonaPl(
+            {
+              estado: accion,
+              titulo: (desactivar ? "Desactivar a " : "Eliminar a ") + p.nombre,
+              nota: desactivar
+                ? (p.esGrupo
+                    ? "Deja de salir en el registro."
+                    : "Deja de salir en el registro y no puede entrar.") +
+                  (cuentasActivas
+                    ? " También se desactivan sus cuentas y se cierran sus sesiones; al reactivarla, las cuentas se reactivan aparte."
+                    : "") +
+                  " Se puede reactivar."
+                : "Se borra" +
+                  (p.cuentas.length ? " junto con sus cuentas" : "") +
+                  ". Sus registros no cambian. No se puede deshacer.",
+              boton: desactivar ? "Desactivar" : "Eliminar",
+              peligro: true,
+              maestra: true,
+            },
+            "personaPlMaestra",
+          );
+          return;
+        }
         if (que === "operario") {
           const quitar = accion === "quitar";
           const enviar = () =>
@@ -10043,6 +10420,20 @@
         }
         const password = document.getElementById("personaPlClave").value;
         const claveMaestra = document.getElementById("personaPlMaestra").value;
+        if (f.estado) {
+          if (!claveMaestra) return _error("Escribe la clave maestra.");
+          const cuentas = p.cuentas.filter((c) => c.activa).length;
+          _enviarPersonaPl(
+            "cambiarEstadoPersona",
+            { cedula: p.cedula, accion: f.estado, claveMaestra },
+            f.estado === "desactivar"
+              ? cuentas
+                ? "Desactivada, con sus cuentas."
+                : "Desactivada."
+              : p.nombre + " se eliminó.",
+          );
+          return;
+        }
         if (f.clave && password.length < 8)
           return _error("La contraseña debe tener al menos 8 caracteres.");
         if (!claveMaestra) return _error("Escribe la clave maestra.");
@@ -10097,6 +10488,17 @@
             }
             plPersonaForm = null;
             document.getElementById("personaPlClave").value = "";
+            if (res.eliminada) {
+              // La persona ya no existe: se cierra el modal y el aviso va
+              // encima de la lista.
+              plPersonaEnCurso = false;
+              cerrarPersonaPl();
+              _recargarUsuariosPl().then(function () {
+                document.getElementById("plUsuariosMensaje").innerHTML =
+                  `<div class="msg ok">${escapeHtml(textoOk)}</div>`;
+              });
+              return;
+            }
             if (res.cerrarSesion) {
               plPersonaEnCurso = false;
               cerrarPersonaPl();
@@ -10168,6 +10570,522 @@
       ["personaPlNombre", "personaPlClave", "personaPlMaestra"].forEach((id) =>
         document.getElementById(id).addEventListener("keydown", function (e) {
           if (e.key === "Enter") enviarFormPersonaPl();
+        }),
+      );
+
+      // ---- U2b: personas, grupos y turnos (desde el corte único) ----
+      // Las escrituras exigen el interruptor `operarios` y `supervisores`; aquí
+      // solo se habilitan los botones cuando edicionHabilitada. Las reglas las
+      // aplica el Worker.
+      let plSeleccion = null; // Set de cédulas en "Cambiar turno", o null
+      let plSeleccionEnCurso = false;
+      let plDatosPersona = null; // { modo: "persona"|"grupo"|"editar", cedula }
+      let plDatosEnCurso = false;
+      let plEquiposSug = []; // sugerencias de equipo: [{ valor, clave }]
+      let plTurnoForm = null; // { id } del turno en edición, o { id: null }
+      let plTurnosEnCurso = false;
+
+      // "Mañana (06:00–14:00)": el nombre es solo para verlo; el sistema usa
+      // la hora de inicio.
+      function _textoTurnoPl(t) {
+        return (
+          t.nombre + " (" + t.hora + (t.horaFin ? "–" + t.horaFin : "") + ")"
+        );
+      }
+
+      // -- Cambiar turno en bloque --
+      function iniciarSeleccionTurnoPl() {
+        if (!plUsuarios || !plUsuarios.edicionHabilitada) return;
+        plSeleccion = new Set();
+        document.getElementById("plUsuariosMensaje").innerHTML = "";
+        renderPlUsuarios();
+        document
+          .getElementById("plSeleccionBarra")
+          .scrollIntoView({ block: "nearest" });
+      }
+
+      function cancelarSeleccionPl() {
+        if (plSeleccionEnCurso) return;
+        plSeleccion = null;
+        renderPlUsuarios();
+      }
+
+      function limpiarSeleccionPl() {
+        if (!plSeleccion || plSeleccionEnCurso) return;
+        plSeleccion.clear();
+        renderPlUsuarios();
+      }
+
+      function seleccionarFiltradosPl() {
+        if (!plSeleccion || plSeleccionEnCurso) return;
+        _plUsuariosFiltrados().forEach(function (p) {
+          if (!p.esGrupo) plSeleccion.add(p.cedula);
+        });
+        renderPlUsuarios();
+      }
+
+      function _pintarSeleccionPl() {
+        const barra = document.getElementById("plSeleccionBarra");
+        barra.style.display = plSeleccion ? "" : "none";
+        if (!plSeleccion) return;
+        const n = plSeleccion.size;
+        document.getElementById("plSeleccionConteo").textContent =
+          n === 0
+            ? "Ninguna persona seleccionada"
+            : n === 1
+              ? "1 persona seleccionada"
+              : n + " personas seleccionadas";
+        document.getElementById("btnPlAplicarTurno").disabled =
+          plSeleccionEnCurso ||
+          !n ||
+          !document.getElementById("plSeleccionTurno").value;
+      }
+
+      function aplicarTurnoSeleccionPl() {
+        if (!plSeleccion || plSeleccionEnCurso || !plUsuarios) return;
+        const mensaje = document.getElementById("plUsuariosMensaje");
+        const n = plSeleccion.size;
+        const t = plUsuarios.turnos.find(
+          (x) =>
+            String(x.id) === document.getElementById("plSeleccionTurno").value,
+        );
+        if (!n || !t) return;
+        if (n > 500) {
+          mensaje.innerHTML =
+            '<div class="msg err">Se pueden cambiar máximo 500 personas a la vez.</div>';
+          return;
+        }
+        const cedulas = [...plSeleccion];
+        pedirConfirmarPl(
+          "Cambiar turno",
+          (n === 1 ? "1 persona pasa" : n + " personas pasan") +
+            " al turno " +
+            _textoTurnoPl(t) +
+            ". Su primer registro del día empezará a las " +
+            t.hora +
+            ". Los registros ya guardados no cambian.",
+          "Cambiar turno",
+          false,
+          function () {
+            plSeleccionEnCurso = true;
+            _pintarSeleccionPl();
+            mensaje.innerHTML = '<p class="hint">Guardando...</p>';
+            const terminar = function (html) {
+              plSeleccionEnCurso = false;
+              mensaje.innerHTML = html;
+              _pintarSeleccionPl();
+            };
+            llamarAPI("cambiarTurnoPersonas", { cedulas, turnoId: t.id })
+              .then(function (res) {
+                if (res.sesionVencida) {
+                  plSeleccionEnCurso = false;
+                  return;
+                }
+                if (!res.success) {
+                  terminar(
+                    `<div class="msg err">${escapeHtml(res.message)}</div>`,
+                  );
+                  return;
+                }
+                plSeleccion = null;
+                _recargarUsuariosPl().then(function () {
+                  renderPlUsuarios();
+                  terminar(
+                    `<div class="msg ok">${escapeHtml(
+                      res.sinCambios
+                        ? "Ya tenían ese turno: no había nada que cambiar."
+                        : "Turno " +
+                            t.nombre +
+                            " asignado a " +
+                            (res.actualizadas === 1
+                              ? "1 persona."
+                              : res.actualizadas + " personas."),
+                    )}</div>`,
+                  );
+                });
+              })
+              .catch(function (err) {
+                terminar(
+                  `<div class="msg err">${escapeHtml("Error de conexión: " + err.message)}</div>`,
+                );
+              });
+          },
+        );
+      }
+
+      document
+        .getElementById("plUsuariosLista")
+        .addEventListener("change", function (e) {
+          const casilla = e.target.closest("[data-sel-pl]");
+          if (!casilla || !plSeleccion) return;
+          if (casilla.checked) plSeleccion.add(casilla.dataset.selPl);
+          else plSeleccion.delete(casilla.dataset.selPl);
+          casilla
+            .closest(".pl-tarjeta")
+            .classList.toggle("pl-marcada", casilla.checked);
+          _pintarSeleccionPl();
+        });
+      document
+        .getElementById("plSeleccionTurno")
+        .addEventListener("change", _pintarSeleccionPl);
+
+      // -- Alta y datos de una persona o grupo --
+      function abrirDatosPersonaPl(modo, cedula) {
+        if (!plUsuarios || !plUsuarios.edicionHabilitada) return;
+        const p = modo === "editar" ? _personaPl(cedula) : null;
+        if (modo === "editar" && !p) return;
+        const esGrupo = modo === "grupo" || !!(p && p.esGrupo);
+        plDatosPersona = { modo, cedula: p ? p.cedula : null };
+        document.getElementById("datosPersonaPlTitulo").textContent =
+          modo === "persona"
+            ? "Nueva persona"
+            : modo === "grupo"
+              ? "Nuevo grupo"
+              : "Datos de " + p.nombre;
+        document.getElementById("datosPersonaPlCampoCedula").style.display =
+          modo === "persona" ? "" : "none";
+        document.getElementById("datosPersonaPlCamposPersona").style.display =
+          esGrupo ? "none" : "";
+        document.getElementById("datosPersonaPlCampoOperario").style.display =
+          modo === "persona" ? "" : "none";
+        document.getElementById("datosPersonaPlTurno").innerHTML = _opcionesPl(
+          [{ valor: "", texto: "Sin turno" }],
+          plUsuarios.turnos.map((t) => ({
+            valor: String(t.id),
+            texto: _textoTurnoPl(t),
+          })),
+        );
+        document.getElementById("datosPersonaPlCedula").value = "";
+        document.getElementById("datosPersonaPlNombre").value = p
+          ? p.nombre
+          : "";
+        document.getElementById("datosPersonaPlEquipo").value = p
+          ? p.equipo
+          : "";
+        document.getElementById("datosPersonaPlTurno").value =
+          p && p.turno ? String(p.turno.id) : "";
+        document.getElementById("datosPersonaPlOperario").checked = true;
+        document.getElementById("datosPersonaPlNota").textContent =
+          modo === "grupo"
+            ? "La cédula de un grupo es su nombre. No tiene turno ni cuenta y nunca sale como operario. Después de crearlo, asígnale sus roles de coordinador o supernumerario."
+            : modo === "persona"
+              ? "La cédula no se podrá cambiar. Con el rol de operario el turno es obligatorio: su hora de inicio es la del primer registro del día."
+              : "La cédula no se cambia. Los registros ya guardados conservan el nombre que tenían." +
+                (p.turno && p.turno.deducido
+                  ? " El turno se dedujo de la hora: al guardar queda asignado."
+                  : "");
+        plEquiposSug = plUsuarios.equipos.map((e) => ({
+          valor: e.nombre,
+          clave: normalizarPedido(e.nombre),
+        }));
+        document.getElementById("datosPersonaPlAlerta").innerHTML = "";
+        document.getElementById("btnGuardarDatosPersonaPl").disabled =
+          plDatosEnCurso;
+        document.getElementById("modalDatosPersonaPl").classList.add("visible");
+        document
+          .getElementById(
+            modo === "persona"
+              ? "datosPersonaPlCedula"
+              : "datosPersonaPlNombre",
+          )
+          .focus();
+      }
+
+      function cerrarDatosPersonaPl() {
+        plDatosPersona = null;
+        document
+          .getElementById("modalDatosPersonaPl")
+          .classList.remove("visible");
+      }
+
+      function guardarDatosPersonaPl() {
+        const d = plDatosPersona;
+        if (!d || plDatosEnCurso || !plUsuarios) return;
+        const alerta = document.getElementById("datosPersonaPlAlerta");
+        const _error = (m) =>
+          (alerta.innerHTML = `<div class="msg err">${escapeHtml(m)}</div>`);
+        const p = d.modo === "editar" ? _personaPl(d.cedula) : null;
+        if (d.modo === "editar" && !p)
+          return _error("La persona ya no está en la lista. Recarga la lista.");
+        const limpio = (id) =>
+          document.getElementById(id).value.trim().replace(/\s+/g, " ");
+        const nombre = limpio("datosPersonaPlNombre");
+        const equipo = limpio("datosPersonaPlEquipo");
+        const turnoTexto = document.getElementById("datosPersonaPlTurno").value;
+        const turnoId = turnoTexto ? Number(turnoTexto) : null;
+        const esOperario =
+          d.modo === "persona"
+            ? document.getElementById("datosPersonaPlOperario").checked
+            : !!(p && p.esOperario);
+        let datos;
+        if (d.modo === "grupo") {
+          if (!nombre) return _error("Escribe el nombre del grupo.");
+          datos = { accion: "crear", esGrupo: true, nombre };
+        } else {
+          const cedula =
+            d.modo === "persona"
+              ? document.getElementById("datosPersonaPlCedula").value.trim()
+              : d.cedula;
+          if (!cedula) return _error("Escribe la cédula.");
+          if (!nombre) return _error("Escribe el nombre.");
+          if (esOperario && !turnoId && !(p && p.esGrupo))
+            return _error("Elige el turno: es obligatorio para un operario.");
+          datos = {
+            accion: d.modo === "persona" ? "crear" : "editar",
+            cedula,
+            nombre,
+            equipo,
+            turnoId,
+          };
+          if (d.modo === "persona") datos.esOperario = esOperario;
+        }
+        const boton = document.getElementById("btnGuardarDatosPersonaPl");
+        plDatosEnCurso = true;
+        boton.disabled = true;
+        alerta.innerHTML = '<p class="hint">Guardando...</p>';
+        llamarAPI("guardarPersona", datos)
+          .then(function (res) {
+            plDatosEnCurso = false;
+            boton.disabled = false;
+            if (res.sesionVencida) return;
+            if (!res.success) {
+              if (plDatosPersona === d) _error(res.message);
+              return;
+            }
+            // Si se cerró el formulario mientras guardaba, el aviso va
+            // encima de la lista y no se abre nada.
+            const abierto = plDatosPersona === d;
+            if (abierto) cerrarDatosPersonaPl();
+            const cedula = res.cedula;
+            const texto = res.sinCambios
+              ? "No había nada que cambiar."
+              : d.modo === "grupo"
+                ? "Grupo creado. Asígnale sus roles de coordinador o supernumerario."
+                : d.modo === "persona"
+                  ? "Persona creada."
+                  : "Datos guardados.";
+            _recargarUsuariosPl().then(function () {
+              const okHtml = `<div class="msg ok">${escapeHtml(texto)}</div>`;
+              // Al crear se abre la persona nueva para asignarle roles o
+              // cuentas; al editar se repinta la que está abierta.
+              if (abierto && d.modo !== "editar" && _personaPl(cedula)) {
+                abrirPersonaPl(cedula);
+                document.getElementById("personaPlAlerta").innerHTML = okHtml;
+              } else if (plPersona === cedula) {
+                _pintarPersonaPl();
+                document.getElementById("personaPlAlerta").innerHTML = okHtml;
+              } else {
+                document.getElementById("plUsuariosMensaje").innerHTML = okHtml;
+              }
+            });
+          })
+          .catch(function (err) {
+            plDatosEnCurso = false;
+            boton.disabled = false;
+            if (plDatosPersona === d)
+              _error("Error de conexión: " + err.message);
+          });
+      }
+
+      activarSugerenciasPedido(
+        "datosPersonaPlEquipo",
+        "sugDatosPersonaPlEquipo",
+        null,
+        () => plEquiposSug,
+        true,
+      );
+      [
+        "datosPersonaPlCedula",
+        "datosPersonaPlNombre",
+        "datosPersonaPlEquipo",
+      ].forEach((id) =>
+        document.getElementById(id).addEventListener("keydown", function (e) {
+          if (e.key === "Enter") guardarDatosPersonaPl();
+        }),
+      );
+
+      // -- Catálogo de turnos --
+      function abrirTurnosPl() {
+        if (!plUsuarios) return;
+        plTurnoForm = null;
+        document.getElementById("turnosPlAlerta").innerHTML = "";
+        _pintarTurnosPl();
+        document.getElementById("modalTurnosPl").classList.add("visible");
+      }
+
+      function cerrarTurnosPl() {
+        plTurnoForm = null;
+        document.getElementById("modalTurnosPl").classList.remove("visible");
+      }
+
+      function _pintarTurnosPl() {
+        if (!plUsuarios) return;
+        const habilitada = plUsuarios.edicionHabilitada === true;
+        document.getElementById("turnosPlNota").textContent = habilitada
+          ? "El nombre es solo para identificarlo; el sistema usa la hora de inicio. Cambiar la hora cambia el primer registro del día de todas sus personas. Un turno se elimina cuando nadie activo lo tiene."
+          : "Solo lectura hasta el corte: por ahora el turno de cada persona sale de la hoja Operarios.";
+        const bloqueado = plTurnosEnCurso ? " disabled" : "";
+        const turnos = plUsuarios.turnos;
+        document.getElementById("turnosPlLista").innerHTML = turnos.length
+          ? turnos
+              .map(function (t) {
+                const botones = habilitada
+                  ? `<button type="button" class="btn-gv-mini btn-gv-contorno" data-turno-pl="editar:${t.id}"${bloqueado}>Editar</button>` +
+                    (t.personas
+                      ? ""
+                      : `<button type="button" class="btn-gv-mini btn-gv-peligro" data-turno-pl="eliminar:${t.id}"${bloqueado}>Eliminar</button>`)
+                  : "";
+                return (
+                  `<div class="pl-tarjeta">` +
+                  `<div class="pl-cabecera"><strong>${escapeHtml(t.nombre)}</strong>` +
+                  `<span class="pl-fecha">${escapeHtml(t.hora + (t.horaFin ? "–" + t.horaFin : ""))}</span></div>` +
+                  `<div class="hint" style="margin: 2px 0 0">${t.personas === 1 ? "1 persona activa" : t.personas + " personas activas"}</div>` +
+                  (botones ? `<div class="pl-acciones">${botones}</div>` : "") +
+                  `</div>`
+                );
+              })
+              .join("")
+          : '<p class="hint">No hay turnos.</p>';
+        document.getElementById("btnTurnoPlNuevo").style.display =
+          habilitada && !plTurnoForm ? "" : "none";
+        document.getElementById("turnosPlForm").style.display =
+          habilitada && plTurnoForm ? "" : "none";
+        document.getElementById("btnGuardarTurnoPl").disabled = plTurnosEnCurso;
+      }
+
+      function abrirFormTurnoPl(id) {
+        if (!plUsuarios || !plUsuarios.edicionHabilitada || plTurnosEnCurso)
+          return;
+        const t = id ? plUsuarios.turnos.find((x) => x.id === id) : null;
+        if (id && !t) return;
+        plTurnoForm = { id: t ? t.id : null };
+        document.getElementById("turnosPlFormTitulo").textContent = t
+          ? "Editar el turno " + t.nombre
+          : "Nuevo turno";
+        document.getElementById("turnoPlNombre").value = t ? t.nombre : "";
+        document.getElementById("turnoPlHora").value = t ? t.hora : "";
+        document.getElementById("turnoPlHoraFin").value = t ? t.horaFin : "";
+        document.getElementById("turnosPlAlerta").innerHTML = "";
+        _pintarTurnosPl();
+        const campo = document.getElementById("turnoPlNombre");
+        campo.focus();
+        campo.scrollIntoView({ block: "nearest" });
+      }
+
+      function cancelarFormTurnoPl() {
+        plTurnoForm = null;
+        _pintarTurnosPl();
+      }
+
+      function _enviarTurnoPl(datos, textoOk) {
+        const alerta = document.getElementById("turnosPlAlerta");
+        plTurnosEnCurso = true;
+        _pintarTurnosPl();
+        alerta.innerHTML = '<p class="hint">Guardando...</p>';
+        const terminar = function (html) {
+          plTurnosEnCurso = false;
+          _pintarTurnosPl();
+          alerta.innerHTML = html;
+        };
+        llamarAPI("guardarTurno", datos)
+          .then(function (res) {
+            if (res.sesionVencida) {
+              plTurnosEnCurso = false;
+              return;
+            }
+            if (!res.success) {
+              terminar(`<div class="msg err">${escapeHtml(res.message)}</div>`);
+              return;
+            }
+            if (res.confirmar) {
+              const c = res.confirmar;
+              terminar("");
+              pedirConfirmarPl(
+                "Cambiar la hora del turno",
+                (c.personas === 1
+                  ? "1 persona empezará"
+                  : c.personas + " personas empezarán") +
+                  " su primer registro del día a las " +
+                  c.horaNueva +
+                  " en vez de las " +
+                  c.horaAntes +
+                  ". Los registros ya guardados no cambian.",
+                "Cambiar hora",
+                false,
+                () => _enviarTurnoPl({ ...datos, confirmado: true }, textoOk),
+              );
+              return;
+            }
+            plTurnoForm = null;
+            _recargarUsuariosPl().then(function () {
+              terminar(
+                `<div class="msg ok">${escapeHtml(res.sinCambios ? "No había nada que cambiar." : textoOk)}</div>`,
+              );
+            });
+          })
+          .catch(function (err) {
+            terminar(
+              `<div class="msg err">${escapeHtml("Error de conexión: " + err.message)}</div>`,
+            );
+          });
+      }
+
+      function guardarTurnoPl() {
+        if (!plTurnoForm || plTurnosEnCurso) return;
+        const _error = (m) =>
+          (document.getElementById("turnosPlAlerta").innerHTML =
+            `<div class="msg err">${escapeHtml(m)}</div>`);
+        const nombre = document
+          .getElementById("turnoPlNombre")
+          .value.trim()
+          .replace(/\s+/g, " ");
+        const hora = document.getElementById("turnoPlHora").value;
+        const horaFin = document.getElementById("turnoPlHoraFin").value;
+        if (!nombre) return _error("Escribe el nombre del turno.");
+        if (!hora || !horaFin)
+          return _error("Escribe la hora de inicio y la de fin.");
+        if (horaFin <= hora || horaFin > "23:30")
+          return _error(
+            "El turno debe empezar y terminar el mismo día, a más tardar a las 23:30: por ahora no se admiten turnos que cruzan la medianoche.",
+          );
+        const id = plTurnoForm.id;
+        _enviarTurnoPl(
+          id
+            ? { accion: "editar", id, nombre, hora, horaFin }
+            : { accion: "crear", nombre, hora, horaFin },
+          id ? "Turno guardado." : 'Turno "' + nombre + '" creado.',
+        );
+      }
+
+      document
+        .getElementById("turnosPlLista")
+        .addEventListener("click", function (e) {
+          const boton = e.target.closest("[data-turno-pl]");
+          if (!boton || boton.disabled || !plUsuarios) return;
+          const [accion, idTexto] = boton.dataset.turnoPl.split(":");
+          const t = plUsuarios.turnos.find((x) => String(x.id) === idTexto);
+          if (!t) return;
+          if (accion === "editar") return abrirFormTurnoPl(t.id);
+          pedirConfirmarPl(
+            "Eliminar turno",
+            'Se elimina el turno "' +
+              t.nombre +
+              '" (' +
+              t.hora +
+              (t.horaFin ? "–" + t.horaFin : "") +
+              "). Nadie activo lo tiene.",
+            "Eliminar",
+            true,
+            () =>
+              _enviarTurnoPl(
+                { accion: "eliminar", id: t.id },
+                'Turno "' + t.nombre + '" eliminado.',
+              ),
+          );
+        });
+      ["turnoPlNombre", "turnoPlHora", "turnoPlHoraFin"].forEach((id) =>
+        document.getElementById(id).addEventListener("keydown", function (e) {
+          if (e.key === "Enter") guardarTurnoPl();
         }),
       );
 
