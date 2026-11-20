@@ -9,12 +9,23 @@ import {
   _formasEan,
   _sqlEanReferente,
   _sqlRegistroReferente,
+  _catalogoEnApp,
 } from "./d1-negocio.js";
 
 export const accionesLectura = {
+  // Selectores del registro. Hasta el corte salen de `supervisores` (la
+  // hoja); desde el corte, de roles_persona: el rol activo de una persona
+  // activa (módulo Usuarios).
+  // datos.historicos (filtros de Editar registros y Control tiempos, una vez
+  // por sesión): desde el corte devuelve además los nombres que tienen los
+  // registros, para seguir encontrando el historial de quien ya no está.
   async getSupervisoresData(datos, env) {
+    const enApp = await _catalogoEnApp(env, "supervisores");
     const { results } = await env.DB.prepare(
-      "SELECT tipo, nombre FROM supervisores ORDER BY tipo, nombre",
+      enApp
+        ? "SELECT r.tipo, r.nombre FROM roles_persona r JOIN operarios o ON o.cedula = r.cedula " +
+            "WHERE r.activo = 1 AND o.activo = 1 ORDER BY r.tipo, r.nombre"
+        : "SELECT tipo, nombre FROM supervisores ORDER BY tipo, nombre",
     ).all();
     const coordinadores = results
       .filter((r) => r.tipo === "coordinador")
@@ -22,7 +33,37 @@ export const accionesLectura = {
     const supernumerarios = results
       .filter((r) => r.tipo === "supernumerario")
       .map((r) => ({ nombre: r.nombre }));
-    return { success: true, data: { coordinadores, supernumerarios } };
+    const data = { coordinadores, supernumerarios };
+    if (enApp && datos && datos.historicos === true) {
+      const { results: viejos } = await env.DB.prepare(
+        "SELECT 'coordinador' AS tipo, TRIM(coordinador) AS nombre, COUNT(*) AS n FROM registros " +
+          "WHERE TRIM(coordinador) <> '' GROUP BY TRIM(coordinador) UNION ALL " +
+          "SELECT 'supernumerario', TRIM(supernumerario), COUNT(*) FROM registros " +
+          "WHERE TRIM(supernumerario) <> '' GROUP BY TRIM(supernumerario)",
+      ).all();
+      // Un nombre escrito con otras mayúsculas cuenta una sola vez, con la
+      // escritura más usada.
+      const lista = (tipo) => {
+        const porClave = new Map();
+        viejos
+          .filter((r) => r.tipo === tipo)
+          .sort(
+            (a, b) =>
+              b.n - a.n ||
+              a.nombre.localeCompare(b.nombre, "es", { caseFirst: "upper" }),
+          )
+          .forEach((r) => {
+            const clave = r.nombre.toLowerCase();
+            if (!porClave.has(clave)) porClave.set(clave, r.nombre);
+          });
+        return [...porClave.values()].sort((a, b) => a.localeCompare(b, "es"));
+      };
+      data.historicos = {
+        coordinadores: lista("coordinador"),
+        supernumerarios: lista("supernumerario"),
+      };
+    }
+    return { success: true, data };
   },
 
   async getProcesos(datos, env) {

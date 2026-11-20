@@ -94,40 +94,50 @@ export async function _liberarIdempotencia(env, huella) {
     .run();
 }
 
+// Hasta el corte, los nombres salen de `supervisores` (la hoja). Desde el
+// corte (supervisores en la app), de roles_persona: el rol activo de una
+// persona activa (módulo Usuarios). `actuales` (solo editarRegistro): el
+// coordinador y el supernumerario que el registro ya tiene se aceptan aunque
+// ya no estén en la lista, como el decimal de antes del 12-11.
 export async function _validarSupervisorYSupernumerario(
   env,
   coordinadorEscrito,
   supernumerarioEscrito,
+  actuales,
 ) {
   if (!coordinadorEscrito) throw new Error("Falta el nombre del coordinador.");
   if (!supernumerarioEscrito)
     throw new Error("Falta el nombre del supernumerario.");
 
-  const coord = await env.DB.prepare(
-    "SELECT nombre FROM supervisores WHERE tipo = 'coordinador' AND lower(nombre) = lower(?)",
-  )
-    .bind(coordinadorEscrito)
-    .first();
-  if (!coord)
-    throw new Error(
-      'El coordinador "' +
-        coordinadorEscrito +
-        '" no existe en el catálogo de supervisores.',
-    );
+  const enApp = await _catalogoEnApp(env, "supervisores");
+  const buscar = async function (tipo, escrito) {
+    const previo = String((actuales && actuales[tipo]) || "").trim();
+    if (previo && previo.toLowerCase() === escrito.toLowerCase()) return previo;
+    const fila = await env.DB.prepare(
+      enApp
+        ? "SELECT r.nombre FROM roles_persona r JOIN operarios o ON o.cedula = r.cedula " +
+            "WHERE r.tipo = ? AND r.activo = 1 AND o.activo = 1 AND lower(r.nombre) = lower(?)"
+        : "SELECT nombre FROM supervisores WHERE tipo = ? AND lower(nombre) = lower(?)",
+    )
+      .bind(tipo, escrito)
+      .first();
+    if (!fila)
+      throw new Error(
+        "El " +
+          tipo +
+          ' "' +
+          escrito +
+          (enApp
+            ? '" no tiene el rol de ' + tipo + " activo en Usuarios."
+            : '" no existe en el catálogo de supervisores.'),
+      );
+    return fila.nombre;
+  };
 
-  const supernum = await env.DB.prepare(
-    "SELECT nombre FROM supervisores WHERE tipo = 'supernumerario' AND lower(nombre) = lower(?)",
-  )
-    .bind(supernumerarioEscrito)
-    .first();
-  if (!supernum)
-    throw new Error(
-      'El supernumerario "' +
-        supernumerarioEscrito +
-        '" no existe en el catálogo de supervisores.',
-    );
-
-  return { coordinador: coord.nombre, supernumerario: supernum.nombre };
+  return {
+    coordinador: await buscar("coordinador", coordinadorEscrito),
+    supernumerario: await buscar("supernumerario", supernumerarioEscrito),
+  };
 }
 
 // Devuelve las dos formas posibles de un EAN escaneado: la de 12 dígitos
@@ -1042,6 +1052,17 @@ export function _ahoraISO() {
 // Interruptor por catálogo (tabla config). Las escrituras de un catálogo solo
 // se aceptan cuando ya salió de la sincronización con Sheets: antes, el pull
 // las revertiría o las borraría.
+// true si el catálogo ya es de la app. Sirve para leer de un lado o del otro
+// según el corte; las escrituras usan _exigirCatalogoEnApp.
+export async function _catalogoEnApp(env, clave) {
+  const fila = await env.DB.prepare(
+    "SELECT valor FROM config WHERE clave = 'catalogos_en_app'",
+  ).first();
+  return String((fila && fila.valor) || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .includes(clave);
+}
 export async function _exigirCatalogoEnApp(env, clave) {
   const fila = await env.DB.prepare(
     "SELECT valor FROM config WHERE clave = 'catalogos_en_app'",

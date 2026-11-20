@@ -909,7 +909,8 @@ export const accionesEscritura = {
 
     const actual = await env.DB.prepare(
       "SELECT numero_pedido, ean, cedula_operario, fecha, hora_inicio, hora_final, " +
-        "unidades_procesadas_operario FROM registros WHERE id = ? AND anulado = 0",
+        "unidades_procesadas_operario, coordinador, supernumerario " +
+        "FROM registros WHERE id = ? AND anulado = 0",
     )
       .bind(id)
       .first();
@@ -943,11 +944,16 @@ export const accionesEscritura = {
       validacionDestino.sublinea,
     );
 
+    // Los que el registro ya tiene se aceptan aunque ya no estén en la lista.
     const { coordinador, supernumerario } =
       await _validarSupervisorYSupernumerario(
         env,
         String(payload.coordinador || "").trim(),
         String(payload.supernumerario || "").trim(),
+        {
+          coordinador: actual.coordinador,
+          supernumerario: actual.supernumerario,
+        },
       );
 
     const procesoValidado = await _obtenerProcesoValidado(
