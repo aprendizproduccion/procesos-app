@@ -21,11 +21,20 @@
 // nombre que sale en el registro. En el corte, los selectores del registro
 // pasan a leer esa tabla. Las cuentas (Administrativo = rol "supervisor",
 // Planeación) viven en `usuarios`.
+// U2b (con el interruptor `operarios` y `supervisores`, es decir, desde el
+// corte único): altas de personas y grupos, nombre, equipo y turno, cambio de
+// turno en bloque, catálogo de turnos, y desactivar, reactivar y eliminar
+// personas.
+// Turnos: el nombre es solo para verlo; lo que usa el sistema es la hora de
+// inicio, copiada en `operarios.turno`. Por ahora un turno empieza y termina
+// el mismo día (la hora fin es informativa): la jornada no cruza la
+// medianoche.
 
 import {
   _normalizarPedido,
   _exigirCatalogoEnApp,
   _ahoraISO,
+  HORA_LIMITE_ENVIO,
 } from "./d1-negocio.js";
 import {
   hashClave,
@@ -40,6 +49,8 @@ const ROL_INTERNO = { administrativo: "supervisor", planeacion: "planeacion" };
 const TIPOS_ROL = ["coordinador", "supernumerario"];
 const LARGO_MIN_CLAVE = 8; // igual que establecerClaveUsuario
 const LARGO_MAX_CLAVE = 200;
+const MAX_TURNO_BLOQUE = 500;
+const PATRON_HORA_TURNO = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 function _limpiar(texto) {
   return String(texto || "")
@@ -164,6 +175,143 @@ async function _edicionHabilitada(env, claves) {
   }
 }
 
+// ---- U2b: personas, grupos y turnos ----
+
+// Las escrituras de personas y turnos esperan el corte: el pull de la hoja
+// Operarios revertiría lo escrito desde la app.
+async function _exigirEdicionPersonas(env) {
+  await _exigirCatalogoEnApp(env, "operarios");
+  await _exigirCatalogoEnApp(env, "supervisores");
+}
+
+// Fila de auditoría que es además la guarda del batch: si la condición ya no
+// se cumple al escribir, hecho_en queda NULL, choca con su NOT NULL y el batch
+// entero se deshace.
+function _auditoriaConGuarda(env, sesion, fila, condicion, binds) {
+  return env.DB.prepare(
+    "INSERT INTO auditoria_catalogos (tabla, llave, accion, antes, despues, cedula, nombre, hecho_en) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, CASE WHEN " +
+      condicion +
+      " THEN ? END)",
+  ).bind(
+    fila.tabla,
+    fila.llave,
+    fila.accion,
+    fila.antes === undefined ? null : JSON.stringify(fila.antes),
+    fila.despues === undefined ? null : JSON.stringify(fila.despues),
+    sesion.cedula,
+    sesion.nombre || "",
+    ...binds,
+    _ahoraISO(),
+  );
+}
+
+function _esFalloDeGuarda(err) {
+  return /NOT NULL/i.test(String(err && err.message));
+}
+
+function _nombrePersonaValidado(texto) {
+  const nombre = _limpiar(texto);
+  if (nombre.length < 2 || nombre.length > 80)
+    throw new Error("El nombre debe tener entre 2 y 80 caracteres.");
+  if (!/^[\p{L}\p{N}][\p{L}\p{N} .'-]*$/u.test(nombre))
+    throw new Error(
+      "El nombre solo puede tener letras, números, espacios, punto, apóstrofo y guion.",
+    );
+  return nombre;
+}
+
+// El registro del administrador agrega operarios por nombre: no puede haber
+// dos personas activas (ni grupos) con el mismo nombre. Se compara sin
+// tildes, mayúsculas ni espacios.
+async function _exigirNombrePersonaLibre(env, nombre, cedula) {
+  const { results } = await env.DB.prepare(
+    "SELECT cedula, nombre_operario AS nombre FROM operarios WHERE activo = 1",
+  ).all();
+  const clave = _normalizarPedido(nombre);
+  const otro = results.find(
+    (r) =>
+      String(r.cedula || "").trim() !== cedula &&
+      _normalizarPedido(r.nombre) === clave,
+  );
+  if (otro)
+    throw new Error(
+      'Ya hay una persona activa llamada "' +
+        String(otro.nombre).trim() +
+        '" (cédula ' +
+        String(otro.cedula).trim() +
+        "). Usa un nombre que las distinga.",
+    );
+}
+
+// Equipo libre; si coincide con uno que ya existe (sin tildes, mayúsculas ni
+// espacios), se guarda con su escritura para no partir "Agregar equipo".
+async function _equipoCanonico(env, texto) {
+  const equipo = _limpiar(texto);
+  if (!equipo) return "";
+  if (equipo.length > 40)
+    throw new Error("El equipo debe tener máximo 40 caracteres.");
+  const { results } = await env.DB.prepare(
+    "SELECT DISTINCT equipo FROM operarios WHERE TRIM(equipo) <> ''",
+  ).all();
+  const clave = _normalizarPedido(equipo);
+  const igual = results.find((r) => _normalizarPedido(r.equipo) === clave);
+  return igual ? String(igual.equipo).trim() : equipo;
+}
+
+async function _turnoExigido(env, turnoId) {
+  const id = Number(turnoId);
+  if (!Number.isInteger(id) || id <= 0) throw new Error("Elige un turno.");
+  const t = await env.DB.prepare(
+    "SELECT id, nombre, hora_inicio AS hora FROM turnos WHERE id = ?",
+  )
+    .bind(id)
+    .first();
+  if (!t) throw new Error("Ese turno ya no existe. Recarga la lista.");
+  return t;
+}
+
+function _nombreTurnoValidado(texto) {
+  const nombre = _limpiar(texto);
+  if (nombre.length < 2 || nombre.length > 40)
+    throw new Error("El nombre del turno debe tener entre 2 y 40 caracteres.");
+  if (!/^[\p{L}\p{N}][\p{L}\p{N} .:'()/-]*$/u.test(nombre))
+    throw new Error(
+      "El nombre del turno solo puede tener letras, números, espacios y . : ' ( ) / -",
+    );
+  return nombre;
+}
+
+// Hora de inicio y fin "HH:MM". Por ahora la jornada no cruza la medianoche:
+// el registro guarda la fecha del día, rechaza una hora fin anterior a la de
+// inicio y no acepta envíos después de HORA_LIMITE_ENVIO.
+function _horasTurnoValidadas(datos) {
+  const hora = String(datos.hora || "").trim();
+  const horaFin = String(datos.horaFin || "").trim();
+  if (!PATRON_HORA_TURNO.test(hora))
+    throw new Error("La hora de inicio debe tener el formato HH:MM.");
+  if (!PATRON_HORA_TURNO.test(horaFin))
+    throw new Error("La hora de fin debe tener el formato HH:MM.");
+  if (horaFin <= hora || horaFin > HORA_LIMITE_ENVIO)
+    throw new Error(
+      "El turno debe empezar y terminar el mismo día, a más tardar a las " +
+        HORA_LIMITE_ENVIO +
+        ": por ahora no se admiten turnos que cruzan la medianoche.",
+    );
+  return { hora, horaFin };
+}
+
+async function _exigirNombreTurnoLibre(env, nombre, id) {
+  const { results } = await env.DB.prepare(
+    "SELECT id, nombre FROM turnos",
+  ).all();
+  const clave = _normalizarPedido(nombre);
+  const otro = results.find(
+    (t) => t.id !== id && _normalizarPedido(t.nombre) === clave,
+  );
+  if (otro) throw new Error('Ya hay un turno llamado "' + otro.nombre + '".');
+}
+
 export const accionesUsuarios = {
   // U1: todo lo que muestra el módulo, en solo lectura. Lleva las cédulas:
   // solo la ve una sesión de Planeación.
@@ -177,7 +325,8 @@ export const accionesUsuarios = {
       "SELECT COUNT(*) AS n FROM operarios WHERE cedula IS NULL OR TRIM(cedula) = ''",
     ).first();
     const { results: filasTurnos } = await env.DB.prepare(
-      "SELECT id, nombre, hora_inicio AS hora, activo FROM turnos ORDER BY hora_inicio, nombre",
+      "SELECT id, nombre, hora_inicio AS hora, hora_fin AS horaFin, activo FROM turnos " +
+        "ORDER BY hora_inicio, nombre",
     ).all();
     const { results: filasCuentas } = await env.DB.prepare(
       "SELECT cedula, rol, activo FROM usuarios",
@@ -205,6 +354,7 @@ export const accionesUsuarios = {
       id: t.id,
       nombre: String(t.nombre),
       hora: String(t.hora),
+      horaFin: String(t.horaFin || ""),
       activo: t.activo === 1,
       personas: 0,
     }));
@@ -710,5 +860,475 @@ export const accionesUsuarios = {
       }),
     ]);
     return respuesta;
+  },
+
+  // ---- U2b: personas, grupos y turnos (desde el corte único) ----
+
+  // Alta y edición de una persona o grupo.
+  // datos: { accion: "crear"|"editar", cedula, nombre, equipo, turnoId,
+  //   esOperario, esGrupo }
+  // - crear persona: cédula de 5 a 15 letras o números; nombre libre entre
+  //   los activos; el turno es obligatorio si tiene el rol de operario.
+  // - crear grupo: la cédula es el nombre; sin turno, equipo ni cuenta, y
+  //   nunca operario.
+  // - editar: nombre, equipo y turno. La cédula no se edita. Los registros
+  //   viejos conservan el nombre que tenían (la cadena y Control tiempos van
+  //   por cédula).
+  // El turno se escribe por id y su hora se copia en `turno` (la que lee la
+  // cadena) con una subconsulta: si el turno se eliminó entre medias, la hora
+  // queda NULL, choca con el NOT NULL y no se guarda nada.
+  async guardarPersona(datos, env, ctx, ip, sesion) {
+    await _exigirEdicionPersonas(env);
+    const accion = String(datos.accion || "");
+    if (accion !== "crear" && accion !== "editar")
+      throw new Error("Acción de persona no válida.");
+    const nombre = _nombrePersonaValidado(datos.nombre);
+
+    if (accion === "crear") {
+      const esGrupo = datos.esGrupo === true;
+      const cedula = esGrupo ? nombre : String(datos.cedula || "").trim();
+      if (!esGrupo && !/^[A-Za-z0-9]{5,15}$/.test(cedula))
+        throw new Error(
+          "La cédula debe tener de 5 a 15 letras o números, sin espacios ni puntos.",
+        );
+      const existe = await env.DB.prepare(
+        "SELECT nombre_operario AS nombre, activo FROM operarios WHERE LOWER(TRIM(cedula)) = LOWER(?)",
+      )
+        .bind(cedula)
+        .first();
+      if (existe)
+        throw new Error(
+          (esGrupo
+            ? 'Ya existe un grupo o persona con la cédula "' + cedula + '"'
+            : "La cédula " + cedula + " ya es de " + existe.nombre) +
+            (existe.activo === 1 ? "." : " (inactiva): reactívala."),
+        );
+      await _exigirNombrePersonaLibre(env, nombre, cedula);
+      const esOperario = !esGrupo && datos.esOperario === true;
+      const equipo = esGrupo ? "" : await _equipoCanonico(env, datos.equipo);
+      let turno = null;
+      if (!esGrupo && (esOperario || datos.turnoId))
+        turno = await _turnoExigido(env, datos.turnoId);
+      try {
+        await env.DB.batch([
+          env.DB.prepare(
+            "INSERT INTO operarios (cedula, nombre_operario, equipo, activo, turno, turno_id, " +
+              "es_operario, es_grupo) VALUES (?, ?, ?, 1, " +
+              (turno ? "(SELECT hora_inicio FROM turnos WHERE id = ?)" : "?") +
+              ", ?, ?, ?)",
+          ).bind(
+            cedula,
+            nombre,
+            equipo,
+            turno ? turno.id : "",
+            turno ? turno.id : null,
+            esOperario ? 1 : 0,
+            esGrupo ? 1 : 0,
+          ),
+          _auditoria(env, sesion, {
+            tabla: "operarios",
+            llave: cedula,
+            accion: "crear",
+            despues: {
+              nombre,
+              equipo,
+              turno: turno ? turno.nombre : "",
+              esOperario,
+              esGrupo,
+            },
+          }),
+        ]);
+      } catch (err) {
+        if (/UNIQUE/i.test(String(err && err.message)))
+          throw new Error("Esa cédula ya existe. Recarga la lista.");
+        if (_esFalloDeGuarda(err))
+          throw new Error("El turno elegido ya no existe. Recarga la lista.");
+        throw err;
+      }
+      return { success: true, cedula, nombre };
+    }
+
+    // editar
+    const p = await _personaExigida(env, datos);
+    const actual = await env.DB.prepare(
+      "SELECT o.nombre_operario AS nombre, o.equipo, o.turno_id AS turnoId, t.nombre AS turnoNombre " +
+        "FROM operarios o LEFT JOIN turnos t ON t.id = o.turno_id WHERE o.cedula = ?",
+    )
+      .bind(p.cedula)
+      .first();
+    const esGrupo = p.esGrupo === 1;
+    if (p.activo === 1) await _exigirNombrePersonaLibre(env, nombre, p.cedula);
+    const equipo = esGrupo ? "" : await _equipoCanonico(env, datos.equipo);
+    let turno = null;
+    if (!esGrupo && datos.turnoId)
+      turno = await _turnoExigido(env, datos.turnoId);
+    if (!esGrupo && !turno && p.esOperario === 1)
+      throw new Error("Un operario necesita turno.");
+    const turnoIdNuevo = turno ? turno.id : null;
+    const cambiaTurno = !esGrupo && turnoIdNuevo !== (actual.turnoId ?? null);
+    if (
+      nombre === String(actual.nombre || "").trim() &&
+      equipo === String(actual.equipo || "").trim() &&
+      !cambiaTurno
+    )
+      return { success: true, cedula: p.cedula, sinCambios: true };
+    const sets = ["nombre_operario = ?", "equipo = ?"];
+    const binds = [nombre, equipo];
+    if (cambiaTurno) {
+      sets.push(
+        "turno_id = ?",
+        turno
+          ? "turno = (SELECT hora_inicio FROM turnos WHERE id = ?)"
+          : "turno = ?",
+      );
+      binds.push(turnoIdNuevo, turno ? turno.id : "");
+    }
+    try {
+      await env.DB.batch([
+        env.DB.prepare(
+          "UPDATE operarios SET " + sets.join(", ") + " WHERE cedula = ?",
+        ).bind(...binds, p.cedula),
+        _auditoria(env, sesion, {
+          tabla: "operarios",
+          llave: p.cedula,
+          accion: "editar",
+          antes: {
+            nombre: actual.nombre,
+            equipo: actual.equipo,
+            turno: actual.turnoNombre || "",
+          },
+          despues: {
+            nombre,
+            equipo,
+            turno: cambiaTurno
+              ? turno
+                ? turno.nombre
+                : ""
+              : actual.turnoNombre || "",
+          },
+        }),
+      ]);
+    } catch (err) {
+      if (_esFalloDeGuarda(err))
+        throw new Error("El turno elegido ya no existe. Recarga la lista.");
+      throw err;
+    }
+    return { success: true, cedula: p.cedula, nombre };
+  },
+
+  // Desactivar, reactivar o eliminar a una persona.
+  // datos: { cedula, accion: "desactivar"|"reactivar"|"eliminar", claveMaestra }
+  // - desactivar (clave maestra): también sus cuentas, con `version` + 1 para
+  //   cerrar sus sesiones; nadie se desactiva a sí mismo. Sus roles de
+  //   coordinador y supernumerario salen de los selectores solos (leen solo
+  //   personas activas).
+  // - reactivar: sin clave; el nombre no puede chocar con otro activo. Sus
+  //   cuentas no vuelven solas.
+  // - eliminar (clave maestra, solo inactiva): borra la persona y sus
+  //   cuentas; sus nombres de rol con registros quedan inactivos y los demás
+  //   se borran. Sus registros no se tocan.
+  async cambiarEstadoPersona(datos, env, ctx, ip, sesion) {
+    await _exigirEdicionPersonas(env);
+    const accion = String(datos.accion || "");
+    if (!["desactivar", "reactivar", "eliminar"].includes(accion))
+      throw new Error("Acción no válida.");
+    if (accion !== "reactivar")
+      await _exigirClaveMaestra(env, ip, datos.claveMaestra);
+    const p = await _personaExigida(env, datos);
+    const ahora = _ahoraISO();
+    const base = { tabla: "operarios", llave: p.cedula };
+
+    if (accion === "desactivar") {
+      if (p.activo !== 1)
+        return { success: true, cedula: p.cedula, sinCambios: true };
+      if (p.cedula === String(sesion.cedula || ""))
+        throw new Error("No puedes desactivarte a ti mismo.");
+      const { results: cuentas } = await env.DB.prepare(
+        "SELECT rol FROM usuarios WHERE cedula = ? AND activo = 1",
+      )
+        .bind(p.cedula)
+        .all();
+      await env.DB.batch([
+        env.DB.prepare(
+          "UPDATE operarios SET activo = 0 WHERE cedula = ? AND activo = 1",
+        ).bind(p.cedula),
+        env.DB.prepare(
+          "UPDATE usuarios SET activo = 0, version = version + 1, actualizado_en = ? " +
+            "WHERE cedula = ? AND activo = 1",
+        ).bind(ahora, p.cedula),
+        _auditoria(env, sesion, {
+          ...base,
+          accion: "desactivar",
+          antes: { activo: true },
+          despues: {
+            activo: false,
+            cuentasDesactivadas: cuentas.map((c) => ROL_CUENTA[c.rol] || c.rol),
+          },
+        }),
+      ]);
+      return {
+        success: true,
+        cedula: p.cedula,
+        cuentasDesactivadas: cuentas.length,
+      };
+    }
+
+    if (accion === "reactivar") {
+      if (p.activo === 1)
+        return { success: true, cedula: p.cedula, sinCambios: true };
+      await _exigirNombrePersonaLibre(env, p.nombre, p.cedula);
+      await env.DB.batch([
+        env.DB.prepare(
+          "UPDATE operarios SET activo = 1 WHERE cedula = ? AND activo = 0",
+        ).bind(p.cedula),
+        _auditoria(env, sesion, {
+          ...base,
+          accion: "activar",
+          antes: { activo: false },
+          despues: { activo: true },
+        }),
+      ]);
+      return { success: true, cedula: p.cedula };
+    }
+
+    // eliminar
+    if (p.activo === 1)
+      throw new Error(
+        "Primero desactiva a la persona; después se puede eliminar.",
+      );
+    const { results: roles } = await env.DB.prepare(
+      "SELECT tipo, nombre FROM roles_persona WHERE cedula = ?",
+    )
+      .bind(p.cedula)
+      .all();
+    const sentencias = [
+      // Guarda: si alguien la reactivó entre medias, no se borra nada.
+      _auditoriaConGuarda(
+        env,
+        sesion,
+        {
+          ...base,
+          accion: "eliminar",
+          antes: { nombre: p.nombre, esGrupo: p.esGrupo === 1 },
+        },
+        "EXISTS (SELECT 1 FROM operarios WHERE cedula = ? AND activo = 0)",
+        [p.cedula],
+      ),
+    ];
+    for (const r of roles) {
+      const usados = await _registrosDelNombre(env, r.tipo, r.nombre);
+      sentencias.push(
+        usados > 0
+          ? env.DB.prepare(
+              "UPDATE roles_persona SET activo = 0, actualizado_en = ? WHERE cedula = ? AND tipo = ?",
+            ).bind(ahora, p.cedula, r.tipo)
+          : env.DB.prepare(
+              "DELETE FROM roles_persona WHERE cedula = ? AND tipo = ?",
+            ).bind(p.cedula, r.tipo),
+      );
+    }
+    sentencias.push(
+      env.DB.prepare("DELETE FROM usuarios WHERE cedula = ?").bind(p.cedula),
+      env.DB.prepare(
+        "DELETE FROM operarios WHERE cedula = ? AND activo = 0",
+      ).bind(p.cedula),
+    );
+    try {
+      await env.DB.batch(sentencias);
+    } catch (err) {
+      if (_esFalloDeGuarda(err))
+        throw new Error(
+          "La persona se reactivó entre medias. Recarga la lista.",
+        );
+      throw err;
+    }
+    return { success: true, cedula: p.cedula, eliminada: true };
+  },
+
+  // Cambio de turno en bloque. datos: { cedulas: [...], turnoId }
+  // Hasta MAX_TURNO_BLOQUE personas, nunca grupos.
+  async cambiarTurnoPersonas(datos, env, ctx, ip, sesion) {
+    await _exigirEdicionPersonas(env);
+    if (!Array.isArray(datos.cedulas) || !datos.cedulas.length)
+      throw new Error("Selecciona al menos una persona.");
+    const cedulas = [
+      ...new Set(datos.cedulas.map((c) => String(c || "").trim())),
+    ].filter(Boolean);
+    if (cedulas.length > MAX_TURNO_BLOQUE)
+      throw new Error(
+        "Se pueden cambiar máximo " + MAX_TURNO_BLOQUE + " personas a la vez.",
+      );
+    const turno = await _turnoExigido(env, datos.turnoId);
+    const lista = JSON.stringify(cedulas);
+    const { results } = await env.DB.prepare(
+      "SELECT cedula, es_grupo AS esGrupo, turno_id AS turnoId FROM operarios " +
+        "WHERE cedula IN (SELECT value FROM json_each(?))",
+    )
+      .bind(lista)
+      .all();
+    if (results.length !== cedulas.length)
+      throw new Error(
+        "Alguna de las personas ya no está en la lista. Recarga la lista.",
+      );
+    if (results.some((r) => r.esGrupo === 1))
+      throw new Error("Un grupo no tiene turno.");
+    const cambian = results.filter((r) => r.turnoId !== turno.id).length;
+    if (!cambian) return { success: true, sinCambios: true, actualizadas: 0 };
+    try {
+      await env.DB.batch([
+        env.DB.prepare(
+          "UPDATE operarios SET turno_id = ?, turno = (SELECT hora_inicio FROM turnos WHERE id = ?) " +
+            "WHERE cedula IN (SELECT value FROM json_each(?)) AND es_grupo = 0",
+        ).bind(turno.id, turno.id, lista),
+        _auditoria(env, sesion, {
+          tabla: "operarios",
+          llave: "bloque",
+          accion: "editar",
+          despues: { turno: turno.nombre, cedulas },
+        }),
+      ]);
+    } catch (err) {
+      if (_esFalloDeGuarda(err))
+        throw new Error("El turno elegido ya no existe. Recarga la lista.");
+      throw err;
+    }
+    return { success: true, actualizadas: cambian, turno: turno.nombre };
+  },
+
+  // Catálogo de turnos. datos: { accion: "crear"|"editar"|"eliminar", id,
+  //   nombre, hora, horaFin, confirmado }
+  // - El nombre es solo para verlo (único); la hora de inicio es la que usa
+  //   el sistema. La hora fin es informativa por ahora.
+  // - editar: cambiar la hora de un turno con gente responde `confirmar` sin
+  //   escribir; con confirmado: true copia la hora nueva a sus personas en el
+  //   mismo batch. Los registros ya guardados no cambian.
+  // - eliminar: solo si ninguna persona activa lo tiene. Las inactivas que lo
+  //   tenían quedan sin turno asignado (conservan su hora).
+  async guardarTurno(datos, env, ctx, ip, sesion) {
+    await _exigirEdicionPersonas(env);
+    const accion = String(datos.accion || "");
+    if (!["crear", "editar", "eliminar"].includes(accion))
+      throw new Error("Acción de turno no válida.");
+    const ahora = _ahoraISO();
+
+    if (accion === "crear") {
+      const nombre = _nombreTurnoValidado(datos.nombre);
+      const { hora, horaFin } = _horasTurnoValidadas(datos);
+      await _exigirNombreTurnoLibre(env, nombre, null);
+      try {
+        await env.DB.batch([
+          env.DB.prepare(
+            "INSERT INTO turnos (nombre, hora_inicio, hora_fin, activo, creado_en) VALUES (?, ?, ?, 1, ?)",
+          ).bind(nombre, hora, horaFin, ahora),
+          _auditoria(env, sesion, {
+            tabla: "turnos",
+            llave: nombre,
+            accion: "crear",
+            despues: { nombre, hora, horaFin },
+          }),
+        ]);
+      } catch (err) {
+        if (/UNIQUE/i.test(String(err && err.message)))
+          throw new Error('Ya hay un turno llamado "' + nombre + '".');
+        throw err;
+      }
+      return { success: true, nombre };
+    }
+
+    const id = Number(datos.id);
+    const t = Number.isInteger(id)
+      ? await env.DB.prepare(
+          "SELECT id, nombre, hora_inicio AS hora, hora_fin AS horaFin FROM turnos WHERE id = ?",
+        )
+          .bind(id)
+          .first()
+      : null;
+    if (!t) throw new Error("Ese turno ya no existe. Recarga la lista.");
+    const activas = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM operarios WHERE turno_id = ? AND activo = 1",
+    )
+      .bind(t.id)
+      .first();
+    const personas = Number(activas && activas.n) || 0;
+    const base = { tabla: "turnos", llave: String(t.id) };
+    const antes = { nombre: t.nombre, hora: t.hora, horaFin: t.horaFin };
+
+    if (accion === "editar") {
+      const nombre = _nombreTurnoValidado(datos.nombre);
+      const { hora, horaFin } = _horasTurnoValidadas(datos);
+      if (nombre === t.nombre && hora === t.hora && horaFin === t.horaFin)
+        return { success: true, id: t.id, sinCambios: true };
+      if (nombre !== t.nombre) await _exigirNombreTurnoLibre(env, nombre, t.id);
+      const cambiaHora = hora !== t.hora;
+      if (cambiaHora && personas > 0 && datos.confirmado !== true)
+        return {
+          success: true,
+          id: t.id,
+          confirmar: { personas, horaAntes: t.hora, horaNueva: hora },
+        };
+      const sentencias = [
+        env.DB.prepare(
+          "UPDATE turnos SET nombre = ?, hora_inicio = ?, hora_fin = ? WHERE id = ?",
+        ).bind(nombre, hora, horaFin, t.id),
+      ];
+      if (cambiaHora)
+        sentencias.push(
+          env.DB.prepare(
+            "UPDATE operarios SET turno = ? WHERE turno_id = ?",
+          ).bind(hora, t.id),
+        );
+      sentencias.push(
+        _auditoria(env, sesion, {
+          ...base,
+          accion: "editar",
+          antes,
+          despues: { nombre, hora, horaFin },
+        }),
+      );
+      try {
+        await env.DB.batch(sentencias);
+      } catch (err) {
+        if (/UNIQUE/i.test(String(err && err.message)))
+          throw new Error('Ya hay un turno llamado "' + nombre + '".');
+        throw err;
+      }
+      return {
+        success: true,
+        id: t.id,
+        personasActualizadas: cambiaHora ? personas : 0,
+      };
+    }
+
+    // eliminar
+    if (personas > 0)
+      throw new Error(
+        (personas === 1
+          ? "Lo tiene 1 persona activa"
+          : "Lo tienen " + personas + " personas activas") +
+          ': pásalas a otro turno con "Cambiar turno" y vuelve a intentarlo.',
+      );
+    try {
+      await env.DB.batch([
+        // Guarda: si alguien recibió el turno entre medias, no se borra.
+        _auditoriaConGuarda(
+          env,
+          sesion,
+          { ...base, accion: "eliminar", antes },
+          "NOT EXISTS (SELECT 1 FROM operarios WHERE turno_id = ? AND activo = 1)",
+          [t.id],
+        ),
+        env.DB.prepare(
+          "UPDATE operarios SET turno_id = NULL WHERE turno_id = ?",
+        ).bind(t.id),
+        env.DB.prepare("DELETE FROM turnos WHERE id = ?").bind(t.id),
+      ]);
+    } catch (err) {
+      if (_esFalloDeGuarda(err))
+        throw new Error(
+          "Alguien recibió este turno entre medias. Recarga la lista.",
+        );
+      throw err;
+    }
+    return { success: true, id: t.id, eliminado: true };
   },
 };
