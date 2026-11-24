@@ -4,6 +4,7 @@ import { accionesEscritura } from "./acciones-escritura.js";
 import { accionesPlaneacion } from "./acciones-planeacion.js";
 import { accionesUsuarios } from "./acciones-usuarios.js";
 import { accionesProcesos } from "./acciones-procesos.js";
+import * as Sentry from "@sentry/cloudflare";
 import { _reconciliarSeguimientoD1 } from "./d1-negocio.js";
 import {
   leerModoAuth,
@@ -51,12 +52,28 @@ const PERMISOS_POR_ACCION = {
   alinearProcesosPedidos: ["planeacion"],
 };
 
-export default {
+const manejador = {
   // Cron del Worker (ver "triggers" en wrangler.jsonc). Solo corre la red de
   // seguridad de "Seguimiento paquetes"; no pasa por el token ni por ACCIONES
   // porque no lo invoca nadie desde fuera.
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(_reconciliarSeguimientoD1(env));
+    // withMonitor avisa en Sentry si el cron falla o deja de correr.
+    ctx.waitUntil(
+      Sentry.withMonitor(
+        "reconciliacion-seguimiento",
+        () =>
+          _reconciliarSeguimientoD1(env).catch((err) => {
+            Sentry.captureException(err, { tags: { tarea: "cron" } });
+            throw err;
+          }),
+        {
+          schedule: { type: "crontab", value: event.cron },
+          checkinMargin: 5,
+          maxRuntime: 10,
+          timezone: "UTC",
+        },
+      ),
+    );
   },
 
   async fetch(request, env, ctx) {
@@ -162,10 +179,32 @@ export default {
       const resultado = await handler(datos || {}, env, ctx, ip, sesion);
       return json(resultado);
     } catch (err) {
+      if (_esErrorInesperado(err)) {
+        Sentry.captureException(err, { tags: { accion: action } });
+      }
       return json({ success: false, message: err.message }, 500);
     }
   },
 };
+
+// Sentry envuelve fetch y scheduled. El DSN viene de "vars" en wrangler.jsonc.
+export default Sentry.withSentry(
+  (env) => ({
+    dsn: env.SENTRY_DSN,
+    environment: "production",
+    tracesSampleRate: 0.2,
+  }),
+  manejador,
+);
+
+// Los mensajes de validación (new Error("Falta …")) son respuestas esperadas
+// y no van a Sentry. Sí van los errores crudos de D1, los bugs (TypeError,
+// ReferenceError…) y las fallas de red.
+function _esErrorInesperado(err) {
+  if (!(err instanceof Error)) return true;
+  if (err.constructor !== Error) return true;
+  return /D1_|SQLITE|network|timeout|fetch failed/i.test(err.message);
+}
 
 // Registro de todas las acciones disponibles del API, fusionando las tres
 // colecciones (lectura, auth, escritura). Todas las acciones del plan original

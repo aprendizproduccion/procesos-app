@@ -2,6 +2,15 @@
 <html>
   <head>
     <meta charset="UTF-8" />
+    <script>
+      window.sentryOnLoad = function () {
+        Sentry.init({ environment: "production", tracesSampleRate: 0.1 });
+      };
+    </script>
+    <script
+      src="https://js.sentry-cdn.com/0c641e98521114429a904896193ccc44.min.js"
+      crossorigin="anonymous"
+    ></script>
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
@@ -1903,65 +1912,65 @@
             <canvas id="graficaDetallePedido"></canvas>
           </div>
           <div class="seg-detalle-fila">
-          <div class="seguimiento-grafica-wrap" style="height: 140px">
-            <canvas id="graficaGaugeEficiencia"></canvas>
-          </div>
-          <div
-            class="seguimiento-kpi"
-            id="kpiEficienciaDetalle"
-            style="margin-bottom: 18px"
-          >
-            <span class="seguimiento-kpi-valor" id="kpiEficienciaDetalleValor"
-              >—</span
-            >
-            <span class="seguimiento-kpi-label">Eficiencia</span>
-          </div>
-          <div
-            id="bloqueSegJustificar"
-            style="
-              display: none;
-              margin-bottom: 18px;
-              padding: 12px;
-              border: 1px solid var(--gv-borde);
-              border-radius: 8px;
-              background: var(--gv-superficie-alt);
-            "
-          >
-            <label style="font-size: 15px">Justificar / Cerrar pedido</label>
-            <p class="hint" style="margin-top: 0">
-              Cierra el pedido completo justificando todo lo que falta. Quedará
-              como "No cumple".
-            </p>
-            <label>Faltante del pedido</label>
-            <div
-              id="segJustFaltante"
-              class="calc-valor-fijo"
-              style="margin-bottom: 14px"
-            >
-              —
+            <div class="seguimiento-grafica-wrap" style="height: 140px">
+              <canvas id="graficaGaugeEficiencia"></canvas>
             </div>
-            <label>Justificado por (obligatorio)</label>
-            <input
-              id="segJustPor"
-              placeholder="Quién hace la justificación"
-              autocomplete="off"
-            />
-            <label>Motivo (obligatorio)</label>
-            <textarea
-              id="segJustMotivo"
-              rows="2"
-              placeholder="Ej: material dañado, unidades faltantes, etc."
-            ></textarea>
-            <div id="segJustAlerta"></div>
-            <button
-              type="button"
-              id="btnSegJustificar"
-              class="btn-submit btn-gv-oscuro"
-              onclick="abrirConfirmarSegJustificar()"
+            <div
+              class="seguimiento-kpi"
+              id="kpiEficienciaDetalle"
+              style="margin-bottom: 18px"
             >
-              Justificar/Cerrar
-            </button>
-          </div>
+              <span class="seguimiento-kpi-valor" id="kpiEficienciaDetalleValor"
+                >—</span
+              >
+              <span class="seguimiento-kpi-label">Eficiencia</span>
+            </div>
+            <div
+              id="bloqueSegJustificar"
+              style="
+                display: none;
+                margin-bottom: 18px;
+                padding: 12px;
+                border: 1px solid var(--gv-borde);
+                border-radius: 8px;
+                background: var(--gv-superficie-alt);
+              "
+            >
+              <label style="font-size: 15px">Justificar / Cerrar pedido</label>
+              <p class="hint" style="margin-top: 0">
+                Cierra el pedido completo justificando todo lo que falta.
+                Quedará como "No cumple".
+              </p>
+              <label>Faltante del pedido</label>
+              <div
+                id="segJustFaltante"
+                class="calc-valor-fijo"
+                style="margin-bottom: 14px"
+              >
+                —
+              </div>
+              <label>Justificado por (obligatorio)</label>
+              <input
+                id="segJustPor"
+                placeholder="Quién hace la justificación"
+                autocomplete="off"
+              />
+              <label>Motivo (obligatorio)</label>
+              <textarea
+                id="segJustMotivo"
+                rows="2"
+                placeholder="Ej: material dañado, unidades faltantes, etc."
+              ></textarea>
+              <div id="segJustAlerta"></div>
+              <button
+                type="button"
+                id="btnSegJustificar"
+                class="btn-submit btn-gv-oscuro"
+                onclick="abrirConfirmarSegJustificar()"
+              >
+                Justificar/Cerrar
+              </button>
+            </div>
           </div>
         </div>
 

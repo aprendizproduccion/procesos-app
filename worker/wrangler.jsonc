@@ -4,6 +4,11 @@
   "workers_dev": false,
   "preview_urls": false,
   "compatibility_date": "2026-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
+  "vars": {
+    "SENTRY_DSN": "https://fbc20e9f2ffdda3f55522014a8ed2a54@o4512487731429376.ingest.us.sentry.io/4512487788380160"
+  },
   "d1_databases": [
     {
       "binding": "DB",
