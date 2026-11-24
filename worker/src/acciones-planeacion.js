@@ -422,6 +422,27 @@ function _errorPedidoNoEditable(pedido, estado) {
   );
 }
 
+// ---------------- Pedidos por etapas (24-11) ----------------
+// Un pedido por etapas es de referencia única: cada proceso que cuenta
+// unidades es una etapa, con su fila en Validación eanes (código ETAPA1,
+// ETAPA2..., en procesos.etapa_ean) y la meta en las unidades pedidas. Los
+// procesos que no cuentan se registran en el EAN 0 sin límite. Esas filas las
+// maneja la app: sus EAN no se agregan, editan ni eliminan a mano.
+const PREFIJO_ETAPA = "ETAPA";
+const MSG_PEDIDO_ETAPAS_EAN =
+  "Es un pedido por etapas: sus filas de unidades las maneja la app. Aquí no se agregan, editan ni eliminan EAN.";
+const MSG_PEDIDO_ETAPAS_EDITAR =
+  "Editar un pedido por etapas todavía no está disponible. Si tiene un error y no tiene registros, elimínalo y créalo de nuevo.";
+
+async function _esPedidoPorEtapas(env, pedido) {
+  const fila = await env.DB.prepare(
+    "SELECT 1 AS si FROM pedidos WHERE numero_pedido = ? AND tipo = 'etapas' LIMIT 1",
+  )
+    .bind(pedido)
+    .first();
+  return !!fila;
+}
+
 // ---------------- F3b: escribir en los EAN de un pedido ----------------
 
 // EAN tal como se escribió o escaneó: sin espacios, máximo 30 caracteres, y
@@ -786,7 +807,7 @@ export const accionesPlaneacion = {
     const { results: filas } = await env.DB.prepare(
       "SELECT p.numero_pedido AS pedido, p.sublinea, p.cliente, p.evento, " +
         "p.clasificacion_proceso AS clasificacion, p.fecha, p.unidades_pedidas AS unidadesPedidas, " +
-        "EXISTS(SELECT 1 FROM registros r WHERE r.numero_pedido = p.numero_pedido) AS conRegistros " +
+        "p.tipo, EXISTS(SELECT 1 FROM registros r WHERE r.numero_pedido = p.numero_pedido) AS conRegistros " +
         "FROM pedidos p",
     ).all();
     const { results: eanes } = await env.DB.prepare(
@@ -805,6 +826,7 @@ export const accionesPlaneacion = {
           pedido,
           sublineas: [],
           conRegistros: false,
+          porEtapas: false,
           unidadesPedidas: 0,
           unidadesEan: 0,
         });
@@ -815,6 +837,7 @@ export const accionesPlaneacion = {
     filas.forEach((f) => {
       const e = _entrada(f.pedido);
       e.conRegistros = e.conRegistros || f.conRegistros === 1;
+      e.porEtapas = e.porEtapas || f.tipo === "etapas";
       e.unidadesPedidas = Math.max(
         e.unidadesPedidas,
         Number(f.unidadesPedidas) || 0,
@@ -897,9 +920,11 @@ export const accionesPlaneacion = {
           .forEach((v) =>
             alertas.push('Clasificación fuera de la lista: "' + v + '".'),
           );
-        const sumaEan = nEanes
-          ? _alertaSumaEan(e.unidadesEan, e.unidadesPedidas)
-          : "";
+        // Por etapas cada etapa lleva las unidades pedidas: la suma no aplica.
+        const sumaEan =
+          nEanes && !e.porEtapas
+            ? _alertaSumaEan(e.unidadesEan, e.unidadesPedidas)
+            : "";
         if (sumaEan) alertas.push(sumaEan);
       }
 
@@ -923,6 +948,7 @@ export const accionesPlaneacion = {
         unidadesPedidas: e.unidadesPedidas,
         unidadesEan: _redondear2(e.unidadesEan),
         conRegistros: e.conRegistros,
+        porEtapas: e.porEtapas,
         soloEnValidacion: reales.length === 0,
         alertas,
       };
@@ -1066,8 +1092,11 @@ export const accionesPlaneacion = {
   // recalcula nunca; si alguien se equivoca, se borra y se crea de nuevo.
   // Los procesos salen del catálogo activo (F5 · P2), con su estándar y su
   // link; si alguno cambia en el catálogo antes de guardar, no se crea nada.
-  // datos: { idEnvio, tipo: "pedido"|"interna", unidades, nombre, cliente,
-  //   sublineas[], evento, clasificacion, procesos[{nombre}], sinLimite }
+  // Por etapas (24-11): una sola sublínea y, en cada proceso, cuenta: true
+  // para los que son etapa (ver "Pedidos por etapas").
+  // datos: { idEnvio, tipo: "pedido"|"interna"|"etapas", unidades, nombre,
+  //   cliente, sublineas[], evento, clasificacion, procesos[{nombre, cuenta}],
+  //   sinLimite }
   async crearPedido(datos, env, ctx, ip, sesion) {
     if (!String(datos.idEnvio || "").trim())
       throw new Error("Falta el identificador del envío. Recarga la página.");
@@ -1087,7 +1116,8 @@ export const accionesPlaneacion = {
       await _exigirCatalogoEnApp(env, "procesos");
 
       const interna = datos.tipo === "interna";
-      if (!interna && datos.tipo !== "pedido")
+      const etapas = datos.tipo === "etapas";
+      if (!interna && !etapas && datos.tipo !== "pedido")
         throw new Error("Tipo de pedido no válido.");
 
       // --- Unidades o nombre ---
@@ -1159,6 +1189,8 @@ export const accionesPlaneacion = {
         throw new Error("Agrega al menos una sublínea.");
       if (sublineas.length > MAX_SUBLINEAS)
         throw new Error("Máximo " + MAX_SUBLINEAS + " sublíneas por pedido.");
+      if (etapas && sublineas.length !== 1)
+        throw new Error("Un pedido por etapas lleva una sola sublínea.");
 
       // --- Procesos: del catálogo activo, con su estándar y su link ---
       const catalogo = await _catalogoProcesos(env);
@@ -1172,11 +1204,22 @@ export const accionesPlaneacion = {
           );
         const c = _procesoDelCatalogo(p, catalogo);
         vistosProc.add(c.clave);
-        procesos.push(c);
+        procesos.push({ ...c, cuenta: etapas && p.cuenta === true });
       });
       if (procesos.length === 0) throw new Error("Agrega al menos un proceso.");
       if (procesos.length > MAX_PROCESOS)
         throw new Error("Máximo " + MAX_PROCESOS + " procesos por pedido.");
+      // Etapas: los procesos que cuentan, en el orden de la lista. El código
+      // de cada etapa no cambia nunca: queda guardado en sus registros.
+      const listaEtapas = procesos.filter((p) => p.cuenta);
+      listaEtapas.forEach((p, i) => {
+        p.orden = i + 1;
+        p.etapaEan = PREFIJO_ETAPA + (i + 1);
+      });
+      if (etapas && listaEtapas.length === 0)
+        throw new Error(
+          "Marca al menos un proceso como etapa (que cuenta unidades).",
+        );
 
       const sinLimite = interna && datos.sinLimite === true;
       const fecha = _fechaHoyBogota();
@@ -1202,7 +1245,7 @@ export const accionesPlaneacion = {
 
         const despues = {
           pedido,
-          tipo: interna ? "interna" : "pedido",
+          tipo: interna ? "interna" : etapas ? "etapas" : "pedido",
           unidadesPedidas: unidades,
           cliente: cliente.nombre,
           sublineas,
@@ -1213,6 +1256,7 @@ export const accionesPlaneacion = {
             nombre: p.nombre,
             estandar: p.estandar,
             link: p.link,
+            ...(etapas ? { etapa: p.etapaEan || "" } : {}),
           })),
           sinLimite,
         };
@@ -1237,8 +1281,8 @@ export const accionesPlaneacion = {
         sublineas.forEach((s) =>
           lote.push(
             env.DB.prepare(
-              "INSERT INTO pedidos (numero_pedido, cliente, sublinea, evento, clasificacion_proceso, fecha, unidades_pedidas) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+              "INSERT INTO pedidos (numero_pedido, cliente, sublinea, evento, clasificacion_proceso, fecha, unidades_pedidas, tipo) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             ).bind(
               pedido,
               cliente.nombre,
@@ -1247,20 +1291,38 @@ export const accionesPlaneacion = {
               clasificacion,
               fecha,
               unidades,
+              etapas ? "etapas" : "",
             ),
           ),
         );
         procesos.forEach((p) =>
           lote.push(
             env.DB.prepare(
-              "INSERT INTO procesos (nombre_proceso, unidades_hora_estandar, numero_pedido, link_procesos) " +
-                "VALUES (?, ?, ?, ?)",
-            ).bind(p.nombre, p.estandar, pedido, p.link),
+              "INSERT INTO procesos (nombre_proceso, unidades_hora_estandar, numero_pedido, link_procesos, etapa_ean, orden_etapa) " +
+                "VALUES (?, ?, ?, ?, ?, ?)",
+            ).bind(
+              p.nombre,
+              p.estandar,
+              pedido,
+              p.link,
+              p.etapaEan || "",
+              p.orden || 0,
+            ),
+          ),
+        );
+        // Etapas: una fila por etapa con la meta en las unidades pedidas.
+        listaEtapas.forEach((p) =>
+          lote.push(
+            env.DB.prepare(
+              "INSERT INTO validacion_eanes (numero_pedido, ean_producto, sublinea, unidades_totales, sin_limite, actualizado_en) " +
+                "VALUES (?, ?, ?, ?, 0, ?)",
+            ).bind(pedido, p.etapaEan, sublineas[0], unidades, ahora),
           ),
         );
         // Sin límite: EAN 0 (trabajo sin unidades estimadas) en la primera
-        // sublínea. No es referente: no cuenta para el cierre del pedido.
-        if (sinLimite) {
+        // sublínea. No es referente: no cuenta para el cierre del pedido. Un
+        // pedido por etapas también lo lleva, para los procesos que no cuentan.
+        if (sinLimite || etapas) {
           lote.push(
             env.DB.prepare(
               "INSERT INTO validacion_eanes (numero_pedido, ean_producto, sublinea, unidades_totales, sin_limite, actualizado_en) " +
@@ -1277,6 +1339,7 @@ export const accionesPlaneacion = {
             fecha,
             sublineas,
             procesos: procesos.length,
+            etapas: listaEtapas.length,
             sinLimite,
           };
         } catch (errLote) {
@@ -1574,6 +1637,8 @@ export const accionesPlaneacion = {
     if (!pedido) throw new Error("Falta el número de pedido.");
     const estado = await _estadoPedido(env, pedido);
     if (!estado.existe) throw _errorPedidoNoEditable(pedido, estado);
+    if (await _esPedidoPorEtapas(env, pedido))
+      throw new Error(MSG_PEDIDO_ETAPAS_EDITAR);
     const formulario = await accionesPlaneacion.obtenerFormularioPedido(
       {},
       env,
@@ -1629,6 +1694,8 @@ export const accionesPlaneacion = {
 
     const actual = await _estadoPedido(env, pedido);
     if (!actual.existe) throw _errorPedidoNoEditable(pedido, actual);
+    if (await _esPedidoPorEtapas(env, pedido))
+      throw new Error(MSG_PEDIDO_ETAPAS_EDITAR);
 
     // --- Cliente: si no cambia se conserva (aunque esté inactivo o escrito
     // distinto); si cambia, debe ser un cliente activo de la tabla ---
@@ -2033,12 +2100,18 @@ export const accionesPlaneacion = {
     if (!pedido) throw new Error("Falta el número de pedido.");
 
     const { results: filasPedido } = await env.DB.prepare(
-      "SELECT sublinea, unidades_pedidas AS unidades FROM pedidos WHERE numero_pedido = ?",
+      "SELECT sublinea, unidades_pedidas AS unidades, tipo FROM pedidos WHERE numero_pedido = ?",
     )
       .bind(pedido)
       .all();
+    // En un pedido por etapas, cada fila de etapa lleva el nombre y el orden
+    // de su proceso (procesos.etapa_ean).
     const { results: filas } = await env.DB.prepare(
       "SELECT v.ean_producto AS ean, v.sublinea, v.unidades_totales AS totales, " +
+        "(SELECT pr.nombre_proceso FROM procesos pr WHERE pr.numero_pedido = v.numero_pedido " +
+        "AND pr.etapa_ean = v.ean_producto LIMIT 1) AS etapa, " +
+        "(SELECT pr.orden_etapa FROM procesos pr WHERE pr.numero_pedido = v.numero_pedido " +
+        "AND pr.etapa_ean = v.ean_producto LIMIT 1) AS ordenEtapa, " +
         "v.sin_limite AS sinLimite, v.unidades_procesadas AS procesadas, " +
         "v.codigos_sobrantes AS sobrantes, COALESCE(v.estado, '') AS estado, " +
         "COALESCE(v.operarios, '') AS operarios, CASE WHEN " +
@@ -2067,6 +2140,7 @@ export const accionesPlaneacion = {
 
     const sublineas = _distintos(filasPedido.map((f) => String(f.sublinea)));
     const enPedido = new Set(sublineas.map((s) => _normalizarPedido(s)));
+    const porEtapas = filasPedido.some((f) => f.tipo === "etapas");
     const unidadesPedidas = Math.max(
       0,
       ...filasPedido.map((f) => Number(f.unidades) || 0),
@@ -2098,6 +2172,8 @@ export const accionesPlaneacion = {
         referente && !sinLimite && (estado === "Completado") !== lleno;
       return {
         ean: String(f.ean),
+        etapa: f.etapa ? String(f.etapa) : "",
+        ordenEtapa: Number(f.ordenEtapa) || 0,
         sublinea: String(f.sublinea || ""),
         sublineaEnPedido: enPedido.has(_normalizarPedido(f.sublinea)),
         referente,
@@ -2121,8 +2197,13 @@ export const accionesPlaneacion = {
         operarios: String(f.operarios),
       };
     });
+    // Por etapas: en el orden de las etapas, con el EAN 0 al final.
     eanes.sort(
-      (a, b) => _orden(a.sublinea, b.sublinea) || _orden(a.ean, b.ean),
+      porEtapas
+        ? (a, b) =>
+            (a.ordenEtapa || Infinity) - (b.ordenEtapa || Infinity) ||
+            _orden(a.ean, b.ean)
+        : (a, b) => _orden(a.sublinea, b.sublinea) || _orden(a.ean, b.ean),
     );
 
     const referentes = eanes.filter((e) => e.referente);
@@ -2144,7 +2225,8 @@ export const accionesPlaneacion = {
           'Hay EAN con la sublínea "' + s + '", que no está en Numero pedidos.',
         ),
       );
-    if (eanes.length) {
+    // Por etapas cada etapa lleva las unidades pedidas: la suma no aplica.
+    if (eanes.length && !porEtapas) {
       const sumaEan = _alertaSumaEan(_suma("totales"), unidadesPedidas);
       if (sumaEan) alertas.push(sumaEan);
     }
@@ -2182,6 +2264,7 @@ export const accionesPlaneacion = {
       success: true,
       pedido,
       soloEnValidacion: filasPedido.length === 0,
+      porEtapas,
       sublineas,
       unidadesPedidas,
       resumen: {
@@ -2234,6 +2317,8 @@ export const accionesPlaneacion = {
   async guardarEan(datos, env, ctx, ip, sesion) {
     const pedido = String(datos.pedido || "").trim();
     if (!pedido) throw new Error("Falta el número de pedido.");
+    if (await _esPedidoPorEtapas(env, pedido))
+      throw new Error(MSG_PEDIDO_ETAPAS_EAN);
     await _exigirCatalogoEnApp(env, "pedidos");
     const estado = await _estadoEanesPedido(env, pedido);
 
@@ -2464,6 +2549,8 @@ export const accionesPlaneacion = {
   async eliminarEan(datos, env, ctx, ip, sesion) {
     const pedido = String(datos.pedido || "").trim();
     if (!pedido) throw new Error("Falta el número de pedido.");
+    if (await _esPedidoPorEtapas(env, pedido))
+      throw new Error(MSG_PEDIDO_ETAPAS_EAN);
     await _exigirCatalogoEnApp(env, "pedidos");
     const estado = await _estadoEanesPedido(env, pedido);
     const ean = String(datos.ean || "").trim();
@@ -2647,6 +2734,8 @@ export const accionesPlaneacion = {
   async cargarEanes(datos, env, ctx, ip, sesion) {
     const pedido = String(datos.pedido || "").trim();
     if (!pedido) throw new Error("Falta el número de pedido.");
+    if (await _esPedidoPorEtapas(env, pedido))
+      throw new Error(MSG_PEDIDO_ETAPAS_EAN);
     const simular = datos.soloSimular === true;
     if (!simular) await _exigirCatalogoEnApp(env, "pedidos");
     const texto = String(datos.texto || "");

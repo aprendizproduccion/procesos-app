@@ -540,6 +540,9 @@
         width: auto;
         margin: 0;
       }
+      .cp-proceso .cp-casilla {
+        margin: 8px 0 0;
+      }
       #vistaEanesPedido th {
         color: var(--gv-jet);
         background: var(--gv-celeste);
@@ -2349,6 +2352,15 @@
               >
                 Actividad interna
               </button>
+              <button
+                type="button"
+                class="chip-estado"
+                data-tipo-cp="etapas"
+                aria-pressed="false"
+                onclick="cambiarTipoCrearPedido('etapas')"
+              >
+                Por etapas
+              </button>
             </div>
             <div id="cpBloquePedido">
               <label for="cpUnidades" id="cpUnidadesEtiqueta"
@@ -2449,7 +2461,7 @@
                 Agregar
               </button>
             </div>
-            <p class="hint" style="margin-top: -6px">
+            <p class="hint" style="margin-top: -6px" id="cpProcesosHint">
               Solo procesos activos del catálogo, con su estándar y su link. Si
               falta uno, créalo en el módulo Procesos.
             </p>
@@ -7722,7 +7734,11 @@
                 partes.push(s.fecha ? _textoFechaChip(s.fecha) : "sin fecha");
             }
             const extra = partes.length ? " · " + partes.join(" · ") : "";
-            const ean = s.eanes === 1 ? "1 EAN" : s.eanes + " EAN";
+            const ean = p.porEtapas
+              ? "por etapas"
+              : s.eanes === 1
+                ? "1 EAN"
+                : s.eanes + " EAN";
             return (
               `<span class="pl-sublinea${s.enPedidos ? "" : " pl-huerfana"}">` +
               `${escapeHtml(s.sublinea)}${escapeHtml(extra)} · ${ean}</span>`
@@ -7750,9 +7766,13 @@
         // Editar se ve siempre (hasta el corte, solo para conocer el
         // formulario); un pedido que solo está en Validación eanes se corrige
         // en la hoja.
+        // Por etapas: el botón abre la misma vista con sus etapas, y editar
+        // todavía no está disponible.
         const botones =
-          `<button type="button" class="btn-gv-mini btn-gv-contorno" data-eanes-pl="${indice}">EAN (${p.eanes})</button>` +
-          (p.soloEnValidacion
+          `<button type="button" class="btn-gv-mini btn-gv-contorno" data-eanes-pl="${indice}">` +
+          (p.porEtapas ? "Etapas" : `EAN (${p.eanes})`) +
+          `</button>` +
+          (p.soloEnValidacion || p.porEtapas
             ? ""
             : `<button type="button" class="btn-gv-mini btn-gv-contorno" data-editar-pl="${indice}">Editar</button>`) +
           (plEdicionPedidos && !p.conRegistros
@@ -7765,6 +7785,7 @@
           `<div class="pl-tarjeta">` +
           `<div class="pl-cabecera"><strong>Pedido ${escapeHtml(p.pedido)}</strong>` +
           `<span class="pl-fecha">${p.fecha ? escapeHtml(_textoFechaChip(p.fecha)) : "Sin fecha"}</span>` +
+          (p.porEtapas ? '<span class="pl-distintivo">Por etapas</span>' : "") +
           (p.conRegistros
             ? '<span class="pl-distintivo">Con registros</span>'
             : "") +
@@ -7902,15 +7923,27 @@
       function _pintarResumenEanesPl() {
         const r = plEanes;
         const k = r.resumen;
+        // Por etapas: misma vista, con una fila por etapa (la app maneja sus
+        // filas; solo queda Corregir).
+        const etapas = r.porEtapas;
+        const conAcciones = r.editable && !etapas;
+        document.getElementById("plEanesTitulo").textContent =
+          (etapas ? "Etapas del pedido " : "EAN del pedido ") + r.pedido;
         document.getElementById("plEanesCabecera").innerHTML =
           `<div class="pl-cabecera"><strong>Pedido ${escapeHtml(r.pedido)}</strong>` +
+          (etapas ? '<span class="pl-distintivo">Por etapas</span>' : "") +
           `<span class="pl-distintivo">${escapeHtml(r.estadoPedido)}</span></div>` +
           `<p class="hint" style="margin: 2px 0 10px">` +
-          (k.eanes === 1 ? "1 EAN" : k.eanes + " EAN") +
-          (k.aparte
-            ? ` · ${k.referentes} ${k.referentes === 1 ? "cuenta" : "cuentan"} para el cierre` +
-              ` y ${k.aparte} ${k.aparte === 1 ? "va" : "van"} aparte`
-            : "") +
+          (etapas
+            ? (k.referentes === 1 ? "1 etapa" : k.referentes + " etapas") +
+              ", cada una con meta de " +
+              _fmtUnidades(r.unidadesPedidas) +
+              " unidades"
+            : (k.eanes === 1 ? "1 EAN" : k.eanes + " EAN") +
+              (k.aparte
+                ? ` · ${k.referentes} ${k.referentes === 1 ? "cuenta" : "cuentan"} para el cierre` +
+                  ` y ${k.aparte} ${k.aparte === 1 ? "va" : "van"} aparte`
+                : "")) +
           `</p>`;
 
         const notas = [];
@@ -7918,14 +7951,18 @@
           notas.push(
             "Este pedido se cerró con justificación: sus EAN quedan en solo lectura.",
           );
+        else if (etapas)
+          notas.push(
+            "Los procesos que no cuentan unidades se registran en el EAN 0, que va aparte. Las filas de las etapas las maneja la app: aquí ves el avance de cada una y puedes usar Corregir.",
+          );
         else if (!r.edicionHabilitada)
           notas.push(
             'Hasta el corte, los EAN se asignan en la hoja "Validacion eanes": aquí ves cómo va cada uno y puedes usar Corregir; el formulario se puede abrir, pero no guarda.',
           );
-        document.getElementById("btnPlAgregarEan").style.display = r.editable
+        document.getElementById("btnPlAgregarEan").style.display = conAcciones
           ? ""
           : "none";
-        document.getElementById("btnPlCargarEan").style.display = r.editable
+        document.getElementById("btnPlCargarEan").style.display = conAcciones
           ? ""
           : "none";
         document
@@ -7945,7 +7982,9 @@
             r.unidadesPedidas ? _fmtUnidades(r.unidadesPedidas) : "—",
             "Unidades pedidas",
           ) +
-          kpi(_fmtUnidades(k.unidadesEan), "Suma de EAN") +
+          (etapas
+            ? kpi(k.referentes, "Etapas")
+            : kpi(_fmtUnidades(k.unidadesEan), "Suma de EAN")) +
           kpi(_fmtUnidades(k.procesadas), "Procesadas") +
           kpi(_fmtUnidades(k.pendientes), "Pendientes") +
           (k.justificado
@@ -7961,6 +8000,7 @@
       // UPC-A): también se prueba sin él.
       function _coincideEanPl(e, clave) {
         if (!clave) return true;
+        if (e.etapa && normalizarPedido(e.etapa).includes(clave)) return true;
         const ean = normalizarPedido(e.ean);
         const sinCero =
           clave.length === 13 && clave.charAt(0) === "0"
@@ -7984,7 +8024,9 @@
         return (
           `<tr${e.referente ? "" : ' class="pl-fila-aparte"'}>` +
           `<td${e.sublineaEnPedido ? "" : aviso("No está en Numero pedidos")}>${escapeHtml(e.sublinea)}</td>` +
-          `<td style="white-space:nowrap">${escapeHtml(e.ean)}</td>` +
+          (e.etapa
+            ? `<td>${e.ordenEtapa}. ${escapeHtml(e.etapa)} <span class="hint" style="white-space:nowrap">(${escapeHtml(e.ean)})</span></td>`
+            : `<td style="white-space:nowrap">${escapeHtml(e.ean)}</td>`) +
           `<td>${e.sinLimite ? "Sin límite" : _fmtUnidades(e.totales)}</td>` +
           `<td${e.descuadrado ? aviso("No coincide con sus registros: Corregir lo recalcula") : ""}>` +
           `${_fmtUnidades(e.procesadas)}${e.descuadrado ? " ⚠" : ""}</td>` +
@@ -8006,12 +8048,16 @@
       function _accionesEanPl(e) {
         if (!plEanes.editable) return "";
         const i = plEanes.eanes.indexOf(e);
+        // Por etapas solo Corregir: las filas las maneja la app.
+        const etapas = plEanes.porEtapas;
         return (
-          `<button type="button" class="btn-gv-mini btn-gv-contorno" data-ean-editar="${i}">Editar</button>` +
+          (etapas
+            ? ""
+            : `<button type="button" class="btn-gv-mini btn-gv-contorno" data-ean-editar="${i}">Editar</button>`) +
           (e.corregible
             ? `<button type="button" class="btn-gv-mini" data-ean-corregir="${i}">Corregir</button>`
             : "") +
-          (plEanes.edicionHabilitada && !e.registros
+          (!etapas && plEanes.edicionHabilitada && !e.registros
             ? `<button type="button" class="btn-gv-mini btn-gv-contorno" data-ean-eliminar="${i}">Eliminar</button>`
             : "")
         );
@@ -8028,7 +8074,11 @@
         document.getElementById("plEanesBody").innerHTML =
           cuentan.map(_filaEanPl).join("") +
           (aparte.length
-            ? '<tr class="pl-fila-titulo"><td colspan="11">Aparte: EAN 0 sin unidades y sin límite (no cuentan para el cierre)</td></tr>' +
+            ? '<tr class="pl-fila-titulo"><td colspan="11">' +
+              (plEanes.porEtapas
+                ? "Aparte: procesos que no cuentan unidades (EAN 0 sin límite)"
+                : "Aparte: EAN 0 sin unidades y sin límite (no cuentan para el cierre)") +
+              "</td></tr>" +
               aparte.map(_filaEanPl).join("")
             : "");
         document.getElementById("plEanesTablaWrap").style.display =
@@ -8845,10 +8895,12 @@
               res.fecha,
             );
             // Los generales del catálogo vienen marcados; se pueden quitar.
+            // cuenta: solo pesa en un pedido por etapas (proceso que es etapa).
             cpProcesos = res.generales.map((g) => ({
               nombre: g.nombre,
               estandar: g.estandar,
               link: g.link || "",
+              cuenta: Number(g.estandar) > 0,
             }));
             _pintarProcesosCp();
             document.getElementById("cpAviso").innerHTML =
@@ -8970,6 +9022,14 @@
       function cambiarTipoCrearPedido(tipo) {
         cpTipo = tipo;
         _pintarTipoCp();
+        _pintarProcesosCp();
+      }
+
+      // Pedido por etapas (24-11): cada proceso marcado "Cuenta unidades" es
+      // una etapa, en el orden de la lista, con meta igual a las unidades
+      // pedidas. Los demás se registran sin sumar.
+      function _porEtapasCp() {
+        return cpTipo === "etapas" && cpPedidoEditar === "";
       }
 
       function _pintarTipoCp() {
@@ -9007,7 +9067,12 @@
           ? "Editar pedido " + cpPedidoEditar
           : interna
             ? "Crear actividad interna"
-            : "Crear pedido";
+            : _porEtapasCp()
+              ? "Crear pedido por etapas"
+              : "Crear pedido";
+        document.getElementById("cpProcesosHint").textContent = _porEtapasCp()
+          ? 'Marca "Cuenta unidades" en cada proceso que es una etapa: cada etapa tiene como meta las unidades pedidas, en el orden de la lista (↑ para subirla). Los demás se registran sin sumar. Lleva una sola sublínea.'
+          : "Solo procesos activos del catálogo, con su estándar y su link. Si falta uno, créalo en el módulo Procesos.";
         document.getElementById("btnCrearPedido").textContent = editar
           ? "Guardar cambios"
           : interna
@@ -9087,6 +9152,13 @@
           input.value = "";
           return;
         }
+        if (_porEtapasCp() && cpSublineas.length >= 1) {
+          mostrarModalAviso(
+            "Un pedido por etapas lleva una sola sublínea. Quita la que tiene para poner otra.",
+            "Una sola sublínea",
+          );
+          return;
+        }
         const usada = ((cpDatos && cpDatos.sublineas) || []).find(
           (s) => normalizarPedido(s) === clave,
         );
@@ -9120,12 +9192,18 @@
           _pintarNumeroCp();
           return;
         }
+        const porEtapas = _porEtapasCp();
+        let numEtapa = 0;
         cont.innerHTML = cpProcesos
           .map(function (p, i) {
             // Al editar, un proceso con registros no se quita.
             const fijo = p.registros > 0;
+            const etapa = porEtapas && p.cuenta ? ++numEtapa : 0;
             const delPedido = p.enCatalogo !== undefined;
             const etiquetas =
+              (etapa
+                ? `<span class="pl-distintivo">Etapa ${etapa}</span>`
+                : "") +
               (Number(p.estandar) > 0
                 ? ""
                 : '<span class="pl-distintivo">Sin estándar</span>') +
@@ -9161,11 +9239,17 @@
             return (
               `<div class="cp-proceso">` +
               `<div class="cp-proceso-cabecera"><strong>${escapeHtml(p.nombre)}</strong>${etiquetas}` +
+              (porEtapas && i > 0
+                ? `<button type="button" aria-label="Subir ${escapeHtml(p.nombre)}" title="Subir" data-subir-proc="${i}">↑</button>`
+                : "") +
               (fijo
                 ? ""
                 : `<button type="button" aria-label="Quitar ${escapeHtml(p.nombre)}" data-quitar-proc="${i}">×</button>`) +
               `</div>` +
               `<div class="hint" style="margin: 2px 0 0">${escapeHtml(estandar)} · ${link}</div>` +
+              (porEtapas
+                ? `<label class="cp-casilla"><input type="checkbox" data-cuenta-proc="${i}"${p.cuenta ? " checked" : ""} /> Cuenta unidades (etapa)</label>`
+                : "") +
               (notas.length
                 ? `<p class="hint">${escapeHtml(notas.join(" "))}</p>`
                 : "") +
@@ -9204,6 +9288,7 @@
           nombre: enCatalogo.nombre,
           estandar: enCatalogo.estandar,
           link: enCatalogo.link || "",
+          cuenta: Number(enCatalogo.estandar) > 0,
         });
         input.value = "";
         _pintarProcesosCp();
@@ -9212,9 +9297,25 @@
       document
         .getElementById("cpProcesos")
         .addEventListener("click", function (e) {
+          const subir = e.target.closest("[data-subir-proc]");
+          if (subir) {
+            const i = Number(subir.dataset.subirProc);
+            if (i > 0)
+              cpProcesos.splice(i - 1, 2, cpProcesos[i], cpProcesos[i - 1]);
+            _pintarProcesosCp();
+            return;
+          }
           const b = e.target.closest("[data-quitar-proc]");
           if (!b) return;
           cpProcesos.splice(Number(b.dataset.quitarProc), 1);
+          _pintarProcesosCp();
+        });
+      document
+        .getElementById("cpProcesos")
+        .addEventListener("change", function (e) {
+          const c = e.target.closest("[data-cuenta-proc]");
+          if (!c) return;
+          cpProcesos[Number(c.dataset.cuentaProc)].cuenta = c.checked;
           _pintarProcesosCp();
         });
       document
@@ -9261,13 +9362,19 @@
       function _datosCrearPedido() {
         const editar = cpPedidoEditar !== "";
         const interna = cpTipo === "interna" && !editar;
+        const etapas = _porEtapasCp();
         const datos = {
           cliente: document.getElementById("cpCliente").value.trim(),
           sublineas: cpSublineas.slice(),
           evento: document.getElementById("cpEvento").value,
           clasificacion: document.getElementById("cpClasificacion").value,
-          // Solo el nombre: el Worker toma estándar y link del catálogo.
-          procesos: cpProcesos.map((p) => ({ nombre: p.nombre })),
+          // Solo el nombre (y si es etapa): el Worker toma estándar y link
+          // del catálogo.
+          procesos: cpProcesos.map((p) =>
+            etapas
+              ? { nombre: p.nombre, cuenta: !!p.cuenta }
+              : { nombre: p.nombre },
+          ),
         };
         if (editar) {
           if (!cpEdicion) return { error: "El pedido todavía está cargando." };
@@ -9285,7 +9392,7 @@
           }
         } else {
           datos.idEnvio = cpIdEnvio;
-          datos.tipo = interna ? "interna" : "pedido";
+          datos.tipo = interna ? "interna" : etapas ? "etapas" : "pedido";
           if (interna) {
             datos.nombre = document.getElementById("cpNombre").value.trim();
             datos.sinLimite = document.getElementById("cpSinLimite").checked;
@@ -9326,6 +9433,12 @@
           return { error: "Selecciona la clasificación." };
         if (!datos.procesos.length)
           return { error: "Agrega al menos un proceso." };
+        if (etapas && datos.sublineas.length !== 1)
+          return { error: "Un pedido por etapas lleva una sola sublínea." };
+        if (etapas && !datos.procesos.some((p) => p.cuenta))
+          return {
+            error: "Marca al menos un proceso como etapa (Cuenta unidades).",
+          };
 
         return { datos };
       }
@@ -9363,6 +9476,15 @@
           d.clasificacion +
           "\nProcesos: " +
           d.procesos.length +
+          (d.tipo === "etapas"
+            ? "\nEtapas (meta de " +
+              d.unidades +
+              " unidades cada una): " +
+              d.procesos
+                .filter((p) => p.cuenta)
+                .map((p, i) => i + 1 + ". " + p.nombre)
+                .join(" · ")
+            : "") +
           "\n\nEl número no se puede cambiar después: si hay un error, se elimina y se crea de nuevo.";
         pedirConfirmarPl(
           interna ? "¿Crear la actividad?" : "¿Crear el pedido?",
@@ -9400,6 +9522,13 @@
                 " y " +
                 res.procesos +
                 (res.procesos === 1 ? " proceso." : " procesos.") +
+                (res.etapas
+                  ? "\n" +
+                    (res.etapas === 1 ? "1 etapa" : res.etapas + " etapas") +
+                    ", cada una con meta de " +
+                    datos.unidades +
+                    " unidades."
+                  : "") +
                 (res.sinLimite ? "\nTiene el EAN 0 sin límite." : ""),
               datos.tipo === "interna" ? "Actividad creada" : "Pedido creado",
             );
