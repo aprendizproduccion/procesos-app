@@ -2411,24 +2411,23 @@
               class="pl-sublineas"
               style="margin: 0 0 8px"
             ></div>
-            <div class="add-row" style="margin-bottom: 14px">
-              <div class="campo-sugerencias">
-                <input
-                  id="cpSublinea"
-                  autocomplete="off"
-                  enterkeyhint="done"
-                  placeholder="Ej: Ninguna"
-                />
-                <div
-                  id="sugCpSublinea"
-                  class="lista-sugerencias"
-                  role="listbox"
-                ></div>
-              </div>
-              <button type="button" onclick="agregarSublineaCrearPedido()">
-                Agregar
-              </button>
+            <div class="campo-sugerencias">
+              <input
+                id="cpSublinea"
+                autocomplete="off"
+                enterkeyhint="done"
+                placeholder="Busca o escribe una sublínea..."
+              />
+              <div
+                id="sugCpSublinea"
+                class="lista-sugerencias"
+                role="listbox"
+              ></div>
             </div>
+            <p class="hint" style="margin-top: -6px">
+              Elige una de la lista para agregarla. Si es nueva, escríbela y
+              pulsa Enter.
+            </p>
             <div class="row2">
               <div>
                 <label for="cpEvento">Evento</label>
@@ -9335,15 +9334,26 @@
           })),
         true,
       );
+      // Sublíneas: lista desplegable al enfocar, como Cliente (24-11), sin las
+      // que ya están agregadas. Elegir una la agrega; una nueva se escribe y
+      // se agrega con Enter (o al crear, si quedó escrita).
       activarSugerenciasPedido(
         "cpSublinea",
         "sugCpSublinea",
         agregarSublineaCrearPedido,
         () =>
-          ((cpDatos && cpDatos.sublineas) || []).map((s) => ({
-            valor: s,
-            clave: normalizarPedido(s),
-          })),
+          ((cpDatos && cpDatos.sublineas) || [])
+            .filter(
+              (s) =>
+                !cpSublineas.some(
+                  (x) => normalizarPedido(x) === normalizarPedido(s),
+                ),
+            )
+            .map((s) => ({
+              valor: s,
+              clave: normalizarPedido(s),
+            })),
+        true,
       );
       activarSugerenciasPedido(
         "cpProceso",
