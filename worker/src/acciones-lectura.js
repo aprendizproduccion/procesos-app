@@ -138,6 +138,9 @@ export const accionesLectura = {
       turnoConfigurado: Boolean(ultimoFin || turno),
       horaCaptura: hora,
       fechaJornada: fecha,
+      // Pivote de la jornada ("" en un turno de día): el navegador lo usa para
+      // la vista previa de la duración, con la misma regla del Worker.
+      pivoteJornada: _pivoteSql(turnoOp),
     };
   },
 

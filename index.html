@@ -3673,8 +3673,10 @@
           <p class="hint" style="margin-top: 0">
             El nombre es solo para identificarlo. El sistema usa la hora de
             inicio: es la hora en que empieza el primer registro del día de sus
-            personas. Por ahora el turno debe terminar el mismo día, a más
-            tardar a las 23:30.
+            personas. Un turno de día termina a más tardar a las 23:30. Si la
+            hora de fin es menor que la de inicio (22:00 a 06:00), el turno
+            cruza la medianoche: dura máximo 12 horas y sus registros llevan la
+            fecha del día en que empieza la jornada.
           </p>
           <div class="row2">
             <button
@@ -6346,6 +6348,8 @@
         opHoraInicioCadena = "";
         opHoraCaptura = "";
         opHoraCapturaEn = 0;
+        opFechaJornada = "";
+        opPivoteJornada = "";
         opIdEnvioActual = null;
         _limpiarIdEnvio();
         opPayloadPendiente = null;
@@ -10802,11 +10806,17 @@
       let plTurnoForm = null; // { id } del turno en edición, o { id: null }
       let plTurnosEnCurso = false;
 
-      // "Mañana (06:00–14:00)": el nombre es solo para verlo; el sistema usa
-      // la hora de inicio.
+      // "Mañana (06:00–15:00)": el nombre es solo para verlo; el sistema usa
+      // la hora de inicio. Un turno que cruza la medianoche lo dice.
       function _textoTurnoPl(t) {
+        const cruza = t.horaFin && t.horaFin < t.hora;
         return (
-          t.nombre + " (" + t.hora + (t.horaFin ? "–" + t.horaFin : "") + ")"
+          t.nombre +
+          " (" +
+          t.hora +
+          (t.horaFin ? "–" + t.horaFin : "") +
+          (cruza ? ", cruza medianoche" : "") +
+          ")"
         );
       }
 
@@ -11261,9 +11271,25 @@
         if (!nombre) return _error("Escribe el nombre del turno.");
         if (!hora || !horaFin)
           return _error("Escribe la hora de inicio y la de fin.");
-        if (horaFin <= hora || horaFin > "23:30")
+        // Misma regla que _horasTurnoValidadas del Worker (pendiente 16).
+        if (horaFin === hora)
           return _error(
-            "El turno debe empezar y terminar el mismo día, a más tardar a las 23:30: por ahora no se admiten turnos que cruzan la medianoche.",
+            "La hora de fin del turno debe ser distinta de la de inicio.",
+          );
+        if (horaFin > hora && horaFin > "23:30")
+          return _error(
+            "Un turno que termina el mismo día debe terminar a más tardar a las 23:30.",
+          );
+        if (
+          horaFin < hora &&
+          _minutosDeHHMM(horaFin) + 24 * 60 - _minutosDeHHMM(hora) > 12 * 60
+        )
+          return _error(
+            "Un turno que cruza la medianoche dura como máximo 12 horas (" +
+              hora +
+              " a " +
+              horaFin +
+              " es más largo).",
           );
         const id = plTurnoForm.id;
         _enviarTurnoPl(
@@ -12116,6 +12142,12 @@
       const VIGENCIA_CAPTURA_MIN = 25;
       let opHoraCaptura = "";
       let opHoraCapturaEn = 0;
+      // Pendiente 16: fecha de la jornada y pivote del turno del operario
+      // (los da buscarOperarioPorCedula). En la madrugada de un turno que
+      // cruza la medianoche, la fecha es la del día anterior y las horas
+      // antes del pivote cuentan 24 h más.
+      let opFechaJornada = "";
+      let opPivoteJornada = "";
       let opRelojHoraFin = null;
       let opIdEnvioActual = null;
       let opPayloadPendiente = null;
@@ -12208,9 +12240,18 @@
         return Number.isFinite(min) ? min : NaN;
       }
 
+      // Minutos dentro de la jornada: misma regla que _duracionMinutos del
+      // Worker (las horas antes del pivote de un turno nocturno suman 24 h).
+      function _minutosJornadaOp(hora) {
+        const min = _minutosDeHHMM(hora);
+        return opPivoteJornada && String(hora) < opPivoteJornada
+          ? min + 24 * 60
+          : min;
+      }
+
       function _duracionPrevistaOperario() {
-        const ini = _minutosDeHHMM(opHoraInicioCadena);
-        const fin = _minutosDeHHMM(opHoraCaptura);
+        const ini = _minutosJornadaOp(opHoraInicioCadena);
+        const fin = _minutosJornadaOp(opHoraCaptura);
         if (!Number.isFinite(ini) || !Number.isFinite(fin)) return null;
         return fin - ini;
       }
@@ -12260,6 +12301,7 @@
           .then(function (res) {
             if (res.success && res.horaInicioPrevista) {
               opHoraInicioCadena = res.horaInicioPrevista;
+              opPivoteJornada = res.pivoteJornada || "";
               _pintarHorasOperario();
             }
           })
@@ -12343,7 +12385,10 @@
               alertaDiv.innerHTML = res.turnoConfigurado
                 ? ""
                 : '<div class="msg warn">No tienes turno configurado: tu hora de inicio arranca en 06:00. Avisa a tu supernumerario.</div>';
-              document.getElementById("opFecha").value = _hoyBogotaCT();
+              opFechaJornada = res.fechaJornada || "";
+              opPivoteJornada = res.pivoteJornada || "";
+              document.getElementById("opFecha").value =
+                opFechaJornada || _hoyBogotaCT();
               opHoraInicioCadena = res.horaInicioPrevista || "";
               // Hora fin congelada en el momento de confirmar. El respaldo con
               // la hora local solo cubre un Worker sin desplegar todavía.
@@ -12360,6 +12405,8 @@
               opHoraInicioCadena = "";
               opHoraCaptura = "";
               opHoraCapturaEn = 0;
+              opFechaJornada = "";
+              opPivoteJornada = "";
               _detenerRelojHoraFin();
               _pintarHorasOperario();
               document.getElementById("opNombreConfirmado").style.display =
@@ -12726,7 +12773,8 @@
         document.getElementById("opAlertaUnidades").innerHTML = "";
         document.getElementById("opCodigosSobrantes").value = "";
         document.getElementById("opObservaciones").value = "";
-        document.getElementById("opFecha").value = _hoyBogotaCT();
+        document.getElementById("opFecha").value =
+          opFechaJornada || _hoyBogotaCT();
         document.getElementById("opAlertaHoras").innerHTML = "";
         // Cédula, coordinador y supernumerario se mantienen.
       }
