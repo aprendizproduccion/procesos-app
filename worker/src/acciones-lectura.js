@@ -5,6 +5,10 @@ import {
   _fechaHoyBogota,
   _ahoraBogota,
   TURNO_POR_DEFECTO,
+  _turnoOperario,
+  _fechaJornada,
+  _sqlClaveHora,
+  _pivoteSql,
   _resolverPedido,
   _formasEan,
   _sqlEanReferente,
@@ -98,14 +102,21 @@ export const accionesLectura = {
     const cedula = String(datos.cedula || "").trim();
     if (!cedula) return { success: false, message: "Falta la cédula." };
 
-    const { fecha, hora } = _ahoraBogota();
+    const { fecha: fechaHoy, hora } = _ahoraBogota();
+    // Pendiente 16: la jornada de un turno que cruza la medianoche, y su
+    // último fin medido con la clave de la jornada.
+    const turnoOp = await _turnoOperario(env, cedula);
+    const fecha = _fechaJornada(fechaHoy, hora, turnoOp);
     const row = await env.DB.prepare(
       "SELECT o.nombre_operario AS nombre, o.equipo, o.turno, " +
-        "(SELECT MAX(hora_final) FROM registros " +
-        "WHERE cedula_operario = ? AND fecha = ? AND anulado = 0) AS ultimoFin " +
+        "(SELECT hora_final FROM registros " +
+        "WHERE cedula_operario = ? AND fecha = ? AND anulado = 0 " +
+        "ORDER BY " +
+        _sqlClaveHora("hora_final") +
+        " DESC LIMIT 1) AS ultimoFin " +
         "FROM operarios o WHERE o.cedula = ? AND o.activo = 1 AND o.es_operario = 1",
     )
-      .bind(cedula, fecha, cedula)
+      .bind(cedula, fecha, _pivoteSql(turnoOp), cedula)
       .first();
 
     if (!row) {
@@ -126,6 +137,7 @@ export const accionesLectura = {
       horaInicioPrevista: ultimoFin || turno || TURNO_POR_DEFECTO,
       turnoConfigurado: Boolean(ultimoFin || turno),
       horaCaptura: hora,
+      fechaJornada: fecha,
     };
   },
 

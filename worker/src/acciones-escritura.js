@@ -11,7 +11,13 @@ import {
   _calcularDuracionValidada,
   _ahoraBogota,
   _inicioCadena,
-  HORA_LIMITE_ENVIO,
+  _turnoOperario,
+  _fechaJornada,
+  _claveHora,
+  _sqlClaveHora,
+  _pivoteSql,
+  _limiteEnvio,
+  _turnoComunCruza,
   _calcularMetricasProduccion,
   _validarCodigosSobrantes,
   _marcarPedidoIniciado,
@@ -171,11 +177,31 @@ export const accionesEscritura = {
 
       const suplementoMin = Number(payload.suplementoMin) || 0;
 
+      // Pendiente 16: una hora fin anterior a la de inicio solo vale si todo
+      // el lote tiene un turno que cruza la medianoche (22:00–02:00). La fecha
+      // es la del inicio de la jornada.
+      const patronHora = /^([01]\d|2[0-3]):[0-5]\d$/;
+      const hIni = String(payload.horaInicio || "").trim();
+      const hFin = String(payload.horaFin || "").trim();
+      let turnoLote = null;
+      if (patronHora.test(hIni) && patronHora.test(hFin) && hFin < hIni) {
+        turnoLote = await _turnoComunCruza(env, operarios);
+        if (!turnoLote)
+          throw new Error(
+            "La hora de fin (" +
+              hFin +
+              ") es anterior a la de inicio (" +
+              hIni +
+              "). Si el trabajo cruzó la medianoche, todos los operarios del lote deben tener un turno que la cruce (en Usuarios); si no, revisa si las horas quedaron invertidas.",
+          );
+      }
+
       // Sin tope de duración: coherente con la edición y con el flujo operario.
       const { duracionBrutaMin, duracionRealMin } = _calcularDuracionValidada(
         payload.horaInicio,
         payload.horaFin,
         suplementoMin,
+        { turno: turnoLote },
       );
       const procesoValidado = await _obtenerProcesoValidado(
         env,
@@ -387,7 +413,7 @@ export const accionesEscritura = {
   },
 
   async submitRegistroOperario(payload, env, ctx) {
-    const { fecha, hora } = _ahoraBogota();
+    const { fecha: fechaHoy, hora } = _ahoraBogota();
     // Las horas salían del payload y eran lo que distinguía dos envíos
     // legítimos iguales. Al salir de ahí, la huella necesita otro
     // diferenciador: el idEnvio del formulario, con la hora como respaldo
@@ -427,6 +453,10 @@ export const accionesEscritura = {
         throw new Error(
           'La cédula "' + cedula + '" no existe en el catálogo de Operarios.',
         );
+      // Pendiente 16: en un turno que cruza la medianoche, la fecha es la del
+      // inicio de la jornada (01:00 del 11 → jornada del 10).
+      const turnoOp = await _turnoOperario(env, operarioMatch.cedula);
+      const fecha = _fechaJornada(fechaHoy, hora, turnoOp);
 
       const { coordinador, supernumerario } =
         await _validarSupervisorYSupernumerario(
@@ -490,18 +520,22 @@ export const accionesEscritura = {
         env,
         operarioMatch.cedula,
         fecha,
+        turnoOp,
       );
+      const claveFin = _claveHora(horaFin, turnoOp);
+      const claveInicio = _claveHora(horaInicio, turnoOp);
 
-      if (horaFin > HORA_LIMITE_ENVIO) {
+      const limiteEnvio = _limiteEnvio(turnoOp);
+      if (claveFin > _claveHora(limiteEnvio, turnoOp)) {
         throw new Error(
           "Fuera del horario de registro (el límite para enviar es las " +
-            HORA_LIMITE_ENVIO +
+            limiteEnvio +
             "). Pide a tu supernumerario que registre por ti.",
         );
       }
       // La cadena puede venir adelantada por un registro del administrador con
       // la hora fin mal digitada: el mensaje tiene que decir qué hacer.
-      if (horaFin < horaInicio) {
+      if (claveFin < claveInicio) {
         throw new Error(
           "Tu hora fin (" +
             horaFin +
@@ -526,6 +560,7 @@ export const accionesEscritura = {
         horaInicio,
         horaFin,
         suplementoMin,
+        { turno: turnoOp },
       );
 
       const observaciones = String(payload.observaciones || "").trim();
@@ -604,7 +639,9 @@ export const accionesEscritura = {
           "unidades_procesadas_operario, codigos_sobrantes, unidades_hora_real, eficiencia, creado_en, hora_inicio_auto) " +
           "SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1 " +
           "WHERE NOT EXISTS (SELECT 1 FROM registros WHERE cedula_operario = ? AND fecha = ? " +
-          "AND anulado = 0 AND hora_final > ?)",
+          "AND anulado = 0 AND " +
+          _sqlClaveHora("hora_final") +
+          " > ?)",
       )
         .bind(
           loteId,
@@ -635,7 +672,8 @@ export const accionesEscritura = {
           ahora,
           operarioMatch.cedula,
           fecha,
-          horaInicio,
+          _pivoteSql(turnoOp),
+          claveInicio,
         )
         .run();
 
@@ -695,6 +733,7 @@ export const accionesEscritura = {
       const respuestaFinal = {
         success: true,
         loteId,
+        fecha,
         horaInicio,
         horaFin,
         eficiencia,
@@ -968,10 +1007,12 @@ export const accionesEscritura = {
     const suplementoMin = Number(payload.suplementoMin) || 0;
     // Sin tope de duración: la edición es la vía correctiva y debe poder tocar
     // cualquier registro, incluidos los bloques largos que genera la cadena.
+    // Con el turno del operario: si cruza la medianoche, 22:00–02:00 vale.
     const { duracionBrutaMin, duracionRealMin } = _calcularDuracionValidada(
       horaInicio,
       horaFin,
       suplementoMin,
+      { turno: await _turnoOperario(env, actual.cedula_operario) },
     );
     const durHoras = Math.round((duracionRealMin / 60) * 100) / 100;
 

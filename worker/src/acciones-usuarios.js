@@ -35,6 +35,7 @@ import {
   _exigirCatalogoEnApp,
   _ahoraISO,
   HORA_LIMITE_ENVIO,
+  MAX_TURNO_CRUZA_MIN,
 } from "./d1-negocio.js";
 import {
   hashClave,
@@ -282,9 +283,10 @@ function _nombreTurnoValidado(texto) {
   return nombre;
 }
 
-// Hora de inicio y fin "HH:MM". Por ahora la jornada no cruza la medianoche:
-// el registro guarda la fecha del día, rechaza una hora fin anterior a la de
-// inicio y no acepta envíos después de HORA_LIMITE_ENVIO.
+// Hora de inicio y fin "HH:MM". Un turno de día termina a más tardar a las
+// HORA_LIMITE_ENVIO. Desde el pendiente 16, un turno puede cruzar la
+// medianoche (fin menor que el inicio, 22:00–06:00), con un máximo de 12 h:
+// sus registros guardan la fecha del inicio de la jornada.
 function _horasTurnoValidadas(datos) {
   const hora = String(datos.hora || "").trim();
   const horaFin = String(datos.horaFin || "").trim();
@@ -292,11 +294,29 @@ function _horasTurnoValidadas(datos) {
     throw new Error("La hora de inicio debe tener el formato HH:MM.");
   if (!PATRON_HORA_TURNO.test(horaFin))
     throw new Error("La hora de fin debe tener el formato HH:MM.");
-  if (horaFin <= hora || horaFin > HORA_LIMITE_ENVIO)
+  if (horaFin === hora)
     throw new Error(
-      "El turno debe empezar y terminar el mismo día, a más tardar a las " +
-        HORA_LIMITE_ENVIO +
-        ": por ahora no se admiten turnos que cruzan la medianoche.",
+      "La hora de fin del turno debe ser distinta de la de inicio.",
+    );
+  if (horaFin > hora) {
+    if (horaFin > HORA_LIMITE_ENVIO)
+      throw new Error(
+        "Un turno que termina el mismo día debe terminar a más tardar a las " +
+          HORA_LIMITE_ENVIO +
+          ".",
+      );
+    return { hora, horaFin };
+  }
+  const minutos = (h) => Number(h.slice(0, 2)) * 60 + Number(h.slice(3, 5));
+  if (minutos(horaFin) + 24 * 60 - minutos(hora) > MAX_TURNO_CRUZA_MIN)
+    throw new Error(
+      "Un turno que cruza la medianoche dura como máximo " +
+        MAX_TURNO_CRUZA_MIN / 60 +
+        " horas (" +
+        hora +
+        " a " +
+        horaFin +
+        " es más largo).",
     );
   return { hora, horaFin };
 }

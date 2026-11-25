@@ -7,6 +7,10 @@ const TTL_IDEMPOTENCIA_SEG = 21600; // 6 horas — igual al tope que ya usaba Ca
 // Horas encadenadas del operario
 export const HORA_LIMITE_ENVIO = "23:30";
 export const TURNO_POR_DEFECTO = "06:00";
+// Pendiente 16: un turno que cruza la medianoche acepta envíos hasta su hora
+// fin más este margen (22:00–06:00 → 07:30), y dura como máximo 12 horas.
+const MARGEN_ENVIO_TURNO_MIN = 90;
+export const MAX_TURNO_CRUZA_MIN = 12 * 60;
 
 // Días hacia atrás que acepta submitRegistro. Debe coincidir con
 // DIAS_MAX_ATRAS_REGISTRO en index.html (_resetFechaAdmin).
@@ -609,14 +613,114 @@ function _minutosDeHora(valor, etiqueta) {
   return Number(m[1]) * 60 + Number(m[2]);
 }
 
-// Sin wrap de medianoche: el último envío es a las 23:30, así que una hora fin
-// anterior a la de inicio es captura invertida, no un turno que cruza el día.
-// El "+= 24 * 60" anterior convertía un bloque real de 15:00–18:00 mal digitado
-// en un registro de 21 horas, silenciosamente.
-export function _duracionMinutos(horaInicio, horaFin) {
+// ---------------- TURNOS QUE CRUZAN LA MEDIANOCHE (pendiente 16) ----------------
+// Un turno cruza la medianoche si su hora fin es menor que la de inicio
+// (22:00–06:00). Su pivote es la mitad del hueco entre el fin y el inicio
+// (14:00): en una jornada de ese turno, las horas antes del pivote son de la
+// madrugada siguiente. La clave "1"+hora / "0"+hora ordena la jornada como
+// texto ("102:00" va después de "023:00"). En un turno de día la clave es
+// siempre "0"+hora, así que nada cambia.
+
+function _horaDeMinutos(minutos) {
+  const m = ((minutos % 1440) + 1440) % 1440;
+  const h = Math.floor(m / 60);
+  return (h < 10 ? "0" : "") + h + ":" + (m % 60 < 10 ? "0" : "") + (m % 60);
+}
+
+export function _infoTurno(inicio, fin) {
+  const i = String(inicio == null ? "" : inicio).trim();
+  const f = String(fin == null ? "" : fin).trim();
+  const cruza = PATRON_HORA.test(i) && PATRON_HORA.test(f) && f < i;
+  const pivote = cruza
+    ? _horaDeMinutos(
+        Math.floor(
+          (_minutosDeHora(f, "hora fin del turno") +
+            _minutosDeHora(i, "hora de inicio del turno")) /
+            2,
+        ),
+      )
+    : "";
+  return { inicio: i, fin: f, cruza, pivote };
+}
+
+// Turno del operario: la hora de inicio que lee la cadena (operarios.turno) y
+// la hora fin de su turno del catálogo, si coinciden.
+export async function _turnoOperario(env, cedula) {
+  const row = await env.DB.prepare(
+    "SELECT o.turno, t.hora_fin AS horaFin FROM operarios o " +
+      "LEFT JOIN turnos t ON t.id = o.turno_id AND t.hora_inicio = o.turno " +
+      "WHERE o.cedula = ?",
+  )
+    .bind(String(cedula == null ? "" : cedula).trim())
+    .first();
+  return _infoTurno(row && row.turno, row && row.horaFin);
+}
+
+// Turno común de un lote del administrador cuyo bloque cruza la medianoche:
+// todos los operarios deben tener un turno que la cruce, con el mismo pivote.
+// Devuelve ese turno, o null si alguno no lo tiene.
+export async function _turnoComunCruza(env, nombres) {
+  let comun = null;
+  for (const nombre of nombres) {
+    const cedula = await _buscarCedulaPorNombre(env, nombre);
+    if (!cedula) return null;
+    const t = await _turnoOperario(env, cedula);
+    if (!t.cruza || (comun && comun.pivote !== t.pivote)) return null;
+    comun = comun || t;
+  }
+  return comun;
+}
+
+export function _claveHora(hora, turno) {
+  const h = String(hora == null ? "" : hora).trim();
+  return (turno && turno.cruza && h < turno.pivote ? "1" : "0") + h;
+}
+
+// La misma clave en SQL: lleva un parámetro, el pivote ("" si no cruza, y
+// ninguna hora es menor que "").
+export function _sqlClaveHora(columna) {
   return (
-    _minutosDeHora(horaFin, "hora de fin") -
-    _minutosDeHora(horaInicio, "hora de inicio")
+    "((CASE WHEN " + columna + " < ? THEN '1' ELSE '0' END) || " + columna + ")"
+  );
+}
+
+export function _pivoteSql(turno) {
+  return turno && turno.cruza ? turno.pivote : "";
+}
+
+// Fecha de la jornada: la del día, salvo en la madrugada de un turno que
+// cruza, que es la del día anterior (01:00 del 11 → jornada del 10).
+export function _fechaJornada(fechaHoy, hora, turno) {
+  if (!(turno && turno.cruza && String(hora).trim() < turno.pivote))
+    return fechaHoy;
+  const d = new Date(fechaHoy + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+export function _limiteEnvio(turno) {
+  return turno && turno.cruza
+    ? _horaDeMinutos(
+        _minutosDeHora(turno.fin, "hora fin del turno") +
+          MARGEN_ENVIO_TURNO_MIN,
+      )
+    : HORA_LIMITE_ENVIO;
+}
+
+// Sin wrap de medianoche en los turnos de día: el último envío es a las 23:30,
+// así que una hora fin anterior a la de inicio es captura invertida. El
+// "+= 24 * 60" anterior convertía un bloque real de 15:00–18:00 mal digitado
+// en un registro de 21 horas, silenciosamente. En un turno que cruza, las horas
+// de la madrugada (antes del pivote) suman 24 h; un 18:00–15:00 invertido
+// sigue siendo error.
+export function _duracionMinutos(horaInicio, horaFin, turno) {
+  const extra = (h) =>
+    turno && turno.cruza && String(h).trim() < turno.pivote ? 24 * 60 : 0;
+  return (
+    _minutosDeHora(horaFin, "hora de fin") +
+    extra(horaFin) -
+    _minutosDeHora(horaInicio, "hora de inicio") -
+    extra(horaInicio)
   );
 }
 
@@ -629,7 +733,11 @@ export function _calcularDuracionValidada(
   const minima = (opciones && opciones.duracionMinimaMin) || 0;
   const maxima = (opciones && opciones.duracionMaximaMin) || 0;
 
-  const duracionBrutaMin = _duracionMinutos(horaInicio, horaFin);
+  const duracionBrutaMin = _duracionMinutos(
+    horaInicio,
+    horaFin,
+    opciones && opciones.turno,
+  );
   if (duracionBrutaMin < 0) {
     throw new Error(
       "La hora de fin (" +
@@ -731,15 +839,19 @@ export function _ahoraBogota() {
 }
 
 // Hora de inicio que le toca al próximo registro del operario: el fin de su
-// último registro vigente del día, o su hora de turno si es el primero.
+// último registro vigente de la jornada, o su hora de turno si es el primero.
+// "Último" se mide con la clave de la jornada (pendiente 16), no como texto.
 // Subconsultas escalares en una sola sentencia (D1 ejecuta una por vez).
-export async function _inicioCadena(env, cedula, fecha) {
+export async function _inicioCadena(env, cedula, fecha, turnoInfo) {
   const row = await env.DB.prepare(
-    "SELECT (SELECT MAX(hora_final) FROM registros " +
-      "WHERE cedula_operario = ? AND fecha = ? AND anulado = 0) AS ultimoFin, " +
+    "SELECT (SELECT hora_final FROM registros " +
+      "WHERE cedula_operario = ? AND fecha = ? AND anulado = 0 " +
+      "ORDER BY " +
+      _sqlClaveHora("hora_final") +
+      " DESC LIMIT 1) AS ultimoFin, " +
       "(SELECT turno FROM operarios WHERE cedula = ?) AS turno",
   )
-    .bind(cedula, fecha, cedula)
+    .bind(cedula, fecha, _pivoteSql(turnoInfo), cedula)
     .first();
 
   const ultimoFin = String((row && row.ultimoFin) || "").trim();
@@ -772,13 +884,18 @@ function _fechaCadenaTexto(fecha) {
 
 // Inicio que le corresponde a "fila" según la cadena: la mayor hora_final de
 // las demás filas activas del día que terminan antes que ella; si no hay
-// ninguna, el turno. Las horas HH:MM con cero a la izquierda comparan bien
-// como texto.
-function _inicioDerivado(filas, fila, turno) {
+// ninguna, el turno. Se compara con la clave de la jornada (pendiente 16): en
+// un turno de día es la hora HH:MM con un "0" delante, que compara bien como
+// texto.
+function _inicioDerivado(filas, fila, turno, info) {
+  const k = (h) => _claveHora(h, info);
   let mejor = "";
   filas.forEach((f) => {
     if (f.id === fila.id || !_horaValida(f.hora_final)) return;
-    if (f.hora_final < fila.hora_final && f.hora_final > mejor)
+    if (
+      k(f.hora_final) < k(fila.hora_final) &&
+      (!mejor || k(f.hora_final) > k(mejor))
+    )
       mejor = f.hora_final;
   });
   return mejor || turno;
@@ -790,7 +907,9 @@ function _inicioDerivado(filas, fila, turno) {
 //   { hora_inicio, hora_final } o null si en ese momento no está activa en
 //   este día (anulada, o en otra fecha).
 // Devuelve { conflicto: texto | null, cambios: [...] }.
-export function _planCadenaDia({ antes, despues, turno, x, fecha }) {
+// - info: el turno del operario (_infoTurno), para la clave de la jornada.
+export function _planCadenaDia({ antes, despues, turno, x, fecha, info }) {
+  const k = (h) => _claveHora(h, info);
   const finesX = [x.antes, x.despues]
     .filter((v) => v && _horaValida(v.hora_final))
     .map((v) => v.hora_final);
@@ -807,10 +926,10 @@ export function _planCadenaDia({ antes, despues, turno, x, fecha }) {
         (f) =>
           f.id !== x.id &&
           _horaValida(f.hora_final) &&
-          f.hora_final > limite &&
-          f.hora_final <= x.despues.hora_final,
+          k(f.hora_final) > k(limite) &&
+          k(f.hora_final) <= k(x.despues.hora_final),
       )
-      .sort((a, b) => (a.hora_final < b.hora_final ? -1 : 1));
+      .sort((a, b) => (k(a.hora_final) < k(b.hora_final) ? -1 : 1));
     if (choques.length > 0) {
       const c = choques[0];
       return {
@@ -829,7 +948,7 @@ export function _planCadenaDia({ antes, despues, turno, x, fecha }) {
     }
   }
 
-  const desde = finesX.reduce((m, h) => (h < m ? h : m));
+  const desde = finesX.reduce((m, h) => (k(h) < k(m) ? h : m));
   const cambios = [];
   const posteriores = despues
     .filter(
@@ -837,13 +956,13 @@ export function _planCadenaDia({ antes, despues, turno, x, fecha }) {
         f.id !== x.id &&
         Number(f.hora_inicio_auto) === 1 &&
         _horaValida(f.hora_final) &&
-        f.hora_final > desde,
+        k(f.hora_final) > k(desde),
     )
-    .sort((a, b) => (a.hora_final < b.hora_final ? -1 : 1));
+    .sort((a, b) => (k(a.hora_final) < k(b.hora_final) ? -1 : 1));
 
   for (const f of posteriores) {
-    const inicioViejo = _inicioDerivado(antes, f, turno);
-    const inicioNuevo = _inicioDerivado(despues, f, turno);
+    const inicioViejo = _inicioDerivado(antes, f, turno, info);
+    const inicioNuevo = _inicioDerivado(despues, f, turno, info);
     // Solo se tocan las filas cuyo predecesor cambió por ESTE cambio.
     if (inicioNuevo === inicioViejo || inicioNuevo === f.hora_inicio) continue;
 
@@ -853,6 +972,7 @@ export function _planCadenaDia({ antes, despues, turno, x, fecha }) {
         inicioNuevo,
         f.hora_final,
         Number(f.suplemento) || 0,
+        { turno: info },
       );
     } catch (err) {
       return {
@@ -920,13 +1040,8 @@ export async function _planCascadaRegistro(env, { id, cedula, antes, despues }) 
   ];
   if (!ced || fechas.length === 0) return { conflicto: null, cambios: [] };
 
-  const filaTurno = await env.DB.prepare(
-    "SELECT turno FROM operarios WHERE cedula = ?",
-  )
-    .bind(ced)
-    .first();
-  const turno =
-    String((filaTurno && filaTurno.turno) || "").trim() || TURNO_POR_DEFECTO;
+  const info = await _turnoOperario(env, ced);
+  const turno = info.inicio || TURNO_POR_DEFECTO;
 
   const limpiar = (v) => ({
     id,
@@ -947,6 +1062,7 @@ export async function _planCascadaRegistro(env, { id, cedula, antes, despues }) 
       turno,
       x: { id, antes: xAntes, despues: xDespues },
       fecha,
+      info,
     });
     if (plan.conflicto) return { conflicto: plan.conflicto, cambios: [] };
     cambios.push(...plan.cambios);
