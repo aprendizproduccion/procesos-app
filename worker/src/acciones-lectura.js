@@ -287,6 +287,7 @@ export const accionesLectura = {
         "COALESCE(js.justificado, 0) AS justificado, " +
         "COALESCE(rg.horasTotales,0) AS horasTotales, " +
         "COALESCE(rg.sumaUnidadesPorTiempo,0) AS sumaUnidadesPorTiempo, " +
+        "COALESCE(rg.unidadesConEstandar,0) AS unidadesConEstandar, " +
         "COALESCE(pf.fecha, '') AS fecha " +
         "FROM (" +
         "SELECT numero_pedido, GROUP_CONCAT(DISTINCT sublinea) AS subLinea, " +
@@ -304,7 +305,10 @@ export const accionesLectura = {
         ") js ON js.pedido = ve.numero_pedido " +
         "LEFT JOIN (" +
         "SELECT r.numero_pedido, SUM(r.tiempo_total) AS horasTotales, " +
-        "SUM(r.tiempo_total * r.unidades_hora_estandar) AS sumaUnidadesPorTiempo " +
+        "SUM(r.tiempo_total * r.unidades_hora_estandar) AS sumaUnidadesPorTiempo, " +
+        // Numerador de la eficiencia: solo unidades con estándar, las mismas
+        // filas que suman tiempo esperado (ver _datosSeguimientoPedido).
+        "SUM(CASE WHEN r.unidades_hora_estandar > 0 THEN r.unidades_procesadas_operario ELSE 0 END) AS unidadesConEstandar " +
         "FROM registros r WHERE r.anulado = 0 AND " +
         _sqlRegistroReferente("r") +
         " GROUP BY r.numero_pedido" +
@@ -355,7 +359,7 @@ export const accionesLectura = {
           noIniciado || r.sumaUnidadesPorTiempo <= 0
             ? null
             : Math.round(
-                (r.unidadesProcesadas / r.sumaUnidadesPorTiempo) * 100,
+                (r.unidadesConEstandar / r.sumaUnidadesPorTiempo) * 100,
               ),
       };
     });
@@ -379,7 +383,8 @@ export const accionesLectura = {
         "COALESCE(js.justificado, 0) AS justificado, " +
         "COALESCE(rg.nRegistros, 0) AS nRegistros, rg.supernumerarios AS supernumerarios, " +
         "COALESCE(rg.horasTotales, 0) AS horasTotales, " +
-        "COALESCE(rg.sumaUnidadesPorTiempo, 0) AS sumaUnidadesPorTiempo " +
+        "COALESCE(rg.sumaUnidadesPorTiempo, 0) AS sumaUnidadesPorTiempo, " +
+        "COALESCE(rg.unidadesConEstandar, 0) AS unidadesConEstandar " +
         "FROM validacion_eanes v " +
         "LEFT JOIN (" +
         "SELECT ean, SUM(faltante) AS justificado FROM justificaciones " +
@@ -389,7 +394,8 @@ export const accionesLectura = {
         "SELECT ean, COUNT(*) AS nRegistros, " +
         "GROUP_CONCAT(DISTINCT supernumerario) AS supernumerarios, " +
         "SUM(tiempo_total) AS horasTotales, " +
-        "SUM(tiempo_total * unidades_hora_estandar) AS sumaUnidadesPorTiempo " +
+        "SUM(tiempo_total * unidades_hora_estandar) AS sumaUnidadesPorTiempo, " +
+        "SUM(CASE WHEN unidades_hora_estandar > 0 THEN unidades_procesadas_operario ELSE 0 END) AS unidadesConEstandar " +
         "FROM registros WHERE numero_pedido = ? AND anulado = 0 GROUP BY ean" +
         ") rg ON rg.ean = v.ean_producto " +
         "WHERE v.numero_pedido = ? ORDER BY v.sublinea, v.ean_producto",
@@ -436,7 +442,7 @@ export const accionesLectura = {
           sinRegistros || r.sumaUnidadesPorTiempo <= 0
             ? null
             : Math.round(
-                (r.unidadesProcesadas / r.sumaUnidadesPorTiempo) * 100,
+                (r.unidadesConEstandar / r.sumaUnidadesPorTiempo) * 100,
               ),
       };
     });

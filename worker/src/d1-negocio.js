@@ -356,7 +356,10 @@ export async function _sincronizarEstadoPedido(env, pedido) {
 // sentencia (D1 ejecuta una por vez). ?1 se repite en todas las subconsultas.
 // - Unds procesadas: sin códigos sobrantes, igual que Seguimiento de paquetes.
 // - Unds pendientes: lo justificado; null si cerró sin faltante.
-// - Eficiencia: misma fórmula que obtenerSeguimientoPaquetes.
+// - Eficiencia: misma fórmula que obtenerSeguimientoPaquetes. Arriba solo van
+//   las unidades de los registros con estándar (Inventario, inducciones o
+//   apoyos tienen estándar 0: no suman tiempo esperado, así que tampoco suman
+//   unidades). Unds procesadas sigue contando todo.
 // - Supernumerario: los de los registros activos.
 // - Justificación: "quien justificó - motivo" (quien justificó se guarda en
 //   justificaciones.supernumerario).
@@ -376,6 +379,10 @@ export async function _datosSeguimientoPedido(env, pedido) {
       "WHERE numero_pedido = ?1 AND anulado = 0 AND " +
       _sqlRegistroReferente("registros") +
       ") AS estandar, " +
+      "(SELECT COALESCE(SUM(unidades_procesadas_operario), 0) FROM registros " +
+      "WHERE numero_pedido = ?1 AND anulado = 0 AND unidades_hora_estandar > 0 AND " +
+      _sqlRegistroReferente("registros") +
+      ") AS unidadesConEstandar, " +
       "(SELECT GROUP_CONCAT(nombre, ' - ') FROM (SELECT DISTINCT supernumerario AS nombre FROM registros " +
       "WHERE numero_pedido = ?1 AND anulado = 0 AND supernumerario <> '' ORDER BY nombre)) AS supernumerarios, " +
       "(SELECT GROUP_CONCAT(nombre, ' - ') FROM (SELECT DISTINCT coordinador AS nombre FROM registros " +
@@ -390,12 +397,14 @@ export async function _datosSeguimientoPedido(env, pedido) {
   const procesadas = Number(r.procesadas) || 0;
   const justificado = Number(r.justificado) || 0;
   const estandar = Number(r.estandar) || 0;
+  const unidadesConEstandar = Number(r.unidadesConEstandar) || 0;
   return {
     fecha: r.fecha || "",
     sublineaCliente: r.sublineaCliente || "",
     undsProcesadas: procesadas,
     undsPendientes: justificado > 0 ? justificado : null,
-    eficiencia: estandar > 0 ? Math.round((procesadas / estandar) * 100) : null,
+    eficiencia:
+      estandar > 0 ? Math.round((unidadesConEstandar / estandar) * 100) : null,
     supernumerarios: r.supernumerarios || "",
     supervisores: r.supervisores || "",
     estado: justificado > 0 ? "No cumple" : "Cumple",
