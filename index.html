@@ -1416,6 +1416,7 @@
           type="button"
           class="btn-submit"
           onclick="seleccionarRol('supervisor')"
+          disabled
         >
           Administrativo
         </button>
@@ -1423,6 +1424,7 @@
           type="button"
           class="btn-submit btn-gv-oscuro"
           onclick="seleccionarRol('operario')"
+          disabled
         >
           Operativo
         </button>
@@ -1430,6 +1432,7 @@
           type="button"
           class="btn-submit btn-gv-platinum"
           onclick="seleccionarRol('planeacion')"
+          disabled
         >
           Planeación
         </button>
@@ -4108,6 +4111,13 @@
           document.getElementById("loginCedula").focus();
         }
       }
+
+      // Los botones de rol nacen deshabilitados en el HTML: un toque antes de
+      // que cargue este script daba "seleccionarRol is not defined" (Sentry
+      // PROCESOS-APP-WEB-2). Las funciones de este bloque ya existen aquí.
+      document
+        .querySelectorAll("#loginBotones button")
+        .forEach((b) => (b.disabled = false));
 
       // Vuelve al primer paso de Planeación: sin nombre ni contraseña a la vista.
       function _reiniciarPasoCedulaLogin() {
